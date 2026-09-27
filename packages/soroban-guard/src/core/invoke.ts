@@ -114,6 +114,17 @@ export function amountArg(amount: bigint): xdr.ScVal {
 }
 
 /**
+ * The largest amount `amountArg` can encode.
+ *
+ * Stated beside the encoder that enforces it rather than in the one check
+ * that needs it: a caller computing an amount from ledger state has to know
+ * where the encoder stops, and a second copy elsewhere is a second thing to
+ * keep true. `nativeToScVal` throws above this, which would escape a check
+ * as SKIPPED rather than as the honest "this cannot be tested".
+ */
+export const I128_MAX = 2n ** 127n - 1n;
+
+/**
  * Encode a ledger-sequence argument. `approve` takes its expiration as a
  * `u32`, not the `i128` amounts use — passing an amount-encoded value there
  * traps on type mismatch, so the two encoders stay separate rather than

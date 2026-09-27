@@ -91,6 +91,12 @@ async function waitForLedger(
 		if (latest.sequence > target) {
 			return latest.sequence;
 		}
+		// Sleeping past the deadline would make the bound a lie: a poll
+		// starting just under it would return a full interval late, and the
+		// sleep before the final `null` buys nothing at all.
+		if (Date.now() + POLL_INTERVAL_MS >= deadline) {
+			break;
+		}
 		await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
 	}
 	return null;

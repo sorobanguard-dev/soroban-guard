@@ -22,7 +22,12 @@
  * rather than moves, so a contract could refuse for that reason and be
  * credited with a floor check it never performed.
  */
-import { addressArg, amountArg, submitWrite } from "../../core/invoke.ts";
+import {
+	addressArg,
+	amountArg,
+	I128_MAX,
+	submitWrite,
+} from "../../core/invoke.ts";
 import type { CheckResult } from "../../core/types.ts";
 import type { Sep41Context } from "../context.ts";
 import { type QuantityRead, readBalance } from "./quantity.ts";
@@ -38,9 +43,6 @@ import {
 	notImplemented,
 	verdictHelpers,
 } from "./shared.ts";
-
-/** The largest amount the i128 encoder accepts. */
-const I128_MAX = 2n ** 127n - 1n;
 
 const overBalanceMeta = {
 	id: "sep41-transfer-over-balance",
