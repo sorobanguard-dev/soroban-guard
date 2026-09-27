@@ -95,3 +95,113 @@ non-conformant in an interesting way; the tokens that can are the ones
 someone wrote in Rust, and none has been tested yet. That gap is the reason
 `transfer_from-unauthorized` matters most against a deployed vulnerable
 fixture, which remains unbuilt.
+
+> Superseded by the run of 2026-09-27 below, which exercises the five
+> negative checks live and builds the vulnerable fixture this paragraph
+> calls for. Left as written, because a log that is edited when it becomes
+> inconvenient is not evidence.
+
+## Run of 2026-09-27 — the negative checks, against a conformant token
+
+Against `CARQGEM3RDSWA2SRZDL6LDBOEQWQHS74BOL5V62QXIGMOBIMIX5YTYYN`, a SAC
+for the TEST asset, with both keys configured and a **fresh spender** so
+`transfer_from-unauthorized` has its premise (no standing allowance) intact.
+
+```
+16 pass, 0 fail, 0 skipped, 0 unverifiable, 0 not implemented (16 checks)
+by layer: interface 3/3 pass · behavior 13/13 pass
+exit 0
+```
+
+The five rows that had never run live before:
+
+```
+  ✓ sep41-transfer-zero-amount  the call was accepted and both balances held, at 898999980 and 4
+  ✓ sep41-transfer-self  the call was accepted and the balance held at 898999980
+  ✓ sep41-transfer-negative-amount  a transfer of -1 was refused
+  ✓ sep41-transfer-over-balance  a transfer of 898999981 against a balance of 898999980 was refused
+  ✓ sep41-transfer_from-expired  a spend against an allowance that expired at ledger 4895392 was refused at ledger 4895393
+```
+
+Run three times; identical verdict each time, with the holder's balance
+tracking down as the writes spent it and `over-balance` recomputing
+`balance + 1` from live state on each run.
+
+### Transactions that run produced
+
+| Check | Transaction |
+| ----- | ----------- |
+| `transfer-zero-amount` | `4a6129a464ff08db5eb2d83f6861508b6f0798ea86885f52a3a42882f191c8aa` |
+| `transfer-self` | `2969d5ffd800aa79a577b8e03b2c57d15026ec418c9fb1b629a2d059c04fa7dc` |
+| `transfer` | `17dcefa66339200ba744be506b9726d8c32a462a057db668d1d764f1d5a1a551` |
+| `approve` | `9517b3f5e8ba9e502c1c7c1e8b909ee9f387b1fa8f5f181758b7c910d9ef5ca2` |
+| `transfer_from` | `15f5690fb74ddea06d94c1ac0d7920dd0dc310729af7b3e1cec79a3b0a68a679` |
+| `burn` | `bebdd4730b024264180f37f4e37629178e8af0a54a7481c1406d4b7a6cff28ea` |
+| `burn_from` | `559dea4f68b9c02a249ca4bf8ad5dc364d5669939d4e59209db8c1cbf11ddb57` |
+
+The three refusal checks produced **no transaction**, and that is the
+result, not a gap: the contract refused each at simulation, so nothing
+reached the ledger. The two invariance checks did settle — they are the
+only negative checks that submit against a conformant token, because a
+contract is permitted to accept them, and the assertion is that the
+balances did not move.
+
+A run with no keys configured reports `5 pass, 0 fail, 11 unverifiable`
+and exits 2: every check that cannot act says so rather than guessing.
+
+## Run of 2026-09-27 — against a deliberately broken token
+
+The gap the section above names is now closed. `fixtures/vulnerable-token`
+is a SEP-41 token written to fail specific checks; see its README for what
+each flaw is and how to deploy one. Against
+`CCUXRTRKO6QBOL6E5Q55M34G5CIC3UGCSJWGQPZHVI55OO2WLS2YLKLN`:
+
+```
+  ✓ sep41-transfer_from-unauthorized  an unauthorized spend was refused
+  ✓ sep41-transfer-zero-amount  the call was accepted and both balances held, at 1000 and 0
+  ✗ sep41-transfer-self  the holder's balance moved from 1000 to 1001; debiting and crediting the same address must net zero, so a change means one side was applied without the other
+  ✗ sep41-transfer-negative-amount  a transfer of -1 succeeded; the holder gained, consistent with the contract reading it as a transfer in the opposite direction — anyone can withdraw from anyone
+  ✗ sep41-transfer-over-balance  balance() returned -1, which is negative; the premise cannot be established
+
+9 pass, 3 fail, 0 skipped, 4 unverifiable, 0 not implemented (16 checks)
+exit 1
+```
+
+This is the run that makes the others mean something. Sixteen passes
+against a SAC prove only that the guard does not cry wolf on a contract
+that is correct by construction; a check that never fires looks exactly
+like a check that fires correctly, until something deserves a red mark.
+
+Three points worth drawing out:
+
+- **`transfer-self` was not a planted flaw.** The fixture was written with
+  three deliberate bugs and this was not among them — `transfer` reads both
+  balances into locals before writing either, so when `from == to` the
+  second write clobbers the first. The guard found it, and described it
+  more precisely than the fixture's own comment did.
+- **`zero-amount` passes on the same broken code path**, because zero nets
+  zero even through that aliasing. That is exactly why the two invariance
+  checks are separate rather than one.
+- **The verdict is a mix, not a wall of red.** Nine passes, three failures,
+  four unverifiable. A tool that failed everything against a broken
+  contract would prove only that it disliked the contract.
+
+The negative amount was also confirmed independently of the guard, by
+invoking the contract directly — transaction
+`b24e690d38dcc9844967cba898170e26f8c62caf20f8e3bc9aca739cccb1a6a5`, which
+moved the holder from `1000` to `1100` and the recipient from `0` to
+`-100`. The transfer ran backwards: the holder's signature withdrew from
+the recipient. That is ground truth for the check that asserts it.
+
+### Why a broken contract reports four unverifiable rows
+
+Once `over-balance` is ignored, the holder's balance is negative, and the
+contract's accounting is unsound for everything after it. Those checks
+report UNVERIFIABLE with the reason — not FAIL — because the defect has
+already been named once and repeating it would bury the finding among its
+own consequences. See `soundness` on `Sep41Context`.
+
+This is also why the refusal checks run least-destructive first
+(`zero → self → negative-amount → over-balance`): ordered the other way,
+the same contract reports one failure and eight unverifiable rows, and two
+real defects go untested. Pinned by unit test in `suite.test.ts`.

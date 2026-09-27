@@ -208,15 +208,22 @@ is a violation of the clause as written, not a variation the tool tolerates.
 ## Current limitations
 
 * Testnet only. Never place mainnet keys in `.env`.
-* Validated so far against a single SAC (Stellar Asset Contract) token.
-  Custom WASM tokens exercise the same code paths but are not yet proven.
-* Custom WASM tokens are supported by design but unverified end to end. No
-  check is SAC-specific: members are called by name, and a WASM contract's
-  spec is the richer path — it says which members are declared, so
-  undeclared ones report NOT_IMPLEMENTED without spending a call, where a
-  SAC has no spec and every member is attempted blind. But every run in
-  [docs/verification.md](docs/verification.md) is against a SAC, so the
-  WASM path is exercised by unit tests alone.
+* Validated against a SAC (Stellar Asset Contract) token and against a
+  purpose-built broken WASM token. No check is SAC-specific: members are
+  called by name, and a WASM contract's spec is the richer path — it says
+  which members are declared, so undeclared ones report NOT_IMPLEMENTED
+  without spending a call, where a SAC has no spec and every member is
+  attempted blind. What is *not* yet proven is a conformant custom WASM
+  token: the passing runs in [docs/verification.md](docs/verification.md)
+  are all against a SAC, so a false FAIL specific to WASM tokens would not
+  have been caught yet.
+* The negative checks are proven to fire. A token that passes every check
+  tells you nothing on its own — a check that never fires looks exactly
+  like one that fires correctly. `fixtures/vulnerable-token` is a SEP-41
+  token written to be wrong in named ways, and the guard reports three
+  distinct defects against it while still passing the nine checks it
+  should. See its [README](fixtures/vulnerable-token/README.md) and the
+  2026-09-27 entries in [docs/verification.md](docs/verification.md).
 * SAC specifics the checks actually observe: `balance` and `allowance`
   against an address with no trustline trap with "trustline entry is
   missing", which is reported UNVERIFIABLE — no standing to ask — rather

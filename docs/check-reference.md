@@ -7,6 +7,17 @@ whose premises the writes below would destroy; then the five writes that
 actually move value. The sixth, the expiry check, runs last, because it is the
 only one that waits on a ledger to close.
 
+Within that middle group the order is itself a safety property, and matters
+only when the contract is broken — which is exactly when a verdict is worth
+having. A refusal check that the contract *ignores* moves what it offered,
+so they run least-destructive first: a zero transfer moves zero and a
+self-transfer nets zero whatever the arithmetic does, a negative amount
+shifts a single unit, and `balance + 1` takes everything and leaves the
+holder below zero. Once that happens the contract's accounting is unsound
+and every later check reads the damage instead of testing its own rule, so
+`over-balance` goes last among them. The suite's ordering rules are pinned
+by unit test rather than left to the comments.
+
 A premise is what must be true *before* the check can say anything at all.
 When a premise is missing the check reports UNVERIFIABLE — never FAIL,
 because a missing key, an empty holder, or an unreadable balance is a fact

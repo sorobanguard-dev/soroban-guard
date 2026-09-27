@@ -45,6 +45,30 @@ log, not here.
   width. Honours `NO_COLOR`, and a piped or redirected run gets the plain
   report so output stays greppable. `--no-color` forces plain.
 
+### Changed
+
+- A contract whose accounting goes negative is reported once, not once per
+  check. A token that lets the holder overdraw leaves the balance below
+  zero, and every later check used to meet that same defect while
+  establishing its own premise — so one missing bounds check reported as
+  nine failures, with the real finding buried among its own consequences.
+  The first negative reading is still a FAIL; the rest now report
+  UNVERIFIABLE and say why they cannot measure anything.
+
+  Against a deliberately broken token this turns `7 pass, 9 fail` into
+  `7 pass, 1 fail, 8 unverifiable` for identical input. A run that gates on
+  failure counts will see the number move.
+- The four refusal checks run least-destructive first —
+  `zero-amount`, `self`, `negative-amount`, `over-balance` — which changes
+  nothing against a conformant token and much against a broken one. A
+  refusal check that is *ignored* moves what it offered: zero moves zero
+  and a self-transfer nets zero whatever the arithmetic does, a negative
+  amount shifts one unit, and `balance + 1` takes everything and leaves the
+  accounting unsound. Ordered the old way, a broken token reported one
+  defect and eight unverifiable rows; ordered this way the same token
+  reports three defects. Pinned by unit test, because the reasoning is
+  invisible to anyone reshuffling the list.
+
 ### Fixed
 
 - The `md` and `json` reports record the RPC endpoint's origin only. A
