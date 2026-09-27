@@ -70,6 +70,44 @@ export interface Sep41Context {
 	 */
 	readonly establishedAllowances: Set<string>;
 	/**
+	 * What this run has learned about the contract's accounting, once it has
+	 * stopped adding up.
+	 *
+	 * **This makes verdicts order-dependent.** Whichever check meets a
+	 * negative quantity first reports the FAIL; the rest report UNVERIFIABLE.
+	 * Reordering the suite therefore changes which findings a broken
+	 * contract yields — not merely how fast they arrive. Against a
+	 * conformant contract nothing here fires and order is free. The suite's
+	 * order is pinned by unit test in `suite.test.ts` for exactly this
+	 * reason, and `sep41/index.ts` carries the reasoning; treat a reshuffle
+	 * as a behavioral change, not a tidy-up.
+	 *
+	 * A negative quantity is a defect, and the check that first sees one
+	 * reports it. The problem is what comes after: a contract that lets the
+	 * holder overdraw leaves the balance below zero, and every later check
+	 * reads that same defect while establishing its own premise. Without
+	 * this, one missing bounds check reports as nine failures — eight of
+	 * them the first one's wake, with the real finding buried among them.
+	 *
+	 * So the first observation is recorded here, and later reads consult it:
+	 * the finding is stated once as a FAIL, and the checks that can no
+	 * longer measure anything say why they cannot rather than repeating it.
+	 * Mutable for the same reason `establishedAllowances` is — checks run
+	 * sequentially sharing one context, and this is the run's memory.
+	 *
+	 * Deliberately one flag for one property rather than a graph of which
+	 * check invalidates which. A negative balance is the case that occurs;
+	 * a second property can be added when a second one actually appears.
+	 */
+	readonly soundness: {
+		/**
+		 * Set when a quantity first reads negative, to the operator-facing
+		 * detail of that reading (e.g. `balance() returned -1, which is
+		 * negative`). Undefined means nothing unsound has been observed.
+		 */
+		firstNegative?: string;
+	};
+	/**
 	 * The two roles, and the single home for their addresses. Reads take
 	 * `parties.owner.address`; writes additionally need `parties.owner.signer`
 	 * and report UNVERIFIABLE without it.

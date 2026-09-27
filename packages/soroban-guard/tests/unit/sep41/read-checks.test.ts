@@ -52,6 +52,7 @@ function ctxWith(
 		},
 		specFunctions,
 		establishedAllowances: new Set(),
+		soundness: {},
 	};
 }
 

@@ -14,8 +14,15 @@ import { balanceCheck } from "./checks/balance.ts";
 import { burnCheck } from "./checks/burn.ts";
 import { burnFromCheck } from "./checks/burn_from.ts";
 import { decimalsCheck } from "./checks/decimals.ts";
+import { expiredAllowanceCheck } from "./checks/expired-allowance.ts";
 import { nameCheck } from "./checks/name.ts";
 import { unauthorizedTransferFromCheck } from "./checks/negative.ts";
+import { negativeAmountTransferCheck } from "./checks/negative-amount.ts";
+import {
+	selfTransferCheck,
+	zeroAmountTransferCheck,
+} from "./checks/no-op-transfer.ts";
+import { overBalanceTransferCheck } from "./checks/over-balance.ts";
 import { symbolCheck } from "./checks/symbol.ts";
 import { transferCheck } from "./checks/transfer.ts";
 import { transferFromCheck } from "./checks/transfer_from.ts";
@@ -123,10 +130,47 @@ export const sep41Suite: Suite<Sep41Context> = {
 		// since a correct contract refuses at simulation and touches no
 		// state at all.
 		unauthorizedTransferFromCheck,
+		// Refusal checks before the moves they would otherwise be starved by:
+		// they need a readable balance, not a large one, and they spend
+		// nothing when the contract behaves — but a holder drained to zero by
+		// the writes below makes `balance + 1` equal 1, which a contract
+		// could refuse for having nothing at all rather than for checking its
+		// floor.
+		//
+		// Among themselves they run least-destructive first, which matters
+		// only when the contract is broken — and that is exactly when a
+		// verdict is worth having. A refusal check that is ignored *moves*
+		// what it offered, so the four differ sharply in what they leave
+		// behind: zero moves zero whatever the implementation does, because
+		// the amount is the thing that would move. A self-transfer *should*
+		// net zero and usually does, but it is not guaranteed to — a
+		// contract that reads both balances before writing either lets the
+		// second write clobber the first, and the fixture in this repo does
+		// exactly that — the debit is overwritten by the credit, so the
+		// holder nets the amount instead of zero. So self is
+		// least-disturbance rather than
+		// no-disturbance, and it goes second. A negative amount shifts one
+		// unit. `balance + 1` takes everything and drives
+		// the holder below zero, which is unsound accounting — and every
+		// later check then reads that instead of testing its own rule (see
+		// `soundness` on Sep41Context). Putting it last costs nothing on a
+		// conformant token and is the difference between learning one defect
+		// and learning all of them.
+		zeroAmountTransferCheck,
+		selfTransferCheck,
+		negativeAmountTransferCheck,
+		overBalanceTransferCheck,
 		transferCheck,
 		approveCheck,
 		transferFromCheck,
 		burnCheck,
 		burnFromCheck,
+		// Last: the only check that waits on wall-clock time. It approves a
+		// grant built to lapse, waits ~10s for the ledger to pass it, then
+		// spends — so running it earlier would delay every verdict behind it
+		// for a question none of them depend on. Its own allowance is
+		// deliberately unregistered, so it cannot disturb the _from checks
+		// above either.
+		expiredAllowanceCheck,
 	],
 };

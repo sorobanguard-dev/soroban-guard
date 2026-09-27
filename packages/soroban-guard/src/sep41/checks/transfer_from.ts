@@ -36,6 +36,7 @@ import {
 	isDeclared,
 	notImplemented,
 	SETTLED_FAILURE_ACTUAL,
+	setupEvidence,
 	verdictHelpers,
 } from "./shared.ts";
 
@@ -214,7 +215,7 @@ export const transferFromCheck = {
 				return unverifiable(
 					"could not establish an allowance to spend; approve must work before transfer_from can be assessed",
 					elapsed(),
-					approval.kind === "timeout" ? undefined : approval.diagnostics,
+					setupEvidence(approval),
 				);
 			}
 		}
@@ -288,11 +289,15 @@ export const transferFromCheck = {
 			// expired footprint. None of that reached the contract's logic, so
 			// a FAIL here would accuse it of a refusal it never made.
 			if (submitted.settled) {
-				return unverifiable(
-					SETTLED_FAILURE_ACTUAL,
-					elapsed(),
-					submitted.diagnostics,
-				);
+				return unverifiable(SETTLED_FAILURE_ACTUAL, elapsed(), {
+					error: submitted.diagnostics,
+					...(submitted.txHash === undefined
+						? {}
+						: { txHash: submitted.txHash }),
+					...(submitted.ledger === undefined
+						? {}
+						: { ledger: submitted.ledger }),
+				});
 			}
 			if (classifyStanding(submitted.diagnostics) !== null) {
 				return unverifiable(

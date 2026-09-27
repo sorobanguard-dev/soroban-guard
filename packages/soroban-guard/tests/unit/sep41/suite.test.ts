@@ -119,3 +119,86 @@ describe("withCoverageGaps", () => {
 		expect(results[0]?.id).toBe("something-else");
 	});
 });
+
+/**
+ * Order is a safety property here, not presentation.
+ *
+ * Every rule below exists because breaking it silently degrades a verdict
+ * against a *broken* contract — which is the only time a verdict matters
+ * and the case no other test covers, since each check is unit-tested alone
+ * against a fresh fixture. The reasoning lives in index.ts; this is what
+ * stops an innocent-looking reshuffle from undoing it.
+ */
+describe("sep41Suite ordering", () => {
+	const ids = sep41Suite.checks.map((check) => check.id);
+	const at = (id: string) => {
+		const index = ids.indexOf(id);
+		expect(index, `${id} is not in the suite`).toBeGreaterThanOrEqual(0);
+		return index;
+	};
+
+	it("reads before writes", () => {
+		for (const read of ["decimals", "balance", "allowance", "name", "symbol"]) {
+			expect(at(`sep41-${read}`)).toBeLessThan(at("sep41-transfer"));
+		}
+	});
+
+	it("tests the unauthorized spend before approve grants one", () => {
+		// Its premise is an absence: approve would create the very allowance
+		// it needs missing.
+		expect(at("sep41-transfer_from-unauthorized")).toBeLessThan(
+			at("sep41-approve"),
+		);
+	});
+
+	it("runs the refusal checks before the writes that would starve them", () => {
+		// A holder drained to zero makes `balance + 1` equal 1, which a
+		// contract may refuse for having nothing rather than for checking a
+		// floor.
+		for (const refusal of [
+			"sep41-transfer-zero-amount",
+			"sep41-transfer-self",
+			"sep41-transfer-negative-amount",
+			"sep41-transfer-over-balance",
+		]) {
+			expect(at(refusal)).toBeLessThan(at("sep41-transfer"));
+		}
+	});
+
+	it("orders the refusal checks least-destructive first", () => {
+		// What a refusal check leaves behind when the contract ignores it:
+		// zero moves zero whatever the implementation does, a self-transfer
+		// should net zero but need not (fixtures/vulnerable-token clobbers
+		// one write with the other and nets +1), a negative amount shifts
+		// one unit, and `balance + 1` takes everything and
+		// drives the holder below zero. Reversing the last pair is the
+		// regression that turns one finding into one finding plus eight
+		// unverifiables.
+		// Zero first of all, though this pair alone is not load-bearing the
+		// way the others are. Zero-amount is balance-agnostic — it takes no
+		// minimum and asserts before against after, so a balance a prior
+		// check shifted moves both readings equally and no verdict is lost
+		// whichever runs first. It is pinned anyway, because the principle
+		// the whole sequence follows is least-destructive-first and zero is
+		// the only member that cannot disturb anything in any position;
+		// leaving one pair unpinned invites a reshuffle that then reaches
+		// the pairs that do matter.
+		expect(at("sep41-transfer-zero-amount")).toBeLessThan(
+			at("sep41-transfer-self"),
+		);
+		expect(at("sep41-transfer-zero-amount")).toBeLessThan(
+			at("sep41-transfer-negative-amount"),
+		);
+		expect(at("sep41-transfer-self")).toBeLessThan(
+			at("sep41-transfer-negative-amount"),
+		);
+		expect(at("sep41-transfer-negative-amount")).toBeLessThan(
+			at("sep41-transfer-over-balance"),
+		);
+	});
+
+	it("leaves the wall-clock wait last", () => {
+		// It waits ~10s for a ledger to pass; anything behind it waits too.
+		expect(at("sep41-transfer_from-expired")).toBe(ids.length - 1);
+	});
+});

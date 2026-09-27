@@ -59,6 +59,32 @@ function cell(text: string): string {
 }
 
 /**
+ * Wrap a value in a code span that survives whatever the value contains.
+ *
+ * A backtick inside a single-backtick span closes it early, and the rest of
+ * the line renders as prose — so a diagnostic quoting a contract's own
+ * source could silently swallow the evidence around it. CommonMark's rule
+ * is that a span may be opened with any number of backticks and is closed
+ * by the same number, so this counts the longest run inside and uses one
+ * more. Diagnostics come from the SDK, so their content is not ours to
+ * assume about.
+ */
+function code(text: string): string {
+	// Incremental, not spread: diagnostics are unbounded and V8 caps
+	// argument lists, so a huge diagnostic would throw out of Math.max
+	// instead of producing a report.
+	let longest = 0;
+	for (const match of text.matchAll(/`+/g)) {
+		longest = Math.max(longest, match[0].length);
+	}
+	const fence = "`".repeat(longest + 1);
+	// A span whose content starts or ends with a backtick needs padding
+	// spaces, which CommonMark strips back off when rendering.
+	const pad = text.startsWith("`") || text.endsWith("`") ? " " : "";
+	return `${fence}${pad}${text}${pad}${fence}`;
+}
+
+/**
  * The headline sentence, phrased from `exitCodeFor`'s own answer.
  *
  * It asks `exitCodeFor` rather than re-deriving the outcome from statuses.
@@ -76,7 +102,9 @@ function cell(text: string): string {
  */
 function summarize(results: readonly CheckResult[]): string {
 	if (results.length === 0) {
-		return "No checks ran — nothing was assessed.";
+		// Names its exit code like the other three. A reader comparing two
+		// reports should not have to know that one outcome is the exception.
+		return "No checks ran — nothing was assessed. Exit code 2.";
 	}
 	const total = results.length;
 	switch (exitCodeFor(results)) {
@@ -101,8 +129,18 @@ function summarize(results: readonly CheckResult[]): string {
 				countByStatus(results, "SKIPPED");
 			return `No violation found, but coverage is incomplete — ${unassessed} of ${total} checks could not be assessed. This is not a conformance claim. Exit code 2.`;
 		}
-		default:
-			return `Conformant — all ${countByStatus(results, "PASS")} checks were exercised and held. Exit code 0.`;
+		default: {
+			// Exit 0 does not imply anything was exercised. A suite of
+			// `optional` members the contract does not declare is conformant
+			// — optionality excuses absence — but nothing was tested, and
+			// "all 0 checks held" would read as a clean bill of health for a
+			// run that asked no questions.
+			const passed = countByStatus(results, "PASS");
+			if (passed === 0) {
+				return `Conformant — no required clause was violated, but no check was exercised either. Exit code 0.`;
+			}
+			return `Conformant — all ${passed} checks were exercised and held. Exit code 0.`;
+		}
 	}
 }
 
@@ -116,19 +154,19 @@ function evidenceLines(result: CheckResult): readonly string[] {
 	const { evidence } = result;
 	const parts: string[] = [];
 	if (evidence.before !== undefined) {
-		parts.push(`before: \`${JSON.stringify(evidence.before)}\``);
+		parts.push(`before: ${code(JSON.stringify(evidence.before))}`);
 	}
 	if (evidence.after !== undefined) {
-		parts.push(`after: \`${JSON.stringify(evidence.after)}\``);
+		parts.push(`after: ${code(JSON.stringify(evidence.after))}`);
 	}
 	if (evidence.txHash !== undefined && evidence.txHash !== "") {
-		parts.push(`tx: \`${evidence.txHash}\``);
+		parts.push(`tx: ${code(evidence.txHash)}`);
 	}
 	if (evidence.ledger !== undefined) {
 		parts.push(`ledger: ${evidence.ledger}`);
 	}
 	if (evidence.error !== undefined) {
-		parts.push(`error: \`${cell(evidence.error)}\``);
+		parts.push(`error: ${code(cell(evidence.error))}`);
 	}
 	return parts;
 }

@@ -114,8 +114,18 @@ export function stubSubmit(result: invoke.SubmitResult) {
  * simulation refusal, which never left the drawing board. The distinction
  * decides FAIL vs UNVERIFIABLE on every write path.
  */
-export function settledFailure(diagnostics: string): invoke.SubmitResult {
-	return { kind: "rejected", diagnostics, settled: true };
+export function settledFailure(
+	diagnostics: string,
+	/**
+	 * The transaction that reached the ledger, defaulted because a settled
+	 * failure has one by definition — it was included and then failed. A
+	 * fixture without it would let a check drop the hash and still pass the
+	 * test, which is exactly the gap that let six call sites lose it.
+	 */
+	txHash = "abc123",
+	ledger = 4738627,
+): invoke.SubmitResult {
+	return { kind: "rejected", diagnostics, settled: true, txHash, ledger };
 }
 
 export const OWNER = Keypair.random().publicKey();
@@ -141,6 +151,7 @@ export function writeCtx(
 		networkPassphrase: Networks.TESTNET,
 		specFunctions: null,
 		establishedAllowances: new Set(),
+		soundness: {},
 		parties: {
 			owner: {
 				address: OWNER,

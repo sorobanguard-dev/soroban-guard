@@ -34,12 +34,18 @@ describe.skipIf(!(CONTRACT && OWNER && SPENDER))(
 				},
 				specFunctions: inspected.kind === "wasm" ? inspected.functions : null,
 				establishedAllowances: new Set(),
+				soundness: {},
 			};
 			const assessed = await runSuite(sep41Suite, ctx);
 			const results = withCoverageGaps(assessed);
-			// Eleven checks, no gaps: if the suite grows or shrinks without
+			// Sixteen checks, no gaps: if the suite grows or shrinks without
 			// this file following, the count fails first, not silently.
-			expect(results).toHaveLength(11);
+			expect(results).toHaveLength(16);
+			// Distinct ids, because the count alone does not imply them: one
+			// id duplicated and another dropped still totals sixteen, and
+			// every `find` below would still succeed while a check had
+			// silently vanished from the run.
+			expect(new Set(results.map((r) => r.id)).size).toBe(16);
 			// Asserted by id, never by position. Positional slices broke
 			// silently every time the suite grew, and these tests only run
 			// with env configured — so CI never caught it.

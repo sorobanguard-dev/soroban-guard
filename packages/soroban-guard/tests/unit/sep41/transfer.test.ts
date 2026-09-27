@@ -60,6 +60,7 @@ function ctxWith(
 		networkPassphrase: Networks.TESTNET,
 		specFunctions: null,
 		establishedAllowances: new Set(),
+		soundness: {},
 		parties: {
 			owner: { address: OWNER, isThrowaway: false, signer },
 			spender: { address: SPENDER, isThrowaway: false },
@@ -166,6 +167,11 @@ describe("transferCheck", () => {
 		expect(result.status).toBe("UNVERIFIABLE");
 		expect(result.actual).toContain("reached the ledger and failed there");
 		expect(result.evidence.error).toBe("transaction abc123 failed on-chain");
+		// The transaction was included before it failed, so a reader has
+		// something to look up — telling them "failed on-chain" without the
+		// hash leaves them nowhere to go.
+		expect(result.evidence.txHash).toBe("abc123");
+		expect(result.evidence.ledger).toBe(4738627);
 	});
 
 	// A SAC enforces the asset's policy as well as the token interface.

@@ -50,11 +50,31 @@ async function readQuantity(
 		}
 		// SEP-41 quantities are non-negative, and the read checks FAIL a
 		// negative one — both phases of a write must match that verdict.
+		//
+		// Only the first one, though. Once the accounting has gone negative
+		// it stays negative, and every check after this reads the same
+		// wound while establishing its own premise. Repeating the FAIL
+		// would report one missing bounds check as nine findings and bury
+		// the one that matters, so the rest say they cannot measure
+		// anything instead — which is the truth, and is what UNVERIFIABLE
+		// is for.
 		if (outcome.value < 0n) {
+			const detail = `${method}() returned ${outcome.value}, which is negative`;
+			if (ctx.soundness.firstNegative === undefined) {
+				ctx.soundness.firstNegative = detail;
+				return { kind: "defect", detail, error: "" };
+			}
+			// Naming the earlier reading only when it differs from this one:
+			// a holder read twice reports the same number both times, and
+			// "-1 ... (-1)" reads as a bug in the report rather than as the
+			// attribution it is meant to be.
+			const earlier =
+				ctx.soundness.firstNegative === detail
+					? ""
+					: ` (first seen as ${ctx.soundness.firstNegative})`;
 			return {
-				kind: "defect",
-				detail: `${method}() returned ${outcome.value}, which is negative`,
-				error: "",
+				kind: "no-answer",
+				detail: `${detail}; this contract's accounting already went negative earlier in the run${earlier}, so nothing measured against it can be trusted`,
 			};
 		}
 		return { kind: "value", amount: outcome.value, ledger };

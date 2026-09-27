@@ -191,12 +191,43 @@ describe("renderMarkdownReport", () => {
 		expect(doc).toContain("Error(Contract, #4)");
 	});
 
+	// A backtick inside a single-backtick span closes it early and the rest
+	// renders as prose, swallowing the evidence around it. Diagnostics come
+	// from the SDK, so their content is not ours to assume about.
+	it("fences evidence so a backtick cannot break out of its code span", () => {
+		const doc = renderMarkdownReport(
+			common([
+				result("FAIL", { evidence: { error: "saw `transfer` in the trace" } }),
+			]),
+		);
+		expect(doc).toContain("``saw `transfer` in the trace``");
+	});
+
 	// A pipe would split the cell and silently move every column after it.
 	it("escapes a pipe inside a cell", () => {
 		const doc = renderMarkdownReport(
 			common([result("FAIL", { actual: "a | b" })]),
 		);
 		expect(doc).toContain("a \\| b");
+	});
+
+	// Diagnostics are unbounded, and the old implementation spread every
+	// backtick run into Math.max — past V8's argument limit the report
+	// itself threw instead of rendering.
+	it("fences a hostile run of backticks without throwing", () => {
+		const doc = renderMarkdownReport(
+			common([result("FAIL", { evidence: { error: "`".repeat(200000) } })]),
+		);
+		// The fence has to be longer than the run it encloses, or the span
+		// closes early and the rest of the row escapes into prose.
+		expect(doc).toContain("`".repeat(200001));
+		// And the payload has to survive. Asserting the fence alone would
+		// pass a renderer that emitted the fence and dropped what it was
+		// meant to enclose — the fence is 200001 backticks, so a document
+		// containing only it satisfies a 200001-run assertion by itself.
+		// Fence + payload + fence is at least 600002 of them.
+		const backticks = (doc.match(/`/g) ?? []).length;
+		expect(backticks).toBeGreaterThanOrEqual(600002);
 	});
 
 	describe("headline", () => {
@@ -222,6 +253,18 @@ describe("renderMarkdownReport", () => {
 			expect(doc).toContain("Exit code 0");
 		});
 
+		// Exit 0 with nothing exercised: `optional` members the contract does
+		// not declare. Conformant, but "all 0 checks were exercised and held"
+		// would claim a run that asked nothing had answered something.
+		it("does not claim checks were exercised when none were", () => {
+			const doc = renderMarkdownReport(
+				common([result("NOT_IMPLEMENTED", { requirement: "optional" })]),
+			);
+			expect(doc).toContain("no check was exercised either");
+			expect(doc).toContain("Exit code 0");
+			expect(doc).not.toContain("were exercised and held");
+		});
+
 		it("names a violation and a missing required member", () => {
 			expect(renderMarkdownReport(common([result("FAIL")]))).toContain(
 				"Violation found — 1 violated",
@@ -232,7 +275,12 @@ describe("renderMarkdownReport", () => {
 		});
 
 		it("says nothing ran rather than claiming conformance", () => {
-			expect(renderMarkdownReport(common([]))).toContain("No checks ran");
+			const doc = renderMarkdownReport(common([]));
+			expect(doc).toContain("No checks ran");
+			// Every headline names its exit code, this one included — a reader
+			// comparing two reports should not have to know which outcome is
+			// the exception.
+			expect(doc).toContain(`Exit code ${exitCodeFor([])}`);
 		});
 
 		/**
@@ -300,6 +348,38 @@ describe("renderPretty", () => {
 		expect(columns[0]).toBe(columns[1]);
 	});
 
+	// A hash or base64 blob has no space to break at, so it must be cut
+	// rather than allowed to run past the terminal and wrap at column zero.
+	it("keeps an unbreakable token inside the width", () => {
+		const out = pretty([result("UNVERIFIABLE", { actual: "X".repeat(140) })]);
+		for (const line of out.split("\n")) {
+			expect(visibleWidth(line)).toBeLessThanOrEqual(100);
+		}
+		// Preservation, not just width: every character survives chunking.
+		// Whitespace-stripped, so line breaks rejoin and only the lowercase
+		// x in "expected:" sits outside the run.
+		expect(out.replace(/\s/g, "")).toContain("X".repeat(140));
+	});
+
+	// Without Unicode-aware splitting, a chunk boundary can land between
+	// an emoji's surrogate halves and corrupt the diagnostic on display.
+	// Width is UTF-16 units throughout, so sixty emoji (120 units) must
+	// wrap even though they are sixty code points.
+	it("never splits a surrogate pair across lines", () => {
+		const out = pretty([
+			result("UNVERIFIABLE", { actual: `diagnostic: ${"😀".repeat(60)}` }),
+		]);
+		expect(out).not.toContain("\uFFFD");
+		expect(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])/.test(out)).toBe(false);
+		expect(/(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/.test(out)).toBe(false);
+		// Count, not just intactness: dropped tail chunks would also leave
+		// no surrogates behind.
+		expect((out.match(/😀/gu) ?? []).length).toBe(60);
+		for (const line of out.split("\n")) {
+			expect(visibleWidth(line)).toBeLessThanOrEqual(100);
+		}
+	});
+
 	it("wraps long prose inside the given width", () => {
 		const out = pretty([
 			result("UNVERIFIABLE", {
@@ -344,6 +424,23 @@ describe("renderPretty", () => {
 		expect(pretty([result("NOT_IMPLEMENTED")])).not.toContain("conformant");
 		expect(pretty([])).toContain("no checks ran");
 		expect(pretty([])).not.toContain("conformant");
+	});
+
+	/**
+	 * Exit 0 does not imply anything was exercised. A suite of `optional`
+	 * members the contract does not declare is conformant — optionality
+	 * excuses absence — but the word over "0/1 checks held" would read as a
+	 * pass for a run that asked no questions.
+	 */
+	it("does not call a run conformant when nothing was exercised", () => {
+		const absent = [result("NOT_IMPLEMENTED", { requirement: "optional" })];
+		expect(exitCodeFor(absent)).toBe(0);
+		expect(pretty(absent)).toContain("nothing exercised");
+		expect(pretty(absent)).not.toContain("conformant");
+		// One real PASS alongside, and the word is earned again.
+		expect(pretty([...absent, result("PASS", { id: "b" })])).toContain(
+			"conformant",
+		);
 	});
 
 	it("agrees with the exit code on every status combination", () => {

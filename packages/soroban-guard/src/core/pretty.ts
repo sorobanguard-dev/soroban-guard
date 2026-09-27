@@ -40,18 +40,57 @@ const COLOR: Record<CheckStatus, "green" | "red" | "yellow" | "grey"> = {
 };
 
 /**
+ * Cut a long token into chunks no wider than `room`.
+ *
+ * Width is UTF-16 units — the same measure `visibleWidth` and the packing
+ * below use — while iteration is by code point, so the cut can never land
+ * between an emoji's surrogate halves. Counting points but measuring units
+ * would let a chunk of `room` emoji run double-wide past the margin.
+ */
+function chunkByWidth(word: string, room: number): string[] {
+	const chunks: string[] = [];
+	let chunk = "";
+	let width = 0;
+	for (const point of word) {
+		if (width + point.length > room && chunk !== "") {
+			chunks.push(chunk);
+			chunk = "";
+			width = 0;
+		}
+		chunk += point;
+		width += point.length;
+	}
+	// The loop only pushes a finished chunk, so the tail is still local —
+	// without this a 64-char hash would render truncated, silently.
+	if (chunk !== "") {
+		chunks.push(chunk);
+	}
+	return chunks;
+}
+
+/**
  * Wrap prose to `width`, indenting continuations to `indent`.
  *
  * Done here rather than left to the terminal because the terminal wraps at
  * column zero: a two-line diagnostic would start flush against the left
  * margin and read as a new row rather than a continuation of this one.
  */
+
 function wrap(text: string, width: number, indent: number): readonly string[] {
 	const room = Math.max(20, width - indent);
 	const pad = " ".repeat(indent);
 	const lines: string[] = [];
 	let current = "";
-	for (const word of text.split(/\s+/)) {
+	// A token wider than the room has no break point of its own — a 64-char
+	// hash or a base64 blob in an SDK diagnostic — so it is cut to fit
+	// rather than allowed to run past the terminal and wrap at column zero,
+	// which is exactly the ragged left edge this function exists to avoid.
+	const words = text
+		.split(/\s+/)
+		.flatMap((word) =>
+			word.length <= room ? [word] : chunkByWidth(word, room),
+		);
+	for (const word of words) {
 		if (current === "") {
 			current = word;
 		} else if (current.length + 1 + word.length <= room) {
@@ -156,7 +195,15 @@ export function renderPretty(input: PrettyInput): string {
 				);
 				break;
 			default:
-				verdict = style("conformant", "green", color);
+				// Exit 0 with nothing exercised: a suite of `optional`
+				// members the contract does not declare. Conformant, since
+				// optionality excuses absence — but green "conformant" over
+				// "0/1 checks held" reads as a pass for a run that asked
+				// nothing, so it says which it is.
+				verdict =
+					passed === 0
+						? style("nothing exercised, no violation", "yellow", color)
+						: style("conformant", "green", color);
 		}
 	}
 	lines.push(

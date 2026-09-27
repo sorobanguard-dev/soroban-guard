@@ -22,6 +22,21 @@ log, not here.
 
 ### Added
 
+- Five negative checks, four on `transfer` and one on `transfer_from`.
+
+  Three require a refusal: moving more than the holder's balance (allowing
+  it mints or wraps, letting a holder spend value never issued), a negative
+  amount (`i128` is signed, and reading one as a reversed transfer lets
+  anyone withdraw from anyone), and spending a grant whose
+  `live_until_ledger` has passed (a contract that stores the amount and
+  drops the deadline leaves every approval it ever made permanent). The
+  last has to create the expiry it tests, because `allowance()` reports the
+  amount but never the ledger it dies at.
+
+  Two assert arithmetic instead, because SEP-41 permits either answer: a
+  zero-amount transfer and a self-transfer must leave the balances where
+  they started, whether the contract accepts or refuses them — only a
+  balance that moved is a finding.
 - `--format text|md|json`. `md` emits a clause-mapped conformance report for
   committing or review; `json` carries `schema`, `exitCode` and a per-status
   summary for CI and the web UI.
@@ -29,6 +44,49 @@ log, not here.
   grouped by layer, ids aligned, long diagnostics wrapped to the terminal
   width. Honours `NO_COLOR`, and a piped or redirected run gets the plain
   report so output stays greppable. `--no-color` forces plain.
+
+### Changed
+
+- A balance or allowance that answers with something impossible now FAILs
+  the contract wherever it is read, not only where a read check reads it.
+  Previously the two no-op checks reported UNVERIFIABLE when their
+  after-read came back defective — a negative quantity, a non-`i128`, or an
+  unexplained trap — which handed one contract two verdicts for the same
+  response, since `sep41-balance` FAILs it. Worse, a negative reading is
+  recorded as the run's first, so the old behaviour set that flag, muted
+  every later check, and exited 2 for a contract that had minted.
+
+  A merely *unreadable* answer — none arriving, an archived entry, an
+  asset's own trustline policy — is unchanged and still UNVERIFIABLE: that
+  is a fact about the run rather than about the contract. The distinction
+  is now stated in `docs/check-reference.md` under the premise rules.
+- A contract whose accounting goes negative is reported once, not once per
+  check. A token that lets the holder overdraw leaves the balance below
+  zero, and every later check used to meet that same defect while
+  establishing its own premise — so one missing bounds check reported as
+  nine failures, with the real finding buried among its own consequences.
+  The first negative reading is still a FAIL; the rest now report
+  UNVERIFIABLE and say why they cannot measure anything.
+
+  Taken alone, against a deliberately broken token, this turns
+  `7 pass, 9 fail` into `7 pass, 1 fail, 8 unverifiable` for identical
+  input — a run that gates on failure counts will see the number move.
+  Combined with the reordering below, the same token now reports
+  `9 pass, 2 fail, 5 unverifiable`.
+- The four checks between the unauthorized spend and the writes run
+  least-destructive first —
+  `zero-amount`, `self`, `negative-amount`, `over-balance` — which changes
+  nothing against a conformant token and much against a broken one. A
+  check whose attempt is *ignored* moves what it offered: zero moves zero
+  whatever the implementation does, a self-transfer should net zero but is
+  not guaranteed to — a contract that reads both balances before writing
+  either nets the amount instead — a negative amount shifts one unit, and
+  `balance + 1` takes everything and leaves the
+  accounting unsound. Ordered the old way, a broken token reported one
+  defect and eight unverifiable rows; ordered this way the same token
+  reports two, because the first unrefused flaw destroys the premises the
+  later checks need whatever the order. Pinned by unit test, because the
+  reasoning is invisible to anyone reshuffling the list.
 
 ### Fixed
 

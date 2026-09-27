@@ -43,12 +43,18 @@ describe.skipIf(!(OWNER && SPENDER))("SEP-41 suite against nothing", () => {
 			},
 			specFunctions: null,
 			establishedAllowances: new Set(),
+			soundness: {},
 		};
 		const assessed = await runSuite(sep41Suite, ctx);
 		const results = withCoverageGaps(assessed);
-		// Eleven checks even against nothing deployed: the count pins the
+		// Sixteen checks even against nothing deployed: the count pins the
 		// suite size so growth without updating this file fails loudly.
-		expect(results).toHaveLength(11);
+		expect(results).toHaveLength(16);
+		// Distinct ids, because the count alone does not imply them: one id
+		// duplicated and another dropped still totals sixteen, and every
+		// `find` below would still succeed while a check had silently
+		// vanished from the run.
+		expect(new Set(results.map((r) => r.id)).size).toBe(16);
 		// By id, never by position: positional slices broke silently every
 		// time the suite grew, and these tests only run with env configured.
 		const byId = (id: string) => results.find((r) => r.id === id);
@@ -68,12 +74,24 @@ describe.skipIf(!(OWNER && SPENDER))("SEP-41 suite against nothing", () => {
 		}
 
 		// The writes never reach the address: no signer is configured, so
-		// they report about this run rather than about the contract.
+		// they report about this run rather than about the contract. The
+		// newer negative checks are listed explicitly rather than covered
+		// by the count above, but not because refusal-credit could fire
+		// here — without a signer every check below exits before it
+		// submits, so that code never runs. What the per-id assertions
+		// catch is a signer guard that stops guarding: a check that
+		// submitted anyway, or one silently dropped from the suite, both
+		// of which the row count alone would miss.
 		for (const id of [
 			"sep41-transfer",
 			"sep41-approve",
 			"sep41-transfer_from",
 			"sep41-transfer_from-unauthorized",
+			"sep41-transfer-over-balance",
+			"sep41-transfer-negative-amount",
+			"sep41-transfer-zero-amount",
+			"sep41-transfer-self",
+			"sep41-transfer_from-expired",
 			"sep41-burn",
 			"sep41-burn_from",
 		]) {

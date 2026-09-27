@@ -219,8 +219,13 @@ function render(results: readonly CheckResult[]): string {
 	if (format === "md") {
 		return renderMarkdownReport({ ...common, ranAt, rpcUrl: reportedRpcUrl });
 	}
+	// Two different refusals, two different answers. `--no-color` and a
+	// non-terminal stdout drop to the flat renderer, because a redirected
+	// report should be one line per check for grep and diff. `NO_COLOR` does
+	// not come through here: it reaches `supportsColor` below and yields the
+	// grouped layout without escapes, which is what that standard asks for —
+	// no colour, not a different report.
 	if (values["no-color"] === true || !process.stdout.isTTY) {
-		// Piped or colour-refused: the plain renderer is the greppable one.
 		return renderReport(common);
 	}
 	return renderPretty({
@@ -265,13 +270,14 @@ try {
 	specFunctions = inspected.kind === "wasm" ? inspected.functions : null;
 	// Fund whoever signs, because a transaction is sourced from its signer
 	// and needs that account to exist and hold fees. The owner always does;
-	// the spender does only when transfer_from, burn_from or the negative
-	// check will run, and an address that merely receives needs nothing —
-	// so the second is conditional rather than unconditional faucet spend.
+	// the spender does only when it holds a key, and an address that merely
+	// receives needs nothing — so the second is conditional rather than
+	// unconditional faucet spend.
 	//
-	// Without the spender's, a fresh SPENDER_SECRET makes all three
-	// spender-signed checks throw and report SKIPPED, which reads as
-	// "unknown" instead of the assessment that was asked for.
+	// Four checks submit as the spender: transfer_from, burn_from, and the
+	// two that attempt a spend the contract should refuse. Without funding,
+	// a fresh SPENDER_SECRET makes all four throw and report SKIPPED, which
+	// reads as "unknown" instead of the assessment that was asked for.
 	await fundAccount(server, parties.owner.address);
 	if (parties.spender.signer !== undefined) {
 		await fundAccount(server, parties.spender.address);
@@ -294,6 +300,9 @@ const ctx: Sep41Context = {
 	// Fresh per run: grants established by earlier checks are fresh by
 	// construction, which is the only expiry proof allowance() can give.
 	establishedAllowances: new Set(),
+	// Fresh per run: what one contract's accounting did says nothing about
+	// the next one's.
+	soundness: {},
 };
 
 const assessed = await runSuite(sep41Suite, ctx);

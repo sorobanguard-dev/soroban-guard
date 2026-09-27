@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
 	classifyStanding,
 	describeValue,
+	setupEvidence,
 } from "../../../src/sep41/checks/shared.ts";
 
 /**
@@ -86,5 +87,55 @@ describe("classifyStanding", () => {
 		const sacTrap =
 			'HostError: Error(Contract, #13)\n\nEvent log (newest first):\n   0: [Diagnostic Event] topics:[error, Error(Contract, #13)], data:["trustline entry is missing for account", GCGX...]';
 		expect(classifyStanding(sacTrap)).toBe("no-trustline");
+	});
+});
+
+describe("setupEvidence", () => {
+	it("keeps the hash of a submission that may still apply", () => {
+		expect(setupEvidence({ kind: "timeout", txHash: "abc123" })).toEqual({
+			txHash: "abc123",
+		});
+	});
+
+	it("records nothing for a timeout with no hash", () => {
+		expect(setupEvidence({ kind: "timeout", txHash: "" })).toBeUndefined();
+	});
+
+	it("keeps diagnostics and handles for a settled rejection", () => {
+		expect(
+			setupEvidence({
+				kind: "rejected",
+				diagnostics: "transaction abc123 failed on-chain",
+				settled: true,
+				txHash: "abc123",
+				ledger: 4738627,
+			}),
+		).toEqual({
+			error: "transaction abc123 failed on-chain",
+			txHash: "abc123",
+			ledger: 4738627,
+		});
+	});
+
+	it("keeps only diagnostics for a refusal that never reached the ledger", () => {
+		expect(
+			setupEvidence({
+				kind: "rejected",
+				diagnostics: "HostError: Error(Contract, #4)",
+				settled: false,
+			}),
+		).toEqual({ error: "HostError: Error(Contract, #4)" });
+	});
+
+	it("keeps restore diagnostics", () => {
+		expect(setupEvidence({ kind: "restore", diagnostics: "archived" })).toEqual(
+			{ error: "archived" },
+		);
+	});
+
+	it("throws rather than shaping an applied submission", () => {
+		expect(() =>
+			setupEvidence({ kind: "applied", txHash: "abc123", ledger: 1 }),
+		).toThrow();
 	});
 });

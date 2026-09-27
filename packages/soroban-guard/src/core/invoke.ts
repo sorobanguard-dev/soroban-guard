@@ -78,6 +78,18 @@ export type SubmitResult =
 			 * reworded.
 			 */
 			readonly settled: boolean;
+			/**
+			 * The transaction, when one reached the ledger to be looked up.
+			 *
+			 * Only a `settled` rejection has one: a refusal thrown at
+			 * simulation never became a transaction. Carried as a field
+			 * rather than left inside the diagnostics sentence, so a report
+			 * can put it where a reader chases hashes instead of leaving it
+			 * to be parsed out of prose.
+			 */
+			readonly txHash?: string;
+			/** Ledger the failed transaction was included in, when known. */
+			readonly ledger?: number;
 	  }
 	| { readonly kind: "restore"; readonly diagnostics: string }
 	| { readonly kind: "timeout"; readonly txHash: string };
@@ -100,6 +112,17 @@ export function addressArg(address: string): xdr.ScVal {
 export function amountArg(amount: bigint): xdr.ScVal {
 	return nativeToScVal(amount, { type: "i128" });
 }
+
+/**
+ * The largest amount `amountArg` can encode.
+ *
+ * Stated beside the encoder that enforces it rather than in the one check
+ * that needs it: a caller computing an amount from ledger state has to know
+ * where the encoder stops, and a second copy elsewhere is a second thing to
+ * keep true. `nativeToScVal` throws above this, which would escape a check
+ * as SKIPPED rather than as the honest "this cannot be tested".
+ */
+export const I128_MAX = 2n ** 127n - 1n;
 
 /**
  * Encode a ledger-sequence argument. `approve` takes its expiration as a
@@ -293,6 +316,8 @@ export async function submitWrite(
 		return {
 			kind: "rejected",
 			settled: true,
+			...(txHash === "" ? {} : { txHash }),
+			...(settled.ledger === undefined ? {} : { ledger: settled.ledger }),
 			diagnostics:
 				txHash === ""
 					? "transaction failed on-chain; no transaction hash was observed"

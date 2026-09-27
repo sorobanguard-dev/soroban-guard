@@ -7,6 +7,7 @@ import { rpc, type xdr } from "@stellar/stellar-sdk";
 import {
 	type InvokeResult,
 	interpretSimulation,
+	type SubmitResult,
 	simulateRead,
 } from "../../core/invoke.ts";
 import type { CheckResult } from "../../core/types.ts";
@@ -78,14 +79,31 @@ export function verdictHelpers(meta: CheckMeta, expected: string) {
 		unverifiable(
 			actual: string,
 			durationMs: number,
-			error?: string,
+			/**
+			 * A diagnostic string, or the whole evidence bag when there is
+			 * more to record than one.
+			 *
+			 * The string form is what most call sites want and stays the
+			 * default. But a submission that reached the ledger and failed
+			 * there carries a transaction hash, and the string-only
+			 * signature was silently dropping it at six sites — a reader
+			 * told the write "failed on-chain" with nothing to look it up
+			 * by. Widening here fixes all six rather than teaching each to
+			 * hand-roll a literal.
+			 */
+			evidence?: string | CheckResult["evidence"],
 		): CheckResult {
 			return {
 				...meta,
 				status: "UNVERIFIABLE",
 				expected,
 				actual,
-				evidence: error === undefined ? {} : { error },
+				evidence:
+					evidence === undefined
+						? {}
+						: typeof evidence === "string"
+							? { error: evidence }
+							: evidence,
 				durationMs,
 			};
 		},
@@ -145,30 +163,6 @@ export async function callRead(
 }
 
 /**
- * Why a call may have had no standing to succeed — or null when the outcome
- * is the contract's own behavior.
- *
- * A Stellar Asset Contract enforces the asset's rules alongside the token
- * interface: account balances live in trustlines, and an `AUTH_REQUIRED`
- * asset needs the issuer's authorization. A call tripping either never had
- * standing, so treating it as a defect accuses a conformant token.
- *
- * Reads diagnostic text, which this codebase otherwise avoids — error
- * strings are RPC- and version-specific. It is the only place the reason
- * exists: no balance read predicts it, and for a submission the attempt has
- * already happened. It fails safe either way, since an unmatched string
- * falls through to the verdict we would have reported anyway, and a match
- * only ever downgrades an accusation to "unknown".
- *
- * Patterns are the SAC host's own wording, narrower than a bare "not
- * authorized" — that phrase appears in custom-token panics where the refusal
- * IS the verdict, and downgrading those would hide real findings.
- *
- * Returns a code rather than a sentence: reads and writes phrase the same
- * finding differently, and keeping two copies of the patterns in sync is
- * exactly the drift this exists to prevent.
- */
-/**
  * What to report when a write reached the ledger and failed there.
  *
  * Not a refusal by the contract: the transaction may have run out of fee,
@@ -184,8 +178,65 @@ export async function callRead(
 export const SETTLED_FAILURE_ACTUAL =
 	"the write reached the ledger and failed there rather than being refused by the contract; the cause is not recoverable from the response";
 
+/**
+ * Evidence for a setup step that did not produce something to assert on.
+ *
+ * A timeout that named its hash keeps it — the attempt may yet apply and a
+ * reader has to look it up. A settled rejection keeps its diagnostics plus
+ * whatever handle the ledger gave it. Anything without a handle yields
+ * undefined, and the caller reports no evidence rather than an empty one.
+ * One function for the three `_from` setups, for the usual reason: the
+ * hash-dropping variant of this already shipped once.
+ */
+export function setupEvidence(
+	result: SubmitResult,
+): CheckResult["evidence"] | undefined {
+	if (result.kind === "applied") {
+		throw new Error("setupEvidence needs a non-applied submission");
+	}
+	if (result.kind === "timeout") {
+		return result.txHash === "" ? undefined : { txHash: result.txHash };
+	}
+	if (result.kind === "restore") {
+		return { error: result.diagnostics };
+	}
+	// Explicit, not fallthrough: a future SubmitResult kind must fail loudly
+	// here rather than inherit rejected-shaped evidence, the same guarantee
+	// refusal.ts makes for verdicts.
+	if (result.kind !== "rejected") {
+		throw new Error(
+			`unhandled submission kind: ${(result as { kind: string }).kind}`,
+		);
+	}
+	return {
+		error: result.diagnostics,
+		...(result.txHash === undefined ? {} : { txHash: result.txHash }),
+		...(result.ledger === undefined ? {} : { ledger: result.ledger }),
+	};
+}
+
 export type StandingProblem = "no-trustline" | "not-authorized";
 
+/**
+ * Why a call may have had no standing to succeed — or null when the outcome
+ * is the contract's own behavior.
+ *
+ * A Stellar Asset Contract enforces the asset's rules alongside the token
+ * interface: balances live in trustlines, and an `AUTH_REQUIRED` asset needs
+ * the issuer's authorization. A call tripping either never had standing, so
+ * treating it as a defect accuses a conformant token.
+ *
+ * Matching on diagnostic text is what this codebase otherwise avoids, and it
+ * is deliberate here: nothing else knows the reason, and it fails safe —
+ * an unmatched string falls through to the verdict we would have reported
+ * anyway, and a match only ever downgrades an accusation to "unknown". The
+ * patterns are the SAC host's own wording rather than a bare "not
+ * authorized", which appears in custom-token panics where the refusal *is*
+ * the verdict.
+ *
+ * Returns a code, not a sentence: reads and writes phrase the same finding
+ * differently, and two copies of these patterns would drift.
+ */
 export function classifyStanding(diagnostics: string): StandingProblem | null {
 	if (/trustline entry is missing/i.test(diagnostics)) {
 		return "no-trustline";
