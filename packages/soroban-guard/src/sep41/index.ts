@@ -131,18 +131,28 @@ export const sep41Suite: Suite<Sep41Context> = {
 		// state at all.
 		unauthorizedTransferFromCheck,
 		// Refusal checks before the moves they would otherwise be starved by:
-		// over-balance needs a readable balance, not a large one, and it
-		// spends nothing when the contract behaves — but a holder drained to
-		// zero by the writes below makes `balance + 1` equal 1, which a
-		// contract could refuse for having nothing at all rather than for
-		// checking its floor.
-		overBalanceTransferCheck,
-		negativeAmountTransferCheck,
-		// The two whose answer is arithmetic rather than a refusal. They move
-		// nothing when the contract is correct, so they cost no balance and
-		// sit with the other refusal checks ahead of the spending writes.
+		// they need a readable balance, not a large one, and they spend
+		// nothing when the contract behaves — but a holder drained to zero by
+		// the writes below makes `balance + 1` equal 1, which a contract
+		// could refuse for having nothing at all rather than for checking its
+		// floor.
+		//
+		// Among themselves they run least-destructive first, which matters
+		// only when the contract is broken — and that is exactly when a
+		// verdict is worth having. A refusal check that is ignored *moves*
+		// what it offered, so the four differ sharply in what they leave
+		// behind: zero moves zero and a self-transfer nets zero whatever the
+		// arithmetic does, so neither can disturb what follows. A negative
+		// amount shifts one unit. `balance + 1` takes everything and drives
+		// the holder below zero, which is unsound accounting — and every
+		// later check then reads that instead of testing its own rule (see
+		// `soundness` on Sep41Context). Putting it last costs nothing on a
+		// conformant token and is the difference between learning one defect
+		// and learning all of them.
 		zeroAmountTransferCheck,
 		selfTransferCheck,
+		negativeAmountTransferCheck,
+		overBalanceTransferCheck,
 		transferCheck,
 		approveCheck,
 		transferFromCheck,
