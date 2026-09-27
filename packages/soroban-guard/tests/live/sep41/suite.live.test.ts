@@ -34,6 +34,7 @@ describe.skipIf(!(CONTRACT && OWNER && SPENDER))(
 				},
 				specFunctions: inspected.kind === "wasm" ? inspected.functions : null,
 				establishedAllowances: new Set(),
+				soundness: {},
 			};
 			const assessed = await runSuite(sep41Suite, ctx);
 			const results = withCoverageGaps(assessed);

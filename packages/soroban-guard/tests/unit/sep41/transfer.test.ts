@@ -60,6 +60,7 @@ function ctxWith(
 		networkPassphrase: Networks.TESTNET,
 		specFunctions: null,
 		establishedAllowances: new Set(),
+		soundness: {},
 		parties: {
 			owner: { address: OWNER, isThrowaway: false, signer },
 			spender: { address: SPENDER, isThrowaway: false },

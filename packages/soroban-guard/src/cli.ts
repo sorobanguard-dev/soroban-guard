@@ -300,6 +300,9 @@ const ctx: Sep41Context = {
 	// Fresh per run: grants established by earlier checks are fresh by
 	// construction, which is the only expiry proof allowance() can give.
 	establishedAllowances: new Set(),
+	// Fresh per run: what one contract's accounting did says nothing about
+	// the next one's.
+	soundness: {},
 };
 
 const assessed = await runSuite(sep41Suite, ctx);

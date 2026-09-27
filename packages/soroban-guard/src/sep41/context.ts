@@ -70,6 +70,35 @@ export interface Sep41Context {
 	 */
 	readonly establishedAllowances: Set<string>;
 	/**
+	 * What this run has learned about the contract's accounting, once it has
+	 * stopped adding up.
+	 *
+	 * A negative quantity is a defect, and the check that first sees one
+	 * reports it. The problem is what comes after: a contract that lets the
+	 * holder overdraw leaves the balance below zero, and every later check
+	 * reads that same defect while establishing its own premise. Without
+	 * this, one missing bounds check reports as nine failures — eight of
+	 * them the first one's wake, with the real finding buried among them.
+	 *
+	 * So the first observation is recorded here, and later reads consult it:
+	 * the finding is stated once as a FAIL, and the checks that can no
+	 * longer measure anything say why they cannot rather than repeating it.
+	 * Mutable for the same reason `establishedAllowances` is — checks run
+	 * sequentially sharing one context, and this is the run's memory.
+	 *
+	 * Deliberately one flag for one property rather than a graph of which
+	 * check invalidates which. A negative balance is the case that occurs;
+	 * a second property can be added when a second one actually appears.
+	 */
+	readonly soundness: {
+		/**
+		 * Set when a quantity first reads negative, to the operator-facing
+		 * detail of that reading (e.g. `balance() returned -1, which is
+		 * negative`). Undefined means nothing unsound has been observed.
+		 */
+		firstNegative?: string;
+	};
+	/**
 	 * The two roles, and the single home for their addresses. Reads take
 	 * `parties.owner.address`; writes additionally need `parties.owner.signer`
 	 * and report UNVERIFIABLE without it.

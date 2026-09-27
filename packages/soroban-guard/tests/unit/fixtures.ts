@@ -151,6 +151,7 @@ export function writeCtx(
 		networkPassphrase: Networks.TESTNET,
 		specFunctions: null,
 		establishedAllowances: new Set(),
+		soundness: {},
 		parties: {
 			owner: {
 				address: OWNER,
