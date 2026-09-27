@@ -62,8 +62,10 @@ log, not here.
   `zero-amount`, `self`, `negative-amount`, `over-balance` — which changes
   nothing against a conformant token and much against a broken one. A
   refusal check that is *ignored* moves what it offered: zero moves zero
-  and a self-transfer nets zero whatever the arithmetic does, a negative
-  amount shifts one unit, and `balance + 1` takes everything and leaves the
+  whatever the implementation does, a self-transfer should net zero but is
+  not guaranteed to — a contract that reads both balances before writing
+  either nets the amount instead — a negative amount shifts one unit, and
+  `balance + 1` takes everything and leaves the
   accounting unsound. Ordered the old way, a broken token reported one
   defect and eight unverifiable rows; ordered this way the same token
   reports three defects. Pinned by unit test, because the reasoning is

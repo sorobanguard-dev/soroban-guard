@@ -102,6 +102,32 @@ describe("negativeAmountTransferCheck", () => {
 		expect(result.actual).not.toContain("sign being discarded");
 	});
 
+	// The case the holder's balance alone cannot describe: a reversed
+	// transfer debits the recipient, and if the holder happens to land back
+	// where it started, watching only the holder would report "accepted
+	// without being refused" while a third party was robbed. The recipient
+	// read is what tells those apart.
+	it("names the recipient's loss when the holder's balance is unchanged", async () => {
+		stubSubmit(APPLIED);
+		const result = await negativeAmountTransferCheck.run(
+			writeCtx(
+				sequencedServer([
+					okResponse(100n), // holder before
+					okResponse(5n), // recipient before
+					okResponse(100n), // holder after: unchanged
+					okResponse(4n), // recipient after: one unit poorer
+				]),
+			),
+		);
+		expect(result.status).toBe("FAIL");
+		expect(result.actual).toContain("the recipient's fell");
+		expect(result.actual).toContain("never authorized it");
+		// The bare "did not change" reading would have been the wrong
+		// diagnosis, not merely a less detailed one.
+		expect(result.actual).not.toContain("accepted without being refused");
+		expect(result.evidence.after).toEqual({ holder: "100", recipient: "4" });
+	});
+
 	// A defective after-read is still the contract's fault — but "could not
 	// be read" would hide which fault. The defect detail names it.
 	it("FAILs with the defect detail when the after-read is defective", async () => {
@@ -121,6 +147,10 @@ describe("negativeAmountTransferCheck", () => {
 		expect(result.evidence.error).toContain("Error(Contract, #7)");
 		expect(result.evidence.after).toEqual({
 			holder: "unreadable (defective read)",
+			// The recipient read follows the holder's and is guarded, so an
+			// exhausted transport leaves it unread rather than discarding a
+			// FAIL that the holder's side already earned.
+			recipient: "unreadable",
 		});
 	});
 

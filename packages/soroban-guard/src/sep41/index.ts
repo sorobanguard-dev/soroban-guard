@@ -141,9 +141,15 @@ export const sep41Suite: Suite<Sep41Context> = {
 		// only when the contract is broken — and that is exactly when a
 		// verdict is worth having. A refusal check that is ignored *moves*
 		// what it offered, so the four differ sharply in what they leave
-		// behind: zero moves zero and a self-transfer nets zero whatever the
-		// arithmetic does, so neither can disturb what follows. A negative
-		// amount shifts one unit. `balance + 1` takes everything and drives
+		// behind: zero moves zero whatever the implementation does, because
+		// the amount is the thing that would move. A self-transfer *should*
+		// net zero and usually does, but it is not guaranteed to — a
+		// contract that reads both balances before writing either lets the
+		// second write clobber the first, and the fixture in this repo does
+		// exactly that (a self-transfer of -1 leaves the holder one unit
+		// richer). So self is least-disturbance rather than
+		// no-disturbance, and it goes second. A negative amount shifts one
+		// unit. `balance + 1` takes everything and drives
 		// the holder below zero, which is unsound accounting — and every
 		// later check then reads that instead of testing its own rule (see
 		// `soundness` on Sep41Context). Putting it last costs nothing on a

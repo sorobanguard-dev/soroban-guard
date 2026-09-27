@@ -86,20 +86,29 @@ async function waitForLedger(
 	target: number,
 	deadline: number,
 ): Promise<number | null> {
-	while (Date.now() < deadline) {
+	// Read, then wait, never the reverse. Checking the clock before the
+	// read is what would give up on a window still had: a poll with a
+	// second left would report "did not pass" on a ledger that had a second
+	// to close in. So every pass reads first, and the wait is trimmed to
+	// whatever remains rather than skipped — the deadline stays a real
+	// bound, and the loop always ends on a read.
+	//
+	// Bounded by the deadline rather than by a count, unlike fundAccount's
+	// retry: the caller states how long the answer is worth waiting for,
+	// and how many polls fit in that is the poll interval's business.
+	while (true) {
 		const latest = await ctx.server.getLatestLedger();
 		if (latest.sequence > target) {
 			return latest.sequence;
 		}
-		// Sleeping past the deadline would make the bound a lie: a poll
-		// starting just under it would return a full interval late, and the
-		// sleep before the final `null` buys nothing at all.
-		if (Date.now() + POLL_INTERVAL_MS >= deadline) {
-			break;
+		const remaining = deadline - Date.now();
+		if (remaining <= 0) {
+			return null;
 		}
-		await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
+		await new Promise((resolve) =>
+			setTimeout(resolve, Math.min(POLL_INTERVAL_MS, remaining)),
+		);
 	}
-	return null;
 }
 
 export const expiredAllowanceCheck = {
@@ -208,6 +217,11 @@ export const expiredAllowanceCheck = {
 			SPEND_AMOUNT,
 			latest.sequence,
 			SHORT_LIFETIME_LEDGERS,
+			// Never registered. The registry means "fresh, so a refusal is
+			// the contract's answer"; this grant is built to lapse, so
+			// registering it would teach transfer_from and burn_from to read
+			// an expired allowance as a live one and FAIL a correct contract.
+			false,
 		);
 		if (approval.kind !== "applied") {
 			return unverifiable(
@@ -310,10 +324,15 @@ export const expiredAllowanceCheck = {
 				expected: EXPECTED,
 				actual: `a spend against an allowance that expired at ledger ${expiresAt} was refused at ledger ${reached}`,
 				evidence: {
+					// The post-wait reads, not the premise ones taken before
+					// the approval: the wait is wall-clock time in which the
+					// holder can spend elsewhere and still stay above
+					// SPEND_AMOUNT, and evidence that reports a balance which
+					// was not true at submission misdescribes the run.
 					before: {
 						allowance: reported,
-						holder: `${holder.amount}`,
-						recipient: `${recipient.amount}`,
+						holder: `${fresh.amount}`,
+						recipient: `${freshRecipient.amount}`,
 					},
 					ledger: reached,
 					error: reading.diagnostics,
@@ -326,10 +345,14 @@ export const expiredAllowanceCheck = {
 			`a spend succeeded against an allowance that expired at ledger ${expiresAt}, submitted at ledger ${reached}; consistent with the contract storing the amount but not its deadline, which would leave every approval it has ever granted permanent`,
 			elapsed(),
 			{
+				// Post-wait, for the same reason as the PASS above: a FAIL
+				// accuses the contract of ignoring a deadline, and the
+				// balances it cites have to be the ones that were true when
+				// the spend was submitted.
 				before: {
 					allowance: reported,
-					holder: `${holder.amount}`,
-					recipient: `${recipient.amount}`,
+					holder: `${fresh.amount}`,
+					recipient: `${freshRecipient.amount}`,
 				},
 				txHash: reading.txHash,
 				ledger: reading.ledger,

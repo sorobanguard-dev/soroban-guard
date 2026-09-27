@@ -167,8 +167,10 @@ describe("sep41Suite ordering", () => {
 
 	it("orders the refusal checks least-destructive first", () => {
 		// What a refusal check leaves behind when the contract ignores it:
-		// zero and self move nothing whatever the arithmetic does, a negative
-		// amount shifts one unit, and `balance + 1` takes everything and
+		// zero moves zero whatever the implementation does, a self-transfer
+		// should net zero but need not (fixtures/vulnerable-token clobbers
+		// one write with the other and nets +1), a negative amount shifts
+		// one unit, and `balance + 1` takes everything and
 		// drives the holder below zero. Reversing the last pair is the
 		// regression that turns one finding into one finding plus eight
 		// unverifiables.

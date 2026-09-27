@@ -104,11 +104,22 @@ export async function submitApproval(
 	 *
 	 * The expiry check wants a grant that lapses within the run, which is
 	 * the one case where a shorter life is the point rather than a mistake.
-	 * A grant made this way is deliberately **not** registered: the registry
-	 * means "fresh, so a refusal is the contract's answer", and a grant
-	 * built to expire is the opposite of that claim.
+	 * Such a grant must **not** reach the registry — see `register`.
 	 */
 	lifetimeLedgers: number = EXPIRATION_LEDGERS,
+	/**
+	 * Whether an applied grant joins the run registry, which means "this
+	 * run watched it land, so it is fresh and a refusal is the contract's
+	 * answer rather than a lapsed deadline".
+	 *
+	 * Stated by the caller rather than inferred from `lifetimeLedgers`.
+	 * Deriving it from the lifetime reads the length as a proxy for the
+	 * intent, so a future caller that passes the default number explicitly —
+	 * for reasons of its own — would be registered by coincidence. A grant
+	 * built to expire is the opposite of the registry's claim, and that is
+	 * a fact about why it was made, not about how long it lives.
+	 */
+	register = true,
 ): Promise<ReturnType<typeof submitWrite>> {
 	const { owner, spender } = ctx.parties;
 	if (owner.signer === undefined) {
@@ -129,7 +140,7 @@ export async function submitApproval(
 		},
 		ctx.networkPassphrase,
 	);
-	if (result.kind === "applied" && lifetimeLedgers === EXPIRATION_LEDGERS) {
+	if (result.kind === "applied" && register) {
 		ctx.establishedAllowances.add(grantKey(owner.address, spender.address));
 	}
 	return result;

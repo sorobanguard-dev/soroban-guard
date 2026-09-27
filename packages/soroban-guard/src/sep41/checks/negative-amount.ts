@@ -217,13 +217,31 @@ export const negativeAmountTransferCheck = {
 				},
 			);
 		}
+		// The recipient's side, for the case the holder's alone cannot
+		// describe: a reversed transfer debits the *recipient*, and if the
+		// holder's own balance happens to land back where it started the
+		// diagnosis would read "accepted without being refused" while a
+		// third party was quietly robbed. Guarded like the read above — the
+		// FAIL is already earned, so a transport throw must not discard it.
+		let afterRecipient: QuantityRead | null = null;
+		try {
+			afterRecipient = await readBalance(ctx, spender.address);
+		} catch {
+			// Left null: the holder's side still carries the finding, and
+			// the hash is what a reader follows.
+		}
+		const recipientLost =
+			afterRecipient?.kind === "value" &&
+			afterRecipient.amount < recipient.amount;
 		const direction =
 			after.kind === "value"
 				? after.amount > holder.amount
 					? "the holder gained, consistent with the contract reading it as a transfer in the opposite direction — anyone can withdraw from anyone"
 					: after.amount < holder.amount
 						? "the holder lost, consistent with the sign being discarded rather than honoured"
-						: "the holder's balance did not change, so the call was accepted without being refused"
+						: recipientLost
+							? "the holder's balance is unchanged but the recipient's fell, so the call moved value out of a party that never authorized it"
+							: "the holder's balance did not change, so the call was accepted without being refused"
 				: after.kind === "defect"
 					? `the resulting balance could not be trusted (${after.detail})`
 					: "the resulting balance could not be read";
@@ -242,6 +260,14 @@ export const negativeAmountTransferCheck = {
 							: after.kind === "defect"
 								? "unreadable (defective read)"
 								: "unreadable",
+					recipient:
+						afterRecipient === null
+							? "unreadable"
+							: afterRecipient.kind === "value"
+								? `${afterRecipient.amount}`
+								: afterRecipient.kind === "defect"
+									? "unreadable (defective read)"
+									: "unreadable",
 				},
 				txHash: reading.txHash,
 				ledger: reading.ledger,

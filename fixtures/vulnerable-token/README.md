@@ -28,12 +28,23 @@ specific, named ways.
 
 ## The flaws
 
-| Flaw | Check that must FAIL |
-| ---- | -------------------- |
+| Flaw | Check that targets it |
+| ---- | --------------------- |
 | `transfer` never compares the amount against the balance | `sep41-transfer-over-balance` |
 | `transfer` never rejects a negative amount | `sep41-transfer-negative-amount` |
 | `transfer` reads both balances before writing either | `sep41-transfer-self` |
 | `approve` discards `live_until_ledger` | `sep41-transfer_from-expired` |
+
+The mapping is which check *targets* which flaw, not which will produce a
+verdict on any given run. A contract with several arithmetic holes cannot
+have all of them tested at once: the first flaw that goes unrefused leaves
+the accounting unsound, and later checks report "the premise cannot be
+established" rather than testing their own rule. On the logged run
+`negative-amount` fires first and leaves the recipient at `-1`, so
+`over-balance` reports a premise failure and the floor is never actually
+exercised. That is the tool being honest, not a gap — but it means a red
+mark against this fixture should be read for *which* message it carries,
+not merely counted.
 
 Authorization is *correct* throughout — `require_auth` is called on every
 path that needs it. The holes are arithmetic, which is the realistic shape:

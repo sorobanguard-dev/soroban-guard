@@ -172,8 +172,21 @@ against a SAC prove only that the guard does not cry wolf on a contract
 that is correct by construction; a check that never fires looks exactly
 like a check that fires correctly, until something deserves a red mark.
 
-Three points worth drawing out:
+Four points worth drawing out:
 
+- **`over-balance`'s red mark here is collateral, not a floor test.** Its
+  message says so — "the premise cannot be established". `negative-amount`
+  ran first and left the recipient at `-1`, so over-balance's
+  recipient-premise read met unsound accounting before it could attempt
+  `balance + 1`. The floor is genuinely untested in *this* run. Against a
+  token whose only flaw is the missing floor it fires properly, which is
+  what the check's own unit tests cover; against this fixture the honest
+  reading is that two flaws were demonstrated and a third was pre-empted by
+  one of them. The ordering already minimises this — reverse it and three
+  checks are pre-empted instead of one — but a contract with several
+  arithmetic holes cannot have all of them tested in a single run, and the
+  report saying "premise cannot be established" rather than claiming a
+  floor failure is the tool behaving correctly.
 - **`transfer-self` was not a planted flaw.** The fixture was written with
   three deliberate bugs and this was not among them — `transfer` reads both
   balances into locals before writing either, so when `from == to` the
