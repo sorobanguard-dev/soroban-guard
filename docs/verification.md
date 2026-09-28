@@ -187,6 +187,41 @@ than blaming the contract for a network condition. Restoring the entry, or
 running against a contract whose entries are live, returns the run to
 16/16.
 
+### Run of 2026-09-28 — the sixteen rows the README shows
+
+The same contract, later the same cycle, once the archived entry was live
+again. This is the run reproduced in the README, kept here so the sample
+there has a logged original rather than pointing at an earlier run with
+different balances:
+
+```
+  ✓ sep41-decimals  returned 7
+  ✓ sep41-balance  balance is 898999960
+  ✓ sep41-allowance  allowance is 0
+  ✓ sep41-name  name is "TEST:GAY3IYUGLOBCIFRCDULGBSR4VYREU4BITUAIYTUD64KN232LJBOHSUGY"
+  ✓ sep41-symbol  symbol is "TEST"
+  ✓ sep41-transfer_from-unauthorized  an unauthorized spend was refused
+  ✓ sep41-transfer-zero-amount  the call was accepted and both balances held, at 898999960 and 14
+  ✓ sep41-transfer-self  the call was accepted and the balance held at 898999960
+  ✓ sep41-transfer-negative-amount  a transfer of -1 was refused
+  ✓ sep41-transfer-over-balance  a transfer of 898999961 against a balance of 898999960 was refused
+  ✓ sep41-transfer  holder -1, recipient +1
+  ✓ sep41-approve  allowance is 2 after approving 2 over 1
+  ✓ sep41-transfer_from  holder -1, recipient +1, allowance -1
+  ✓ sep41-burn  holder -1
+  ✓ sep41-burn_from  holder -1, spender 0, allowance -1
+  ✓ sep41-transfer_from-expired  a spend against an allowance that expired at ledger 4903103 was refused at ledger 4903104
+
+16 pass, 0 fail, 0 skipped, 0 unverifiable, 0 not implemented (16 checks)
+by layer: interface 3/3 pass · behavior 13/13 pass
+exit 0
+```
+
+The holder's balance is lower than in the earlier entry — each keyed run
+spends four units — and the recipient's differs because a different fresh
+spender was used. Both are what repeated runs against a live network look
+like; neither changes a verdict.
+
 ## Run of 2026-09-27 — against a deliberately broken token
 
 The gap the section above names is now closed. `fixtures/vulnerable-token`

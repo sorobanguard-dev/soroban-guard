@@ -1,10 +1,20 @@
-# SEP-41 Guard
+# soroban-guard
 
 [![CI](https://github.com/birserg/soroban-guard/actions/workflows/ci.yml/badge.svg)](https://github.com/birserg/soroban-guard/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 
 Conformance testing for deployed [SEP-41](https://github.com/stellar/stellar-protocol/blob/master/ecosystem/sep-0041.md)
 Soroban token contracts on Stellar **testnet**.
+
+> **Scope, stated plainly:** this checks **SEP-41 token contracts only**,
+> and is built for **testnet**. Reads work against any network; the writes
+> refuse to sign anywhere but a test network unless
+> `--allow-non-testnet-write` is passed, and a full run burns real units
+> where it lands. The name is broader than the tool — it does not audit
+> arbitrary Soroban contracts, review WASM, or check any other SEP.
+> A contract that passes here has been shown to honour the SEP-41
+> interface as this suite exercises it; that is not a security audit, and
+> no run of this tool should be read as one.
 
 > **Status: early.** All ten SEP-41 members are checked against testnet.
 > The five reads (`decimals`, `balance`, `allowance`, `name`, `symbol`) are
@@ -32,7 +42,11 @@ pnpm install
 node packages/soroban-guard/src/cli.ts <contract-id>
 ```
 
-Against a real testnet token, with no keys configured:
+Against a real testnet token, with **nothing configured** — no keys, no
+addresses. This is the first run, and it is mostly question marks by
+design: thirteen checks need signing authority or a real holder, and each
+one names what it needs instead of guessing. A configured run answers all
+sixteen — see [Checking writes](#checking-writes) below for that output.
 
 ```
 SEP-41 Conformance — CA5UTUUPHYL5K22UBRUVC37EARZUGYOSGK3IKIXG2JLCC5ZZLI4BDWDM
@@ -100,6 +114,57 @@ OWNER_SECRET=$(stellar keys secret owner) \
 SPENDER_SECRET=$(stellar keys secret spender) \
   node packages/soroban-guard/src/cli.ts <contract-id>
 ```
+
+With both keys configured, every row carries a verdict — this is a real
+run against a Stellar Asset Contract on testnet:
+
+```
+SEP-41 Conformance — CARQGEM3RDSWA2SRZDL6LDBOEQWQHS74BOL5V62QXIGMOBIMIX5YTYYN
+
+  ✓ sep41-decimals  returned 7
+  ✓ sep41-balance  balance is 898999960
+  ✓ sep41-allowance  allowance is 0
+  ✓ sep41-name  name is "TEST:GAY3IYUGLOBCIFRCDULGBSR4VYREU4BITUAIYTUD64KN232LJBOHSUGY"
+  ✓ sep41-symbol  symbol is "TEST"
+  ✓ sep41-transfer_from-unauthorized  an unauthorized spend was refused
+  ✓ sep41-transfer-zero-amount  the call was accepted and both balances held, at 898999960 and 14
+  ✓ sep41-transfer-self  the call was accepted and the balance held at 898999960
+  ✓ sep41-transfer-negative-amount  a transfer of -1 was refused
+  ✓ sep41-transfer-over-balance  a transfer of 898999961 against a balance of 898999960 was refused
+  ✓ sep41-transfer  holder -1, recipient +1
+  ✓ sep41-approve  allowance is 2 after approving 2 over 1
+  ✓ sep41-transfer_from  holder -1, recipient +1, allowance -1
+  ✓ sep41-burn  holder -1
+  ✓ sep41-burn_from  holder -1, spender 0, allowance -1
+  ✓ sep41-transfer_from-expired  a spend against an allowance that expired at ledger 4903103 was refused at ledger 4903104
+
+16 pass, 0 fail, 0 skipped, 0 unverifiable, 0 not implemented (16 checks)
+by layer: interface 3/3 pass · behavior 13/13 pass
+
+exit 0
+```
+
+And against a token written to be wrong — `fixtures/vulnerable-token`,
+which exists so the checks can be proven to fire — the same suite reports
+findings rather than a wall of red:
+
+```
+  ✓ sep41-transfer-zero-amount  the call was accepted and both balances held, at 1000 and 0
+  ✗ sep41-transfer-self  the holder's balance moved from 1000 to 1001; debiting and crediting the same address must net zero, so a change means one side was applied without the other
+  ✗ sep41-transfer-negative-amount  a transfer of -1 succeeded; the holder gained, consistent with the contract reading it as a transfer in the opposite direction — anyone can withdraw from anyone
+  ? sep41-transfer-over-balance  recipient balance unreadable (balance() returned -1, which is negative; this contract's accounting already went negative earlier in the run, so nothing measured against it can be trusted); cannot establish that neither party is the asset issuer
+
+9 pass, 2 fail, 0 skipped, 5 unverifiable, 0 not implemented (16 checks)
+
+exit 1
+```
+
+Three exit codes, so a pipeline can gate on the answer rather than parse
+the text: **0** conformant, **1** the contract did not meet the standard —
+either a check failed or a required member is not implemented — and **2**
+no verdict was reached. Both runs above are logged row-for-row in
+[docs/verification.md](docs/verification.md), alongside the transaction
+hashes an earlier keyed run produced.
 
 Each secret settles its own address, so `*_ADDRESS` is redundant alongside
 it — supply both only if you want the mismatch checked. Each write acts on
@@ -189,8 +254,8 @@ the other way — it attempts a spend with no allowance and passes only when
 the contract refuses, which is the shape of check a missing `require_auth`
 cannot survive.
 
-SEP-41 Guard takes a deployed contract address, exercises it against a live
-network, and reports which SEP-41 clauses it satisfies.
+`soroban-guard` takes a deployed contract address, exercises it against a
+live network, and reports which SEP-41 clauses it satisfies.
 
 ## Scope
 
