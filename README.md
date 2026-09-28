@@ -25,7 +25,7 @@ Soroban token contracts on Stellar **testnet**.
 > Six further checks assert what a contract must *refuse* or must leave
 > alone — an unauthorized spend, more than the balance, a negative amount,
 > a lapsed allowance, a zero transfer, a self-transfer. These are the shape
-> that catches a missing authorization guard or a missing bounds check,
+> that catches a missing allowance check or a missing bounds check,
 > because a contract lacking either behaves identically to a correct one
 > whenever the request is legitimate. See
 > [docs/check-reference.md](docs/check-reference.md) for what each proves
@@ -238,21 +238,32 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for the development workflow.
 
 ## Why
 
-SEP-41 is the standard token interface for Soroban. Unlike Stellar Classic
-assets — where the protocol itself enforces balance arithmetic — a Soroban
-token is just a contract. Nothing stops a contract from implementing the
-interface correctly while behaving incorrectly.
+SEP-41 is the standard token interface for Soroban. A Stellar Asset
+Contract is the protocol's own implementation of it — the same code for
+every classic asset, so its arithmetic is not something an issuer writes
+or can get wrong. A custom token is just a contract, written by whoever
+deployed it, and nothing stops one from implementing the interface
+correctly while behaving incorrectly.
+
+(The protocol guaranteeing a SAC's arithmetic is a narrow promise: a
+classic asset's issuer can still freeze, claw back, or issue more. This
+tool checks the interface's behaviour, not an issuer's intentions — see
+[Scope](#scope).)
 
 Existing tooling checks that a contract _exports_ the right functions. That
-cannot distinguish a correct `transfer` from one that omits `from.require_auth()`
-and lets anyone drain any balance. Those failures are behavioural, and
-behaviour requires execution. That is why the write clauses are checked by
+cannot distinguish a correct `transfer` from one that never compares the
+amount against the balance and lets a holder spend units that were never
+issued, or one that reads a negative amount as a transfer in the opposite
+direction. `fixtures/vulnerable-token` in this repository does exactly
+those things while exporting all ten members with the right signatures.
+Those failures are behavioural, and behaviour requires execution. That is why the write clauses are checked by
 actually performing them: the guard reads the balances and allowances involved,
 submits a signed call, reads them again, and reports the deltas with the
-transaction hash and ledger as evidence. `transfer_from-unauthorized` goes
-the other way — it attempts a spend with no allowance and passes only when
-the contract refuses, which is the shape of check a missing `require_auth`
-cannot survive.
+transaction hash and ledger as evidence. The negative checks go the other
+way — they attempt what a contract must refuse and pass only when it does,
+which is the shape a missing bounds check cannot survive. What that shape
+covers, and what it does not, is set out under
+[Authorization](#what-a-passing-report-does-not-mean) below.
 
 `soroban-guard` takes a deployed contract address, exercises it against a
 live network, and reports which SEP-41 clauses it satisfies.
@@ -308,6 +319,17 @@ is a violation of the clause as written, not a variation the tool tolerates.
   judge any run the issuer takes part in — sending from one mints and
   sending to one burns, so neither side's delta means what it appears to —
   and reports UNVERIFIABLE before spending a ledger close.
+
+  SEP-41 itself draws none of these distinctions: a SAC and a custom token
+  implement the same interface, and every check calls members by name
+  without asking which it is talking to. What differs is what the *guard*
+  infers. Two of those inferences are value-based rather than type-based,
+  so a custom token could trip them by coincidence: a balance of exactly
+  `i64::MAX` is read as an issuer sentinel, and a trap whose text matches
+  the SAC host's trustline wording is downgraded to UNVERIFIABLE. Both
+  fail safe — they withhold a verdict rather than invent one — but a
+  custom token holding 922 billion units of a 7-decimal asset would be
+  skipped where a SAC issuer would be.
 * Events are not observed. The writes land and their deltas are asserted,
   but no check reads the topics a contract emits — so a token that moves
   balances correctly while emitting wrong or missing `transfer` events

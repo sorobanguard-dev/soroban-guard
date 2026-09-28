@@ -4,9 +4,17 @@
  * Every other check in this suite confirms something works. These confirm
  * something does not, which inverts the verdict mapping — a refusal is the
  * PASS, and a success is the finding. That inversion is the whole reason
- * they exist: a contract missing `from.require_auth()` behaves identically
- * to a correct one whenever the real owner asks, so no positive check can
- * tell them apart. Only asking for something you are not entitled to can.
+ * they exist: a contract that never consults the allowance behaves
+ * identically to a correct one whenever the spend is within a grant, so no
+ * positive check can tell them apart. Only asking for something you are not
+ * entitled to can.
+ *
+ * Note what this does *not* reach. A missing `from.require_auth()` on
+ * `transfer` is the same shape of bug, but invisible here: every write in
+ * the suite is signed by the party its clause names, so the call succeeds
+ * whether or not the contract demanded that signature. Catching it needs a
+ * call signed by the wrong party — which this check does for the allowance,
+ * not for the signature.
  *
  * The same care applies in the other direction. A refusal only counts as
  * evidence of authorization enforcement when the call was otherwise able to

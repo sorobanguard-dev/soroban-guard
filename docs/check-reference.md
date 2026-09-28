@@ -111,8 +111,12 @@ which is itself the finding.
 ### `sep41-transfer_from-unauthorized` — behavior
 
 Attempts a spend with no allowance and **passes only when the contract
-refuses** — the inverted mapping that catches a missing `require_auth()`,
-which no positive check can distinguish. Premise: the spender holds no
+refuses** — the inverted mapping that catches a `transfer_from` which never
+consults the allowance, something no positive check can distinguish because
+a spend *within* a grant behaves identically either way. It does not test
+`from.require_auth()` on `transfer`: every write here is signed by the
+party the clause names, so a contract that forgot to demand that signature
+is indistinguishable from one that demands it. Premise: the spender holds no
 allowance, the holder holds something worth taking, neither party is the
 asset issuer, the holder and spender differ, the spender is not a generated
 address, and the spender's signer signs as the spender. Needs the spender's
