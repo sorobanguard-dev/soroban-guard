@@ -15,6 +15,20 @@ log, not here.
 
 ## [Unreleased]
 
+## [0.4.0] — 2026-09-29
+
+Checks that assert what a contract must *refuse* or leave alone, and the
+first evidence that they fire. Six negative checks join the ten member
+checks, and `fixtures/vulnerable-token` — a SEP-41 token written to be
+wrong in named ways — exists so their failure can be demonstrated rather
+than assumed: against it the suite reports two defects with specific
+diagnoses while still passing the nine checks it should.
+
+Numbered 0.4.0 rather than 0.3.0 because `v0.3.0` was tagged at the report
+renderers and never carried a version bump or a changelog section. That tag
+is published, so it stays where it is; the Breaking entry below belongs to
+that work and is recorded here because it was recorded nowhere else.
+
 ### Breaking
 
 - The CLI is invoked as `soroban-guard`, matching the package name. The
