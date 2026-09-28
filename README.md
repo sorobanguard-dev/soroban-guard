@@ -259,11 +259,12 @@ those things while exporting all ten members with the right signatures.
 Those failures are behavioural, and behaviour requires execution. That is why the write clauses are checked by
 actually performing them: the guard reads the balances and allowances involved,
 submits a signed call, reads them again, and reports the deltas with the
-transaction hash and ledger as evidence. The negative checks go the other
-way — they attempt what a contract must refuse and pass only when it does,
-which is the shape a missing bounds check cannot survive. What that shape
+transaction hash and ledger as evidence. Refusal checks attempt behavior
+a contract must refuse and pass only on refusal — the shape a missing
+bounds check cannot survive. Other checks, such as zero-amount and
+self-transfer, assess the required balance outcome. What that shape
 covers, and what it does not, is set out under
-[Authorization](#what-a-passing-report-does-not-mean) below.
+[Scope](#scope) below.
 
 `soroban-guard` takes a deployed contract address, exercises it against a
 live network, and reports which SEP-41 clauses it satisfies.
