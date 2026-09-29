@@ -31,6 +31,7 @@ import {
 	classifyStanding,
 	ISSUER_SENTINEL_BALANCE,
 	isDeclared,
+	isFeeAssetContract,
 	notImplemented,
 	SETTLED_FAILURE_ACTUAL,
 	verdictHelpers,
@@ -289,7 +290,18 @@ export const transferCheck = {
 				},
 			],
 			[
-				{ label: "holder", delta: -TRANSFER_AMOUNT },
+				// The holder signs this call, so it is also the transaction's
+				// source account. When the token under test is the asset fees
+				// are paid in — the native XLM SAC — its balance moves by the
+				// fee as well as by the transfer, and the difference is not
+				// something this check can attribute. Gated on the asset
+				// itself: on any other token the fee leaves this balance
+				// alone, and a shortfall is the contract's own doing.
+				{
+					label: "holder",
+					delta: -TRANSFER_AMOUNT,
+					paysFees: isFeeAssetContract(ctx.contractId, ctx.networkPassphrase),
+				},
 				{ label: "recipient", delta: TRANSFER_AMOUNT },
 			],
 			writeEvidence(submitted, before, after),

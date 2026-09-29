@@ -149,6 +149,91 @@ describe("assertDeltas", () => {
 			RangeError,
 		);
 	});
+
+	/**
+	 * `paysFees` exists for one situation: the asset under test is also the
+	 * asset transaction fees are paid in — the native XLM Stellar Asset
+	 * Contract — so a party that signed the call is debited by the network
+	 * as well as by the contract, and the two cannot be separated from a
+	 * balance delta alone.
+	 *
+	 * The rules it has to obey are narrow, and each is pinned below: only a
+	 * shortfall is excusable, only for the signer, and never over a real
+	 * mismatch elsewhere.
+	 */
+	describe("a party that also paid the fee in this asset", () => {
+		it("is UNVERIFIABLE when short by more than the clause requires", () => {
+			const result = assertDeltas(
+				META,
+				EXPECTED,
+				[
+					{ label: "holder", before: 100000n, after: 86185n },
+					{ label: "recipient", before: 5n, after: 6n },
+				],
+				[
+					{ label: "holder", delta: -1n, paysFees: true },
+					{ label: "recipient", delta: 1n },
+				],
+				{},
+				0,
+			);
+			expect(result.status).toBe("UNVERIFIABLE");
+			expect(result.actual).toContain("transaction fee");
+		});
+
+		// A fee is always a debit, so a signer holding *more* than expected
+		// cannot be explained by one. That is the contract inventing value.
+		it("still FAILs a signer that gained rather than paid", () => {
+			const result = assertDeltas(
+				META,
+				EXPECTED,
+				[{ label: "holder", before: 100n, after: 150n }],
+				[{ label: "holder", delta: -1n, paysFees: true }],
+				{},
+				0,
+			);
+			expect(result.status).toBe("FAIL");
+			expect(result.actual).toContain("expected -1");
+		});
+
+		// The protection that makes the excuse safe: a fee-on-transfer token
+		// also over-debits the signer, but short-changes the counterparty
+		// doing it. That mismatch outranks the unreadable side.
+		it("FAILs when another party mismatched, fee or not", () => {
+			const result = assertDeltas(
+				META,
+				EXPECTED,
+				[
+					{ label: "holder", before: 100000n, after: 86185n },
+					{ label: "recipient", before: 5n, after: 5n },
+				],
+				[
+					{ label: "holder", delta: -1n, paysFees: true },
+					{ label: "recipient", delta: 1n },
+				],
+				{},
+				0,
+			);
+			expect(result.status).toBe("FAIL");
+			expect(result.actual).toContain("recipient 0");
+			expect(result.actual).not.toContain("transaction fee");
+		});
+
+		// And the ordinary case is untouched: an exact match still PASSes,
+		// so marking a party as a fee payer costs nothing on every token
+		// whose fees are paid in a different asset.
+		it("PASSes an exact delta even when marked as a fee payer", () => {
+			const result = assertDeltas(
+				META,
+				EXPECTED,
+				[{ label: "holder", before: 100n, after: 99n }],
+				[{ label: "holder", delta: -1n, paysFees: true }],
+				{},
+				0,
+			);
+			expect(result.status).toBe("PASS");
+		});
+	});
 });
 
 describe("writeEvidence", () => {

@@ -135,6 +135,44 @@ describe("burnCheck", () => {
 		expect(result.actual).toContain("trustline policy");
 	});
 
+	/**
+	 * The native XLM SAC gates burn on `check_non_native` and returns
+	 * `OperationNotSupportedError`. SEP-41 declares burn with no exemption
+	 * in its text, so the clause is genuinely unmet and the verdict stays
+	 * FAIL — downgrading it would hide a real deviation, one the spec
+	 * arguably owns since it also claims the SAC implements the interface.
+	 *
+	 * What changes is the sentence. This is the first contract most people
+	 * will point the tool at, and "your contract is broken" is the wrong
+	 * thing to tell them about a documented property of XLM.
+	 */
+	it("names the native-asset gate while still FAILing the clause", async () => {
+		stubSubmit(rejected("operation invalid on native asset"));
+		const result = await burnCheck.run(
+			writeCtx(sequencedServer([okResponse(100n)])),
+		);
+		expect(result.status).toBe("FAIL");
+		expect(result.actual).toContain("native asset");
+		expect(result.actual).toContain("known property of XLM");
+		// The generic wording would send a reader hunting a defect.
+		expect(result.actual).not.toContain("affordable amount");
+		expect(result.evidence.error).toContain(
+			"operation invalid on native asset",
+		);
+	});
+
+	// Any other refusal keeps the generic sentence: the named case must not
+	// widen into an excuse for refusals it does not describe.
+	it("keeps the generic sentence for a refusal it cannot name", async () => {
+		stubSubmit(rejected("HostError: Error(Contract, #7)"));
+		const result = await burnCheck.run(
+			writeCtx(sequencedServer([okResponse(100n)])),
+		);
+		expect(result.status).toBe("FAIL");
+		expect(result.actual).toContain("affordable amount");
+		expect(result.actual).not.toContain("native asset");
+	});
+
 	it("reports NOT_IMPLEMENTED when the spec declares no burn", async () => {
 		const ctx = writeCtx(sequencedServer([okResponse(100n)]));
 		const result = await burnCheck.run({

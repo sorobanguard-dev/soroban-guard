@@ -23,6 +23,18 @@ export interface Observation {
 export interface Expectation {
 	readonly label: string;
 	readonly delta: bigint;
+	/**
+	 * True when this party also sourced the transaction, so its balance
+	 * moved by the network fee as well as by the call.
+	 *
+	 * Only meaningful when the asset under test *is* the fee asset — the
+	 * native XLM Stellar Asset Contract, in practice. For every other token
+	 * the fee is paid in a different asset and the delta is clean, so this
+	 * must only be set where the measured asset is the fee asset (see
+	 * `isFeeAssetContract`): set unconditionally, it would excuse any
+	 * shortfall on any token as a fee the network never charged there.
+	 */
+	readonly paysFees?: boolean;
 }
 
 /**
@@ -78,6 +90,7 @@ export function assertDeltas(
 	}
 	const mismatches: string[] = [];
 	const moved: string[] = [];
+	const feeConfounded: string[] = [];
 	for (const expectation of expectations) {
 		const observation = observations.find(
 			(candidate) => candidate.label === expectation.label,
@@ -88,6 +101,31 @@ export function assertDeltas(
 		}
 		const delta = observation.after - observation.before;
 		const rendered = `${observation.label} ${delta > 0n ? "+" : ""}${delta}`;
+		// A party that also paid the transaction fee, in the very asset being
+		// measured, has a delta this check cannot read exactly.
+		//
+		// Only an *overspend* is excusable, and only in that direction: a
+		// fee is always a debit, so a fee-payer short by more than expected
+		// may have paid one, while a fee-payer short by less cannot have.
+		//
+		// What that does and does not protect. On `transfer` the holder is
+		// flagged and the recipient is not, so a fee-on-transfer token —
+		// which debits the holder extra *and* credits the recipient less —
+		// still mismatches on the unflagged side and FAILs. Where the
+		// short-changed party is itself the fee payer, as on
+		// `transfer_from`, no such second observation exists: a recipient
+		// credited `+1 − skim` and one credited `+1 − fee` are the same
+		// number, and this reports UNVERIFIABLE rather than choose between
+		// them. That is the honest answer and also a real limit — on the
+		// one token where fees and balances share an asset, a
+		// recipient-side skim is not distinguishable from the network's own
+		// charge.
+		if (expectation.paysFees === true && delta < expectation.delta) {
+			feeConfounded.push(
+				`${rendered}, expected ${expectation.delta > 0n ? "+" : ""}${expectation.delta} before the transaction fee this account also paid in the same asset`,
+			);
+			continue;
+		}
 		if (delta === expectation.delta) {
 			moved.push(rendered);
 		} else {
@@ -96,11 +134,34 @@ export function assertDeltas(
 			);
 		}
 	}
+	// A genuine mismatch outranks a fee-confounded one: if any party moved
+	// wrongly for a reason the fee cannot explain, that is the finding, and
+	// an unreadable delta elsewhere does not soften it.
+	if (mismatches.length > 0) {
+		return {
+			...meta,
+			status: "FAIL",
+			expected,
+			actual: mismatches.join("; "),
+			evidence,
+			durationMs,
+		};
+	}
+	if (feeConfounded.length > 0) {
+		return {
+			...meta,
+			status: "UNVERIFIABLE",
+			expected,
+			actual: `${feeConfounded.join("; ")}; measuring a balance in the asset that also pays the fee cannot separate the two`,
+			evidence,
+			durationMs,
+		};
+	}
 	return {
 		...meta,
-		status: mismatches.length === 0 ? "PASS" : "FAIL",
+		status: "PASS",
 		expected,
-		actual: mismatches.length === 0 ? moved.join(", ") : mismatches.join("; "),
+		actual: moved.join(", "),
 		evidence,
 		durationMs,
 	};

@@ -297,9 +297,10 @@ export const negativeAmountTransferCheck = {
 								: `unreadable (${recipientError})`
 							: afterRecipient.kind === "value"
 								? `${afterRecipient.amount}`
-								: afterRecipient.kind === "defect"
-									? "unreadable (defective read)"
-									: "unreadable",
+								: // Carries which defect, as the holder's side does:
+									// "defective read" names that one happened but
+									// not what the contract answered.
+									`unreadable (${afterRecipient.detail})`,
 				},
 				txHash: reading.txHash,
 				ledger: reading.ledger,

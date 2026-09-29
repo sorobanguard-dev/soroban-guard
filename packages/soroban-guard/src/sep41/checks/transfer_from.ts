@@ -34,6 +34,7 @@ import {
 	classifyStanding,
 	ISSUER_SENTINEL_BALANCE,
 	isDeclared,
+	isFeeAssetContract,
 	notImplemented,
 	SETTLED_FAILURE_ACTUAL,
 	setupEvidence,
@@ -163,6 +164,10 @@ export const transferFromCheck = {
 				elapsed(),
 			);
 		}
+		// The baseline the delta below asserts against. Re-pointed after a
+		// setup submit lands: the approval is signed by the holder, so on a
+		// fee-asset the reads above predate a fee debit.
+		let holderBaseline = beforeOwner.amount;
 
 		// Setup, not assertion: the allowance has to exist before there is
 		// anything to consume. A failure here says nothing about
@@ -218,6 +223,25 @@ export const transferFromCheck = {
 					setupEvidence(approval),
 				);
 			}
+			// The setup submit was signed by the holder, so on an asset that
+			// also pays the fee the baseline above predates a debit this
+			// check itself caused. Asserting the spend's delta against it
+			// would report the network's fee as the contract's doing — the
+			// same confound `paysFees` excuses, except here the fee came
+			// from setup rather than from the measured call, so the fix is
+			// a fresh baseline rather than an unreadable delta.
+			const refreshedOwner = await readBalance(ctx, owner.address);
+			const refreshedProblem = baselineProblem(refreshedOwner, elapsed);
+			if (refreshedProblem !== null) {
+				return refreshedProblem;
+			}
+			// Unreachable — baselineProblem returned above for every
+			// non-value kind — but it is what narrows the union for the
+			// assignment below, so it stays.
+			if (refreshedOwner.kind !== "value") {
+				return unverifiable("balances unreadable", elapsed());
+			}
+			holderBaseline = refreshedOwner.amount;
 		}
 
 		const beforeAllowance = await readAllowance(
@@ -260,7 +284,7 @@ export const transferFromCheck = {
 		);
 
 		const before = {
-			holder: beforeOwner.amount,
+			holder: holderBaseline,
 			recipient: beforeSpender.amount,
 			allowance: beforeAllowance.amount,
 		};
@@ -383,7 +407,7 @@ export const transferFromCheck = {
 			[
 				{
 					label: "holder",
-					before: beforeOwner.amount,
+					before: holderBaseline,
 					after: afterOwner.amount,
 				},
 				{
@@ -399,7 +423,16 @@ export const transferFromCheck = {
 			],
 			[
 				{ label: "holder", delta: -MOVE_AMOUNT },
-				{ label: "recipient", delta: MOVE_AMOUNT },
+				// The spender signs and receives here, so when the measured
+				// asset is also the fee asset the credit arrives net of one.
+				// Gated like the holder flag in transfer: on any other token
+				// a short credit is the contract short-changing the
+				// recipient, not a fee.
+				{
+					label: "recipient",
+					delta: MOVE_AMOUNT,
+					paysFees: isFeeAssetContract(ctx.contractId, ctx.networkPassphrase),
+				},
 				{ label: "allowance", delta: -MOVE_AMOUNT },
 			],
 			writeEvidence(submitted, before, {

@@ -26,6 +26,7 @@ import {
 	classifyStanding,
 	ISSUER_SENTINEL_BALANCE,
 	isDeclared,
+	isNativeAssetRefusal,
 	notImplemented,
 	SETTLED_FAILURE_ACTUAL,
 	verdictHelpers,
@@ -159,8 +160,13 @@ export const burnCheck = {
 				...burnMeta,
 				status: "FAIL",
 				expected: EXPECTED,
-				actual:
-					"a burn of an affordable amount, signed by the holder, was refused",
+				// Still a FAIL on the native asset: SEP-41 declares burn with
+				// no exemption, so the clause is unmet however deliberate the
+				// refusal. The sentence says which it is, so a reader is not
+				// left hunting a defect that is a documented property.
+				actual: isNativeAssetRefusal(submitted.diagnostics)
+					? "the Stellar Asset Contract refuses burn on the native asset, which it gates deliberately — the clause is unmet, but this is a known property of XLM rather than a defect in this contract"
+					: "a burn of an affordable amount, signed by the holder, was refused",
 				evidence: { error: submitted.diagnostics },
 				durationMs: elapsed(),
 			};
@@ -211,6 +217,12 @@ export const burnCheck = {
 			burnMeta,
 			EXPECTED,
 			[{ label: "holder", before: before.amount, after: after.amount }],
+			// The holder signs, so on a token whose asset also pays fees this
+			// balance moves by the fee too — but it is not marked as a fee
+			// payer, because burn has no counterparty. A contract burning
+			// more than asked looks exactly like a fee, and excusing one
+			// would excuse the other. The native XLM SAC refuses burn
+			// outright, so the case does not arise there.
 			[{ label: "holder", delta: -BURN_AMOUNT }],
 			writeEvidence(submitted, holderBefore, { holder: after.amount }),
 			elapsed(),

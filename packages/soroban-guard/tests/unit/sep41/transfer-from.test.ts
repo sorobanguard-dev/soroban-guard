@@ -30,8 +30,9 @@ afterEach(() => {
 });
 
 describe("transferFromCheck", () => {
-	// Reads: owner, spender, seed-allowance, post-approval allowance, then
-	// after the write: owner, spender, allowance.
+	// Reads: owner, spender, seed-allowance, holder re-read after the setup
+	// submit, post-approval allowance, then after the write: owner,
+	// spender, allowance.
 	it("PASSes when both balances and the allowance all move", async () => {
 		stubSubmit(APPLIED);
 		const result = await transferFromCheck.run(
@@ -40,6 +41,7 @@ describe("transferFromCheck", () => {
 					okResponse(100n),
 					okResponse(5n),
 					okResponse(0n),
+					okResponse(100n),
 					okResponse(1n),
 					okResponse(99n),
 					okResponse(6n),
@@ -49,6 +51,52 @@ describe("transferFromCheck", () => {
 		);
 		expect(result.status).toBe("PASS");
 		expect(result.actual).toContain("allowance -1");
+	});
+
+	// The baseline the delta asserts against is read after the setup, not
+	// before it: the approval is signed by the holder, so on a fee-asset
+	// the premise reads predate a fee debit this check itself caused.
+	it("asserts against the post-setup baseline, not the premise reads", async () => {
+		stubSubmit(APPLIED);
+		const result = await transferFromCheck.run(
+			writeCtx(
+				sequencedServer([
+					okResponse(100n),
+					okResponse(5n),
+					okResponse(0n),
+					okResponse(99999n),
+					okResponse(1n),
+					okResponse(99998n),
+					okResponse(6n),
+					okResponse(0n),
+				]),
+			),
+		);
+		expect(result.status).toBe("PASS");
+		expect(result.evidence.before).toEqual({
+			holder: "99999",
+			recipient: "5",
+			allowance: "1",
+		});
+	});
+
+	// A defective re-read is a premise failure with the setup already
+	// landed: the contract is at fault, so it FAILs rather than reporting
+	// unknown.
+	it("FAILs when the post-setup baseline cannot be trusted", async () => {
+		stubSubmit(APPLIED);
+		const result = await transferFromCheck.run(
+			writeCtx(
+				sequencedServer([
+					okResponse(100n),
+					okResponse(5n),
+					okResponse(0n),
+					errorResponse("Error(Contract, #7)"),
+				]),
+			),
+		);
+		expect(result.status).toBe("FAIL");
+		expect(result.actual).toContain("before state cannot be trusted");
 	});
 
 	// The distinguishing requirement: moving tokens without consuming the
@@ -61,6 +109,7 @@ describe("transferFromCheck", () => {
 					okResponse(100n),
 					okResponse(5n),
 					okResponse(0n),
+					okResponse(100n),
 					okResponse(1n),
 					okResponse(99n),
 					okResponse(6n),
@@ -70,6 +119,29 @@ describe("transferFromCheck", () => {
 		);
 		expect(result.status).toBe("FAIL");
 		expect(result.actual).toContain("allowance 0, expected -1");
+	});
+
+	// On a token that is not the fee asset the recipient's shortfall cannot
+	// be the network's charge: the fee is paid in XLM, so a credit that
+	// never arrived is the contract short-changing the recipient.
+	it("FAILs a recipient shortfall on a token that is not the fee asset", async () => {
+		stubSubmit(APPLIED);
+		const result = await transferFromCheck.run(
+			writeCtx(
+				sequencedServer([
+					okResponse(100n),
+					okResponse(5n),
+					okResponse(0n),
+					okResponse(100n),
+					okResponse(1n),
+					okResponse(99n),
+					okResponse(5n),
+					okResponse(0n),
+				]),
+			),
+		);
+		expect(result.status).toBe("FAIL");
+		expect(result.actual).toContain("recipient 0, expected +1");
 	});
 
 	it("is UNVERIFIABLE without the spender's key", async () => {
@@ -132,6 +204,7 @@ describe("transferFromCheck", () => {
 					okResponse(5n),
 					// Insufficient, so the suite seeds the allowance itself.
 					okResponse(0n),
+					okResponse(100n),
 					okResponse(1n),
 				]),
 			),

@@ -3,7 +3,7 @@
  * identity, the spec short-circuit, the chain call, and standing
  * classification.
  */
-import { rpc, type xdr } from "@stellar/stellar-sdk";
+import { Asset, rpc, type xdr } from "@stellar/stellar-sdk";
 import {
 	type InvokeResult,
 	interpretSimulation,
@@ -248,6 +248,34 @@ export function classifyStanding(diagnostics: string): StandingProblem | null {
 }
 
 /**
+ * Whether a refusal is the Stellar Asset Contract declining an operation it
+ * never offers for the native asset.
+ *
+ * The SAC gates `burn` and `burn_from` on `check_non_native`, which matches
+ * `AssetInfo::Native` and returns `OperationNotSupportedError` with this
+ * exact wording. XLM therefore cannot be burned through the token
+ * interface — a deliberate policy gate, not a consequence of having no
+ * issuer, since `burn` is `spend_balance` plus an event and never touches
+ * one.
+ *
+ * This does **not** change the verdict. SEP-41 declares `burn`
+ * unconditionally, with no exemption in its text, so a contract refusing it
+ * fails the clause as written and downgrading that would hide a real
+ * deviation — one the spec arguably owns, since it also asserts "the
+ * Stellar Asset contract would implement the interface", which is false
+ * here. What it changes is the sentence: a reader pointing the tool at the
+ * ecosystem's canonical asset deserves to know the refusal is a known
+ * property rather than a defect they can act on.
+ *
+ * Matched on the host's wording, like `classifyStanding` and with the same
+ * caveat: a custom token emitting this phrase would be described the same
+ * way. It fails safe — the verdict is unchanged either way.
+ */
+export function isNativeAssetRefusal(diagnostics: string): boolean {
+	return /operation invalid on native asset/i.test(diagnostics);
+}
+
+/**
  * A decoded contract return, rendered for a report line.
  *
  * `String()` alone is not enough: scValToNative turns a Soroban map into a
@@ -293,3 +321,22 @@ export function describeValue(value: unknown): string {
  * this size is unreachable — 922 billion units of a 7-decimal asset.
  */
 export const ISSUER_SENTINEL_BALANCE = 2n ** 63n - 1n;
+
+/**
+ * Whether the contract under test is the asset transaction fees are paid
+ * in — the native XLM Stellar Asset Contract — derived from its address
+ * rather than asserted.
+ *
+ * Soroban fees are always paid in XLM by the transaction's source account,
+ * so a balance measured in XLM on the signer also moves by the fee. Any
+ * other asset is untouched by it, and a shortfall there is the contract's
+ * own doing. Derived per network with `Asset.native().contractId` (which
+ * is how `CDLZ…` on testnet and `CAS3…` on mainnet both resolve) instead
+ * of a table nobody would keep current.
+ */
+export function isFeeAssetContract(
+	contractId: string,
+	networkPassphrase: string,
+): boolean {
+	return Asset.native().contractId(networkPassphrase) === contractId;
+}

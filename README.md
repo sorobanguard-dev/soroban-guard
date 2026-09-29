@@ -312,6 +312,27 @@ is a violation of the clause as written, not a variation the tool tolerates.
   the same run. See its [README](fixtures/vulnerable-token/README.md) and
   the 2026-09-27 entries in
   [docs/verification.md](docs/verification.md).
+* **Native XLM cannot reach exit 0, and that is not a defect in the
+  asset.** It is the obvious first contract to point this at, so the
+  outcome is worth knowing in advance. Two independent reasons:
+
+  `burn` and `burn_from` **FAIL**. The Stellar Asset Contract gates both on
+  `check_non_native`, so XLM cannot be burned through the token interface —
+  a deliberate policy gate, not an accident. SEP-41 declares both members
+  with no exemption in its text, so the clause is genuinely unmet and the
+  verdict stands; the report names the case rather than implying a defect
+  you can fix. See [issue #13](https://github.com/birserg/soroban-guard/issues/13).
+
+  `transfer` and `transfer_from` report **UNVERIFIABLE**. Soroban fees are
+  paid in XLM by the transaction's source account, which on this contract
+  is also a party whose balance the check measures — so its delta carries
+  the fee as well as the transfer, and the two cannot be separated from one
+  balance reading. Withholding the verdict is the honest answer; the other
+  parties' deltas are still asserted exactly, so a contract losing value
+  elsewhere still fails.
+
+  Every other member answers normally. A run against XLM is a fine way to
+  see the tool work; it is not a conformance claim about XLM.
 * SAC specifics the checks actually observe: `balance` and `allowance`
   against an address with no trustline trap with "trustline entry is
   missing", which is reported UNVERIFIABLE — no standing to ask — rather

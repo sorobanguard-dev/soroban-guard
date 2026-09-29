@@ -32,6 +32,7 @@ import {
 	classifyStanding,
 	ISSUER_SENTINEL_BALANCE,
 	isDeclared,
+	isNativeAssetRefusal,
 	notImplemented,
 	SETTLED_FAILURE_ACTUAL,
 	setupEvidence,
@@ -119,6 +120,10 @@ export const burnFromCheck = {
 				elapsed(),
 			);
 		}
+		// The baseline the delta below asserts against. Re-pointed after a
+		// setup submit lands: the approval is signed by the holder, so on a
+		// fee-asset the reads above predate a fee debit.
+		let holderBaseline = beforeOwner.amount;
 
 		// Spender already read and defect-cleared above; here only the
 		// no-answer case remains.
@@ -173,6 +178,25 @@ export const burnFromCheck = {
 					setupEvidence(approval),
 				);
 			}
+			// The setup submit was signed by the holder, so on an asset that
+			// also pays the fee the baseline above predates a debit this
+			// check itself caused — re-read it rather than report the
+			// network's fee as the contract's doing (see transfer_from).
+			const refreshedOwner = await readBalance(ctx, owner.address);
+			if (refreshedOwner.kind === "defect") {
+				return failed(
+					`${refreshedOwner.detail}; the before state cannot be trusted`,
+					elapsed(),
+					refreshedOwner.error === "" ? {} : { error: refreshedOwner.error },
+				);
+			}
+			if (refreshedOwner.kind !== "value") {
+				return unverifiable(
+					"balance unreadable; cannot establish a before state to compare against",
+					elapsed(),
+				);
+			}
+			holderBaseline = refreshedOwner.amount;
 		}
 		const beforeAllowance = await readAllowance(
 			ctx,
@@ -215,7 +239,7 @@ export const burnFromCheck = {
 		);
 
 		const before = {
-			holder: beforeOwner.amount,
+			holder: holderBaseline,
 			spender: beforeSpender.amount,
 			allowance: beforeAllowance.amount,
 		};
@@ -272,8 +296,14 @@ export const burnFromCheck = {
 					submitted.diagnostics,
 				);
 			}
+			// Still a FAIL on the native asset — SEP-41 declares burn_from
+			// with no exemption — but named, so a reader is not left hunting
+			// a defect that is a documented property of XLM. See
+			// isNativeAssetRefusal.
 			return failed(
-				"a burn_from within an allowance the contract itself granted was refused",
+				isNativeAssetRefusal(submitted.diagnostics)
+					? "the Stellar Asset Contract refuses burn_from on the native asset, which it gates deliberately — the clause is unmet, but this is a known property of XLM rather than a defect in this contract"
+					: "a burn_from within an allowance the contract itself granted was refused",
 				elapsed(),
 				{ error: submitted.diagnostics },
 			);
@@ -332,7 +362,7 @@ export const burnFromCheck = {
 			[
 				{
 					label: "holder",
-					before: beforeOwner.amount,
+					before: holderBaseline,
 					after: afterOwner.amount,
 				},
 				{
@@ -350,6 +380,12 @@ export const burnFromCheck = {
 				{ label: "holder", delta: -BURN_AMOUNT },
 				// The spender authorises the burn but pays nothing for it, so
 				// debiting it too would be a double-spend — caught here.
+				// Deliberately *not* marked as a fee payer, though the spender
+				// signs. Its expected delta is zero, so a fee debit and a
+				// contract wrongly debiting the spender are the same shape,
+				// and the second is double-spending — a finding worth more
+				// than a clean verdict on the native asset. Unlike transfer,
+				// there is no counterparty credit to tell them apart.
 				{ label: "spender", delta: 0n },
 				{ label: "allowance", delta: -BURN_AMOUNT },
 			],

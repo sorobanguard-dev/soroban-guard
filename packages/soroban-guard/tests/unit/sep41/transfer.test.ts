@@ -1,6 +1,7 @@
 import {
 	Account,
 	Address,
+	Asset,
 	Keypair,
 	Networks,
 	type rpc,
@@ -50,12 +51,22 @@ const STUB_SIGNER = { address: OWNER } as unknown as Signer;
  */
 function ctxWith(
 	server: rpc.Server,
-	{ withSigner = true }: { withSigner?: boolean } = {},
+	{
+		withSigner = true,
+		nativeAsset = false,
+	}: {
+		withSigner?: boolean;
+		nativeAsset?: boolean;
+	} = {},
 ): Sep41Context {
 	const signer = withSigner ? STUB_SIGNER : undefined;
 	return {
 		server,
-		contractId: Address.contract(new Uint8Array(32)).toString(),
+		// Fee-asset runs need the native contract address: the fee excuse
+		// keys off it, so a generated address would test the wrong asset.
+		contractId: nativeAsset
+			? Asset.native().contractId(Networks.TESTNET)
+			: Address.contract(new Uint8Array(32)).toString(),
 		source: new Account(OWNER, "1"),
 		networkPassphrase: Networks.TESTNET,
 		specFunctions: null,
@@ -130,6 +141,79 @@ describe("transferCheck", () => {
 		);
 		expect(result.status).toBe("FAIL");
 		expect(result.actual).toContain("recipient 0");
+	});
+
+	// The native XLM SAC, in miniature. The holder signs, so it also pays
+	// the network fee — in the very asset being measured — and its balance
+	// drops by far more than the unit transferred. The recipient is credited
+	// exactly, which is what says the contract behaved: no verdict is
+	// available on the holder's side, but there is no finding either. Needs
+	// the native contract address — on any other asset a shortfall cannot
+	// be a fee, and the same readings FAIL below.
+	it("is UNVERIFIABLE when the holder also paid the fee in this asset", async () => {
+		stubSubmit(APPLIED);
+		const result = await transferCheck.run(
+			ctxWith(
+				sequencedServer([
+					okResponse(100000n), // holder before
+					okResponse(5n), // recipient before
+					okResponse(86185n), // holder after: -1 moved, -13814 fee
+					okResponse(6n), // recipient after: credited exactly
+				]),
+				{ nativeAsset: true },
+			),
+		);
+		expect(result.status).toBe("UNVERIFIABLE");
+		expect(result.actual).toContain("transaction fee");
+		expect(result.actual).not.toContain("recipient");
+	});
+
+	// The same readings against any other token: fees there are paid in XLM,
+	// so a holder short by more than the unit moved is the contract
+	// double-debiting, not the network. Gated on the asset for exactly this
+	// reason — an unconditional excuse would report unknown here.
+	it("FAILs a holder shortfall on a token that is not the fee asset", async () => {
+		stubSubmit(APPLIED);
+		const result = await transferCheck.run(
+			ctxWith(
+				sequencedServer([
+					okResponse(100n), // holder before
+					okResponse(5n), // recipient before
+					okResponse(98n), // holder after: debited twice
+					okResponse(6n), // recipient after: credited exactly
+				]),
+			),
+		);
+		expect(result.status).toBe("FAIL");
+		expect(result.actual).toContain("holder -2, expected -1");
+	});
+
+	// And the protection that must survive it: a fee-on-transfer token also
+	// debits the holder extra, but short-changes the recipient doing it.
+	// That mismatch is a real finding and outranks the excused holder.
+	//
+	// `nativeAsset` is what makes this a precedence test rather than a
+	// second mismatch test: without it the holder shortfall is an ordinary
+	// mismatch, both sides land in `mismatches`, and the check would FAIL
+	// even if the excuse outranked the finding.
+	it("still FAILs a fee-on-transfer token that short-changes the recipient", async () => {
+		stubSubmit(APPLIED);
+		const result = await transferCheck.run(
+			ctxWith(
+				sequencedServer([
+					okResponse(100000n), // holder before
+					okResponse(5n), // recipient before
+					okResponse(86185n), // holder after: same shape as above
+					okResponse(5n), // recipient after: never credited
+				]),
+				{ nativeAsset: true },
+			),
+		);
+		expect(result.status).toBe("FAIL");
+		expect(result.actual).toContain("recipient 0");
+		// The excused side must not surface: a fee cannot explain away a
+		// recipient that was never credited.
+		expect(result.actual).not.toContain("transaction fee");
 	});
 
 	// P1: a submission that never reached the ledger is a harness failure.
