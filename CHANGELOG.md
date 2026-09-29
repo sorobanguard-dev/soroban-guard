@@ -15,6 +15,19 @@ log, not here.
 
 ## [Unreleased]
 
+## [0.4.1] — 2026-09-29
+
+### Fixed
+
+- Same-asset transaction fees no longer read as contract defects. When the
+  token under test is the asset fees are paid in (the native XLM contract),
+  the fee-paying side's delta is reported UNVERIFIABLE instead of FAIL;
+  genuine mismatches elsewhere in the pair still fail as before.
+- `burn` and `burn_from` refusals on the native asset name the gate: the
+  Stellar Asset Contract deliberately declines burning XLM, which is a
+  known property rather than a defect — the FAIL verdict stands, since
+  SEP-41 declares no exemption.
+
 ## [0.4.0] — 2026-09-29
 
 Checks that assert what a contract must *refuse* or leave alone, and the
