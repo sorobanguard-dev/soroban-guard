@@ -17,6 +17,7 @@ concurrency:
 jobs:
   verify:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       # Pinned by SHA (tags noted alongside): floating tags let a
       # compromised upstream release run unreviewed code in our pipeline.
@@ -38,3 +39,71 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm check:ci
       - run: pnpm test
+
+  # A clone runs the TypeScript sources; npm users run the compiled
+  # `dist/`, from inside node_modules where Node does not strip types. The
+  # unit suite only ever sees the first, so this installs the packed
+  # tarball into an empty project and runs the CLI the way a user would.
+  package:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+      # `pack` runs this package's own prepack (README staging + build);
+      # the install into the scratch project still ignores dependency hooks.
+      - run: pnpm --filter soroban-guard pack --pack-destination "$RUNNER_TEMP"
+      - name: Installed CLI answers --help and refuses a missing contract
+        working-directory: ${{ runner.temp }}
+        run: |
+          npm init -y > /dev/null
+          npm install --ignore-scripts --no-audit --no-fund ./soroban-guard-*.tgz
+          npx --no-install soroban-guard --help
+          status=0
+          npx --no-install soroban-guard || status=$?
+          test "$status" -eq 2
+
+  # Mastra's changed-test gate, scaled down: an outside contributor's PR
+  # that changes package sources must change tests too. Maintainers are
+  # trusted to judge the exceptions (a comment-only edit, a rename); the
+  # rule in CONTRIBUTING applies to them all the same.
+  changed-tests:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Source changes come with test changes
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          AUTHOR_ASSOCIATION: ${{ github.event.pull_request.author_association }}
+        run: |
+          changed="$(git diff --name-only "$(git merge-base "$BASE_SHA" "$HEAD_SHA")" "$HEAD_SHA")"
+          # Tests count only where CONTRIBUTING puts them: a *.test.ts dropped
+          # into src/ is not a test layer, and must not satisfy the gate.
+          sources="$(printf '%s\n' "$changed" | grep -E '^packages/[^/]+/(src|scripts)/' || true)"
+          tests="$(printf '%s\n' "$changed" | grep -E '^packages/[^/]+/tests/' || true)"
+          if [ -z "$sources" ] || [ -n "$tests" ]; then
+            exit 0
+          fi
+          case "$AUTHOR_ASSOCIATION" in
+            OWNER|MEMBER|COLLABORATOR)
+              echo "::notice::Source changes without test changes, allowed for a maintainer ($AUTHOR_ASSOCIATION)."
+              ;;
+            *)
+              echo "::error::This PR changes package sources but no tests. Add or update the tests that pin the behavior (see CONTRIBUTING.md)."
+              printf '%s\n' "$sources"
+              exit 1
+              ;;
+          esac
