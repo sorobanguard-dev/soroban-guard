@@ -56,6 +56,40 @@ const REWRITES: readonly (readonly [RegExp, string])[] = [
 	[/its key is discarded at exit/g, "nobody holds its key"],
 ];
 
+/**
+ * What a network refusal code means for the person holding the wallet.
+ *
+ * When the network rejects a signed transaction, the SDK's error is a
+ * generic first line followed by a JSON dump whose `result` field is the
+ * real reason — `tx_insufficient_balance` for a wallet sitting on exactly
+ * its reserve, which is what a visitor first hit here. The dump is kept in
+ * the row's drawer; this is the sentence on the row.
+ */
+const NETWORK_REFUSALS: Readonly<Record<string, string>> = {
+	tx_insufficient_balance:
+		"the wallet has too little XLM to pay the fee — send it some testnet XLM and run again",
+	tx_insufficient_fee:
+		"the fee was lowered below what the network requires — approve the fee Freighter proposes",
+	tx_bad_auth:
+		"the signature did not match the account — check Freighter is on Testnet and signing with the connected account",
+	tx_bad_seq:
+		"the wallet sent another transaction at the same time — run again",
+	tx_too_late:
+		"the approval came after the transaction expired — run again and approve sooner",
+	tx_no_account:
+		"the wallet's account does not exist on testnet yet — fund it with Friendbot first",
+};
+
+/**
+ * A plain explanation of why a write never reached the ledger, when the
+ * error carries a network result code this page knows; `undefined`
+ * otherwise, so the caller falls back to the error's own first line.
+ */
+export function explainFailure(error: string): string | undefined {
+	const code = /"result":\s*"(tx_[a-z_]+)"/.exec(error)?.[1];
+	return code === undefined ? undefined : NETWORK_REFUSALS[code];
+}
+
 export function forBrowser(text: string): string {
 	return REWRITES.reduce(
 		(current, [pattern, replacement]) => current.replace(pattern, replacement),

@@ -37,17 +37,17 @@ reports which clauses hold, with evidence.
 | Writes (`transfer`, `approve`, `transfer_from`, `burn`, `burn_from`) | Done, asserted against on-chain deltas |
 | Negative checks (unauthorized, over-balance, negative, expired, zero, self) | Done, proven to fire against `fixtures/vulnerable-token` |
 | Reports (terminal, `md`, `json`) | Done — `--format` |
-| Browser UI | In progress, same suite via Freighter |
+| Browser UI | Done — same suite, signed by Freighter; a demo token with a faucet runs all sixteen from one wallet |
 | Events layer | Not started — balances asserted, topics unread |
-| Custom WASM proof | Open — passing runs are SAC so far |
+| Custom WASM proof | Done for `fixtures/vulnerable-token` (two defects found); conformant third-party WASM tokens not yet run |
 
 ## Install
 
 Requires **Node 24**.
 
 ```sh
-npm install -g soroban-guard   # forthcoming — publishing now; until then, source:
-soroban-guard <contract-id>
+npx soroban-guard <contract-id>          # nothing to install
+npm install -g soroban-guard            # or keep it on your PATH
 ```
 
 Or from source (TypeScript runs directly via type stripping, no build step):
@@ -122,6 +122,11 @@ Machine-readable and committable reports:
 soroban-guard <contract-id> --format json > report.json   # CI, web UI
 soroban-guard <contract-id> --format md > CHECKS.md       # review, diffing
 ```
+
+Two real CHECKS.md files, as the tool wrote them against testnet: a
+[conformant token](docs/examples/CHECKS-conformant.md) (16/16, exit 0) and
+[the vulnerable fixture](docs/examples/CHECKS-vulnerable.md) (two violations,
+exit 1).
 
 ### Checking writes
 
@@ -262,7 +267,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for the development workflow.
 
 ## Web UI
 
-[**soroban-guard.pages.dev/run**](https://soroban-guard.pages.dev/run) runs
+[**sorobanguard.com/run**](https://sorobanguard.com/run) runs
 the same sixteen checks in the browser, signed by your own Freighter wallet
 on testnet. Paste a contract ID, approve each write as Freighter proposes
 it, and get the verdicts the CLI would print — with live progress,

@@ -9,7 +9,7 @@
  * how the context is assembled: the CLI reads secrets from the environment,
  * and this asks a wallet.
  */
-import { Keypair, rpc, StrKey } from "@stellar/stellar-sdk";
+import { Keypair, rpc, StrKey, xdr } from "@stellar/stellar-sdk";
 import { KeypairSigner, type Signer } from "@stellar/stellar-sdk/contract";
 import { fundAccount } from "soroban-guard/src/core/funding.ts";
 import {
@@ -91,6 +91,61 @@ async function spenderParty(
 		signer: new KeypairSigner(keypair, request.networkPassphrase),
 		isThrowaway: false,
 	};
+}
+
+/** Stroops in one XLM. */
+export const STROOPS_PER_XLM = 10_000_000n;
+
+/** The network's base reserve per ledger entry: 0.5 XLM. */
+const BASE_RESERVE = 5_000_000n;
+
+/**
+ * The XLM the wallet can actually spend on fees: its balance above the
+ * minimum reserve every account must hold.
+ *
+ * A wallet can show "1 XLM" and have none of it to spend — 1 XLM is exactly
+ * the reserve of an account with no trustlines — and every write it signs
+ * then comes back from the network as `tx_insufficient_balance`. Read before
+ * a run so the page says so up front rather than reporting a check that did
+ * not complete. Sponsorships and liabilities are ignored: a wallet
+ * sophisticated enough to have them is not the one this protects.
+ *
+ * `null` when the account does not exist on the network yet — a wallet
+ * created in Freighter but never funded — which the page answers with
+ * Friendbot, not with a fee shortfall. Read with `getLedgerEntry` rather
+ * than the SDK's `getAccountEntry`, which turns every failure, a dropped
+ * connection included, into "Account not found": the same distinction
+ * `accountExists` in the CLI's funding code draws, for the same reason.
+ * Any other error propagates.
+ */
+export async function spendableXlm(
+	rpcUrl: string,
+	address: string,
+): Promise<bigint | null> {
+	const key = xdr.LedgerKey.account(
+		new xdr.LedgerKeyAccount({
+			accountId: Keypair.fromPublicKey(address).xdrPublicKey(),
+		}),
+	);
+	let found: Awaited<ReturnType<rpc.Server["getLedgerEntry"]>>;
+	try {
+		found = await new rpc.Server(rpcUrl).getLedgerEntry(key);
+	} catch (error) {
+		if (
+			error instanceof Error &&
+			/failed to find an entry/i.test(error.message)
+		) {
+			return null;
+		}
+		throw error;
+	}
+	if (found.val.type !== "account") {
+		throw new Error(`expected an account entry for ${address}`);
+	}
+	// Plain fields in SDK 17's generated XDR, not accessor methods.
+	const entry = found.val.value;
+	const reserve = (2n + BigInt(entry.numSubEntries)) * BASE_RESERVE;
+	return entry.balance - reserve;
 }
 
 /**

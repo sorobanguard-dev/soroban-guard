@@ -19,7 +19,7 @@ import {
 	DEMO_FAUCET_UNITS,
 	isDemoContract,
 } from "../data/demo.ts";
-import { forBrowser } from "../data/wording.ts";
+import { explainFailure, forBrowser } from "../data/wording.ts";
 import {
 	connect,
 	isFreighterInstalled,
@@ -31,6 +31,8 @@ import {
 	looksLikeAccountId,
 	looksLikeContractId,
 	runChecks,
+	STROOPS_PER_XLM,
+	spendableXlm,
 	tokenBalance,
 } from "./run.ts";
 
@@ -82,6 +84,13 @@ let lastRanAt = "";
 let running = false;
 
 /**
+ * The `contract:wallet` pair whose empty balance the visitor has already
+ * been told about. The first Run with no balance explains and stops; a
+ * second for the same pair means "run the reads anyway".
+ */
+let readsOnlyConfirmed = "";
+
+/**
  * The contract the last run assessed.
  *
  * Held separately from the input, because the report renderers are called
@@ -122,6 +131,36 @@ function refreshRunButton(): void {
 	} else {
 		runButton.textContent = "Run 16 checks";
 	}
+}
+
+/**
+ * Enough XLM above the reserve for a full run's fees. A run signs about
+ * fifteen transactions at roughly 0.01–0.02 XLM each; one XLM leaves room.
+ */
+const MIN_SPENDABLE = STROOPS_PER_XLM;
+
+/**
+ * Why this wallet cannot pay for a run, or `undefined` if it can.
+ *
+ * A wallet holding exactly its reserve looks funded in Freighter — it
+ * shows 1 XLM — yet every write it signs is refused by the network as
+ * `tx_insufficient_balance`, and the run reports checks that did not
+ * complete. Checked before anything is signed, and said in the wallet's
+ * terms. Friendbot funds only new accounts, so an existing one needs XLM
+ * sent to it.
+ */
+async function xlmShortfall(address: string): Promise<string | undefined> {
+	const spendable = await spendableXlm(TESTNET_RPC, address);
+	if (spendable === null) {
+		// Friendbot creates an account; it cannot top one up, which is why
+		// this case gets its own advice rather than the shortfall below.
+		return "This wallet's account does not exist on testnet yet, so it cannot pay for anything. Fund it with Friendbot — Freighter offers “Fund with Friendbot” for a new testnet account — then run again.";
+	}
+	if (spendable >= MIN_SPENDABLE) {
+		return undefined;
+	}
+	const shown = (Number(spendable < 0n ? 0n : spendable) / 1e7).toFixed(2);
+	return `This wallet has ${shown} XLM available above the reserve every Stellar account must keep, and each write costs a fee. Send it at least 1 testnet XLM from another account — or create a new account in Freighter and fund it with Friendbot — then run again.`;
 }
 
 /**
@@ -168,6 +207,11 @@ faucetButton.addEventListener("click", async () => {
 	faucetButton.textContent = "Approve in Freighter…";
 	try {
 		await requireTestnet();
+		const feeProblem = await xlmShortfall(holder);
+		if (feeProblem !== undefined) {
+			setWalletState(feeProblem, "error");
+			return;
+		}
 		const target = {
 			contractId: contractInput.value,
 			rpcUrl: TESTNET_RPC,
@@ -281,6 +325,18 @@ function renderRow(result: CheckResult): HTMLLIElement {
 	// In the browser's words: no OWNER_SECRET here, only a wallet and a
 	// counterparty field. The exports keep the suite's own wording.
 	actual.textContent = forBrowser(result.actual);
+	// A skipped row is this run failing, and "check did not complete" alone
+	// left the visitor nothing to act on — a rejected Freighter prompt and a
+	// dropped connection looked identical. The reason goes on the row itself
+	// (first line, trimmed), and in full in the drawer below.
+	const failure = result.evidence.error;
+	if (result.status === "SKIPPED" && failure !== undefined && failure !== "") {
+		const firstLine = failure.split("\n")[0] ?? failure;
+		const reason =
+			explainFailure(failure) ??
+			(firstLine.length > 160 ? `${firstLine.slice(0, 157)}…` : firstLine);
+		actual.textContent = `${forBrowser(result.actual)}: ${reason}`;
+	}
 
 	const why = document.createElement("button");
 	why.className = "why";
@@ -303,6 +359,16 @@ function renderRow(result: CheckResult): HTMLLIElement {
 	const expectedValue = document.createElement("dd");
 	expectedValue.textContent = result.expected;
 	list.append(expectedTerm, expectedValue);
+
+	if (failure !== undefined && failure !== "") {
+		const errorTerm = document.createElement("dt");
+		errorTerm.textContent =
+			result.status === "SKIPPED" ? "WHY IT DID NOT COMPLETE" : "ERROR";
+		const errorValue = document.createElement("dd");
+		errorValue.className = "error-text";
+		errorValue.textContent = failure;
+		list.append(errorTerm, errorValue);
+	}
 
 	// A transaction hash is the one piece of evidence a reader can take to
 	// an explorer and check for themselves, so it is a link rather than text.
@@ -439,7 +505,14 @@ form.addEventListener("submit", async (event) => {
 		 * other token the reads are still worth having, so it runs and says
 		 * what to expect.
 		 */
-		progress.textContent = "Reading this wallet's balance of the token…";
+		progress.textContent = "Reading this wallet's balances…";
+		const feeProblem = await xlmShortfall(signingAs);
+		if (feeProblem !== undefined) {
+			report.hidden = true;
+			progress.textContent = "";
+			setWalletState(feeProblem, "error");
+			return;
+		}
 		const target = {
 			contractId,
 			rpcUrl: TESTNET_RPC,
@@ -465,9 +538,27 @@ form.addEventListener("submit", async (event) => {
 			);
 			return;
 		}
+		/*
+		 * Any other token, and none of it in the wallet: eleven of sixteen
+		 * checks cannot run, and the result is a wall of "?". The recorded
+		 * fixture on the home page is the usual case — its mint is
+		 * admin-only — so the page stops once, says why, and points at the
+		 * demo token. Pressing Run again for the same pair runs the reads.
+		 */
+		const pair = `${contractId}:${signingAs}`;
+		if (held === 0n && readsOnlyConfirmed !== pair) {
+			readsOnlyConfirmed = pair;
+			report.hidden = true;
+			progress.textContent = "";
+			setWalletState(
+				"This wallet holds none of this token, so the eleven checks that write cannot run. For a full run, press “Use the demo token” above — its faucet gives any wallet what a run needs. Or press Run again to run the reads only.",
+				"error",
+			);
+			return;
+		}
 		if (held === 0n) {
 			progress.textContent =
-				"This wallet holds none of this token, so the checks that write will report unverifiable. Running the rest…";
+				"Running the reads only — this wallet holds none of this token.";
 		}
 
 		const outcome = await runChecks(
