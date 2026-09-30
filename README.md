@@ -46,7 +46,7 @@ reports which clauses hold, with evidence.
 Requires **Node 24**.
 
 ```sh
-npm install -g soroban-guard
+npm install -g soroban-guard   # forthcoming — publishing now; until then, source:
 soroban-guard <contract-id>
 ```
 
@@ -77,12 +77,12 @@ SEP-41 Conformance — CA5UTUUPHYL5K22UBRUVC37EARZUGYOSGK3IKIXG2JLCC5ZZLI4BDWDM
   ✓ sep41-symbol  symbol is "CPAL"
   ? sep41-transfer_from-unauthorized  no signing authority for the spender; set SPENDER_SECRET to attempt a spend the contract should refuse
     expected: transfer_from refuses a spender with no allowance from the holder
-  ? sep41-transfer-over-balance  no signing authority for the holder; set OWNER_SECRET to attempt a transfer the contract should refuse
-    expected: transfer refuses to move more than the holder's balance
-  ? sep41-transfer-negative-amount  no signing authority for the holder; set OWNER_SECRET to attempt a transfer the contract should refuse
-    expected: transfer refuses a negative amount
   ? sep41-transfer-zero-amount  no signing authority for the holder; set OWNER_SECRET to attempt a transfer that must not move value
     expected: a transfer of zero leaves both balances unchanged
+  ? sep41-transfer-negative-amount  no signing authority for the holder; set OWNER_SECRET to attempt a transfer the contract should refuse
+    expected: transfer refuses a negative amount
+  ? sep41-transfer-over-balance  no signing authority for the holder; set OWNER_SECRET to attempt a transfer the contract should refuse
+    expected: transfer refuses to move more than the holder's balance
   ? sep41-transfer-self  no signing authority for the holder; set OWNER_SECRET to attempt a transfer that must not move value
     expected: a transfer to oneself leaves the balance unchanged
   ? sep41-transfer  no signing authority for the holder; set OWNER_SECRET to an account that both signs and holds this token
@@ -151,10 +151,10 @@ SEP-41 Conformance — CARQGEM3RDSWA2SRZDL6LDBOEQWQHS74BOL5V62QXIGMOBIMIX5YTYYN
   ✓ sep41-name  name is "TEST:GAY3IYUGLOBCIFRCDULGBSR4VYREU4BITUAIYTUD64KN232LJBOHSUGY"
   ✓ sep41-symbol  symbol is "TEST"
   ✓ sep41-transfer_from-unauthorized  an unauthorized spend was refused
-  ✓ sep41-transfer-over-balance  a transfer of 898999961 against a balance of 898999960 was refused
-  ✓ sep41-transfer-negative-amount  a transfer of -1 was refused
   ✓ sep41-transfer-zero-amount  the call was accepted and both balances held, at 898999960 and 14
   ✓ sep41-transfer-self  the call was accepted and the balance held at 898999960
+  ✓ sep41-transfer-negative-amount  a transfer of -1 was refused
+  ✓ sep41-transfer-over-balance  a transfer of 898999961 against a balance of 898999960 was refused
   ✓ sep41-transfer  holder -1, recipient +1
   ✓ sep41-approve  allowance is 2 after approving 2 over 1
   ✓ sep41-transfer_from  holder -1, recipient +1, allowance -1
