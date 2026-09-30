@@ -8,7 +8,7 @@ Conventions: new entries go under `[Unreleased]` in the order Breaking,
 Added, Changed, Fixed, Removed. A released section is immutable — correct a
 released claim by adding an entry to `[Unreleased]`, never by rewriting
 history someone may already have read. Reference issues as
-`([#12](https://github.com/birserg/soroban-guard/issues/12))` and credit
+`([#12](https://github.com/sorobanguard-dev/soroban-guard/issues/12))` and credit
 outside contributors by handle. Entries describe what changed for a user of
 the tool; internal refactors with no observable effect belong in the commit
 log, not here.

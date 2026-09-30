@@ -1,7 +1,6 @@
 {
 	"name": "soroban-guard",
 	"version": "0.4.1",
-	"private": true,
 	"description": "Conformance testing for deployed SEP-41 Soroban token contracts",
 	"keywords": [
 		"stellar",
@@ -13,12 +12,26 @@
 	"license": "Apache-2.0",
 	"author": "Sergei Birtanov <arigatosf@gmail.com> (https://github.com/birserg)",
 	"type": "module",
-	"main": "./src/index.ts",
+	"bin": {
+		"soroban-guard": "./dist/cli.js"
+	},
+	"main": "./dist/index.js",
+	"types": "./dist/index.d.ts",
 	"exports": {
-		".": "./src/index.ts",
+		".": {
+			"types": "./dist/index.d.ts",
+			"default": "./dist/index.js"
+		},
 		"./package.json": "./package.json"
 	},
+	"files": [
+		"dist",
+		"README.md",
+		"LICENSE"
+	],
 	"scripts": {
+		"build": "tsc -p tsconfig.build.json",
+		"prepack": "node scripts/prepare-package.mjs && pnpm run build",
 		"typecheck": "tsc --noEmit",
 		"soroban-guard": "node src/cli.ts",
 		"test": "vitest run tests/unit",
@@ -37,11 +50,11 @@
 	},
 	"repository": {
 		"type": "git",
-		"url": "git+https://github.com/birserg/soroban-guard.git",
+		"url": "git+https://github.com/sorobanguard-dev/soroban-guard.git",
 		"directory": "packages/soroban-guard"
 	},
 	"bugs": {
-		"url": "https://github.com/birserg/soroban-guard/issues"
+		"url": "https://github.com/sorobanguard-dev/soroban-guard/issues"
 	},
-	"homepage": "https://github.com/birserg/soroban-guard#readme"
+	"homepage": "https://github.com/sorobanguard-dev/soroban-guard#readme"
 }

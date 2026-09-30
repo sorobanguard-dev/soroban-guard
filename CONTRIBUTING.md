@@ -42,3 +42,10 @@ committing, then re-verify with `check:ci`.
 
 Small, one concern, green CI. Describe the behavior change and how it was
 verified (offline tests + live output where applicable).
+
+## Release
+
+Bump the version in all three manifests together (`package.json`,
+`packages/soroban-guard/package.json`, `packages/web/package.json`) —
+a release that moves one and not the others repeats the 0.2.0/0.4.1 drift.
+Then CHANGELOG entry, merge, tag `vX.Y.Z`, push tag.
