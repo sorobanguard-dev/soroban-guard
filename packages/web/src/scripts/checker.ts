@@ -26,7 +26,9 @@ import {
 	WalletError,
 	walletNetwork,
 } from "./freighter.ts";
+import { owedSendBack } from "./owed.ts";
 import {
+	type Cleanup,
 	claimDemoTokens,
 	looksLikeAccountId,
 	looksLikeContractId,
@@ -84,6 +86,87 @@ let lastRanAt = "";
 let running = false;
 
 /**
+ * A faucet claim waiting in Freighter or on the ledger. The run guard's
+ * mirror image: `running` keeps a claim from landing mid-run, and this
+ * keeps a run — or a second claim — from starting while one is in flight,
+ * since a claim that lands mid-run moves the balance a check is measuring.
+ */
+let claiming = false;
+
+/**
+ * A retried send-back from the temporary account, in flight. Blocks a new
+ * run for the same reason `claiming` does: units landing in the wallet
+ * mid-run move the balance a check is measuring.
+ */
+let returning = false;
+
+/**
+ * The send-back still owed from the last run, while the page holds the
+ * temporary account's key. The retry button lives in `progress`, which a
+ * new run overwrites — so without this, Run would drop the only reference
+ * to the key and strand the units.
+ */
+const owed = owedSendBack<Cleanup>();
+
+/**
+ * Say what happened to the temporary account's units — and, while the
+ * page still holds that account's key, offer to try again. The key lives
+ * only in this tab; without a retry, a failed send-back left the units
+ * unreachable.
+ */
+function showCleanup(cleanup: Cleanup): void {
+	owed.owe(
+		"failed" in cleanup && cleanup.retry !== undefined ? cleanup : undefined,
+	);
+	if ("returned" in cleanup) {
+		progress.textContent =
+			cleanup.returned > 0n
+				? `The temporary second account sent ${cleanup.returned} unit${cleanup.returned === 1n ? "" : "s"} back to your wallet.`
+				: "";
+		return;
+	}
+	progress.textContent = `The temporary second account could not send its units back to your wallet: ${cleanup.failed}`;
+	const retry = cleanup.retry;
+	if (retry === undefined) {
+		return;
+	}
+	const button = document.createElement("button");
+	button.type = "button";
+	button.className = "retry-action";
+	button.textContent = "Try sending them back again";
+	button.addEventListener("click", async () => {
+		// A faucet claim reads the wallet's balance when it lands; units
+		// arriving from a send-back at the same time would make that read
+		// stale. So the two exclude each other, as each excludes a run.
+		if (running || claiming || returning) {
+			// Silent-button class, same as copy/no-wallet: a control that
+			// visibly does nothing reads as broken, so it says why.
+			setWalletState(
+				running
+					? "A run is in progress — try sending the units back once it finishes."
+					: claiming
+						? "A faucet claim is in progress — try sending the units back once it lands."
+						: "The units are already being sent back — wait for that to finish.",
+			);
+			return;
+		}
+		returning = true;
+		refreshRunButton();
+		refreshFaucet();
+		button.disabled = true;
+		button.textContent = "Sending back…";
+		try {
+			showCleanup(await retry());
+		} finally {
+			returning = false;
+			refreshRunButton();
+			refreshFaucet();
+		}
+	});
+	progress.append(" ", button);
+}
+
+/**
  * The `contract:wallet` pair whose empty balance the visitor has already
  * been told about. The first Run with no balance explains and stops; a
  * second for the same pair means "run the reads anyway".
@@ -120,9 +203,13 @@ function setWalletState(message: string, tone?: "error" | "ready"): void {
 function refreshRunButton(): void {
 	const hasContract = looksLikeContractId(contractInput.value);
 	const hasWallet = connected !== null;
-	runButton.disabled = !(hasContract && hasWallet);
+	runButton.disabled = claiming || returning || !(hasContract && hasWallet);
 
-	if (!hasContract && !hasWallet) {
+	if (claiming) {
+		runButton.textContent = "Waiting for the faucet…";
+	} else if (returning) {
+		runButton.textContent = "Sending units back…";
+	} else if (!hasContract && !hasWallet) {
 		runButton.textContent = "Paste a contract, connect a wallet";
 	} else if (!hasContract) {
 		runButton.textContent = "Paste a contract ID";
@@ -173,11 +260,14 @@ async function xlmShortfall(address: string): Promise<string | undefined> {
  * The faucet button belongs to the demo token only, and needs a wallet to
  * receive the units — so it shows exactly when both hold. Hidden while a
  * run is active: a faucet claim mid-run would move balances the checks are
- * measuring (see the guard in its click handler).
+ * measuring (see the guard in its click handler). Hidden during a send-back
+ * retry too, whose units would land under the claim's balance read.
  */
 function refreshFaucet(): void {
 	faucetButton.hidden =
-		running || !(isDemoContract(contractInput.value) && connected !== null);
+		running ||
+		returning ||
+		!(isDemoContract(contractInput.value) && connected !== null);
 }
 
 // Typing an address is half the precondition, so the button tracks it.
@@ -185,6 +275,16 @@ contractInput.addEventListener("input", () => {
 	contractInput.removeAttribute("aria-invalid");
 	refreshRunButton();
 	refreshFaucet();
+	// The likeliest wrong paste for a classic asset: its issuer's G-address
+	// sits right beside it everywhere the asset is listed, and it is the
+	// same length. A greyed-out button said nothing about why.
+	if (looksLikeAccountId(contractInput.value)) {
+		contractInput.setAttribute("aria-invalid", "true");
+		setWalletState(
+			"That is an account address (it starts with G), not a token contract. A token's contract ID starts with C — for a classic asset like USDC, use its Stellar Asset Contract ID, not the issuer's address.",
+			"error",
+		);
+	}
 });
 
 useDemoButton.addEventListener("click", () => {
@@ -205,10 +305,13 @@ faucetButton.addEventListener("click", async () => {
 	}
 	// Same guard as the run handler: hidden controls can still be reached
 	// (keyboard, automation), and a claim landing mid-run would move a
-	// balance a check is measuring.
-	if (running) {
+	// balance a check is measuring. A send-back retry in flight would do the
+	// same to the balance this claim reads when it lands.
+	if (running || claiming || returning) {
 		return;
 	}
+	claiming = true;
+	refreshRunButton();
 	faucetButton.disabled = true;
 	faucetButton.textContent = "Approve in Freighter…";
 	try {
@@ -235,6 +338,8 @@ faucetButton.addEventListener("click", async () => {
 			"error",
 		);
 	} finally {
+		claiming = false;
+		refreshRunButton();
 		faucetButton.disabled = false;
 		faucetButton.textContent = `Get ${DEMO_FAUCET_UNITS} test VULN`;
 	}
@@ -438,6 +543,15 @@ form.addEventListener("submit", async (event) => {
 	if (running) {
 		return;
 	}
+	if (claiming || returning) {
+		setWalletState(
+			claiming
+				? "The faucet claim is still in progress — run once it has landed."
+				: "Units are still being sent back from the last run — run once that has finished.",
+			"error",
+		);
+		return;
+	}
 	if (connected === null) {
 		setWalletState(
 			"Connect Freighter first — the eleven checks that write need a wallet to sign them.",
@@ -468,6 +582,17 @@ form.addEventListener("submit", async (event) => {
 	}
 	spenderInput.removeAttribute("aria-invalid");
 
+	// Testnet units are cheap, but the page does not discard something the
+	// visitor owns without saying so.
+	if (owed.onRun() === "warn") {
+		setWalletState(
+			"The temporary second account still holds units from the last run. Press “Try sending them back again” below — or press Run again to start a new run and leave them there.",
+			"error",
+		);
+		return;
+	}
+
+	let suiteStarted = false;
 	running = true;
 	runButton.disabled = true;
 	runButton.textContent = "Running…";
@@ -570,6 +695,10 @@ form.addEventListener("submit", async (event) => {
 				"Running the reads only — this wallet holds none of this token.";
 		}
 
+		// Only now is an owed send-back given up: every gate above can still
+		// stop the run, and a stopped run must leave the retry in place.
+		owed.abandon();
+		suiteStarted = true;
 		const outcome = await runChecks(
 			{
 				...target,
@@ -590,17 +719,10 @@ form.addEventListener("submit", async (event) => {
 		renderSummary(outcome.results, outcome.exitCode);
 		// The temporary second account's units go back to the holder; say
 		// whether they did, since they were the visitor's to begin with.
-		const cleanup = outcome.cleanup;
-		if (
-			cleanup !== undefined &&
-			"returned" in cleanup &&
-			cleanup.returned > 0n
-		) {
-			progress.textContent = `The temporary second account sent ${cleanup.returned} unit${cleanup.returned === 1n ? "" : "s"} back to your wallet.`;
-		} else if (cleanup !== undefined && "failed" in cleanup) {
-			progress.textContent = `The temporary second account could not send its units back to your wallet: ${cleanup.failed}`;
+		if (outcome.cleanup !== undefined) {
+			showCleanup(outcome.cleanup);
 		} else if (outcome.spenderSetupFailed !== undefined) {
-			progress.textContent = `The page could not set up a second account (${outcome.spenderSetupFailed}), so the four checks that need one could not run. Run again to retry.`;
+			progress.textContent = `The page could not set up a second account (${outcome.spenderSetupFailed}), so the four checks that need one could not run. Run the checks again from the top to retry.`;
 		}
 	} catch (error) {
 		// A throw here is the run never starting — a bad address, an
@@ -614,6 +736,14 @@ form.addEventListener("submit", async (event) => {
 		);
 	} finally {
 		running = false;
+		// Stopped before the suite: "Preparing…" replaced the retry button,
+		// but the key is still held, so offer it again.
+		const stillOwed = owed.pending();
+		if (!suiteStarted && stillOwed !== undefined) {
+			// The reads-only gate hides the report, and the retry lives in it.
+			report.hidden = false;
+			showCleanup(stillOwed);
+		}
 		// Back to whichever precondition state now applies, rather than
 		// unconditionally enabled: a run does not change whether the page
 		// still has a contract and a wallet.

@@ -67,13 +67,18 @@ prints `○`.
 - **A full run signs real transactions** and moves real testnet units. `burn`
   and `burn_from` destroy one unit each, irreversibly.
 - **Several approval prompts**, one per write.
-- **All sixteen run from one wallet, on any token.** With the counterparty
+- **All sixteen run from one wallet, on any token — when setup works.** With the counterparty
   field empty, `spenderParty` in `src/scripts/run.ts` generates a temporary
   account, funds it with Friendbot, gives it a trustline when the token is a
   classic asset (read from the SAC's own `name()`), and signs as it for the
   four spender-signed checks. Its key lives only in the tab. When the run
   ends, `returnUnits` tries to send whatever it received back to the holder — best
-  effort and reported, never thrown, since the verdicts are already in.
+  effort and reported, never thrown, since the verdicts are already in. A
+  failure that retrying could fix keeps the account's key in `retry`, and
+  the page offers "Try sending them back again"; the key exists nowhere
+  else. If setup itself fails (Friendbot down, a trustline refused), the
+  run falls back to a keyless address: the reads and the holder's writes
+  still run, and the four spender-signed checks report what they need.
 - **A named counterparty is used as given, without a signer.** The page
   cannot sign for an address it did not create, so the four spender-signed
   checks then report what they would need.

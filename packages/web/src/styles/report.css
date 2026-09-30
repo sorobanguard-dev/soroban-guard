@@ -388,3 +388,23 @@
 	font-size: 11.5px;
 	overflow-wrap: anywhere;
 }
+
+/* The retry offered after a failed send-back. Created by the checker
+   script, so it is styled here in the global sheet: a scoped component
+   style would not reach an element added at runtime. */
+.retry-action {
+	font: inherit;
+	padding: 0;
+	border: 0;
+	background: none;
+	color: var(--ink);
+	text-decoration: underline;
+	text-underline-offset: 3px;
+	cursor: pointer;
+}
+
+.retry-action:disabled {
+	color: var(--faint);
+	text-decoration: none;
+	cursor: default;
+}
