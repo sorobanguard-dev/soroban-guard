@@ -132,7 +132,9 @@ function expectFullyRendered(html: readonly string[]): void {
 		// Code is shown as written — `--format text|md|json` is a real pipe.
 		const prose = fragment.replace(/<code>[^<]*<\/code>/g, "");
 		expect(prose).not.toMatch(
-			/\*\*|(^|\s)\*\S|`|\]\(|\||^\s*(\d+\.|\*|#{1,6})\s/,
+			// `&gt;` because the renderer escapes before this sees it: a
+			// blockquote line reaches here as "&gt; …", never as "> …".
+			/\*\*|(^|\s)\*\S|`|\]\(|\||^\s*(\d+\.|\*|#{1,6}|&gt;|>)\s/,
 		);
 	}
 }
@@ -182,6 +184,13 @@ describe("check-reference.md", () => {
 				"# Checks reference\n\nIntro.\n\n## Premises\n\nProse only.\n",
 			),
 		).toThrow(/Premises/);
+	});
+
+	// The guard itself, on a construct the renderer does not handle: a
+	// blockquote reaches the page as literal "&gt; …" text, and must fail.
+	it("catches a blockquote the renderer would leave as text", () => {
+		expect(() => expectFullyRendered([inline("> quoted")])).toThrow();
+		expect(() => expectFullyRendered(allHtml(blocks("> quoted")))).toThrow();
 	});
 
 	it("drops the verdicts section by name", () => {

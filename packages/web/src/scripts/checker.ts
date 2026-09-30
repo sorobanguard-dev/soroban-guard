@@ -588,6 +588,20 @@ form.addEventListener("submit", async (event) => {
 		progress.textContent = "";
 		rows.replaceChildren(...outcome.results.map(renderRow));
 		renderSummary(outcome.results, outcome.exitCode);
+		// The temporary second account's units go back to the holder; say
+		// whether they did, since they were the visitor's to begin with.
+		const cleanup = outcome.cleanup;
+		if (
+			cleanup !== undefined &&
+			"returned" in cleanup &&
+			cleanup.returned > 0n
+		) {
+			progress.textContent = `The temporary second account sent ${cleanup.returned} unit${cleanup.returned === 1n ? "" : "s"} back to your wallet.`;
+		} else if (cleanup !== undefined && "failed" in cleanup) {
+			progress.textContent = `The temporary second account could not send its units back to your wallet: ${cleanup.failed}`;
+		} else if (outcome.spenderSetupFailed !== undefined) {
+			progress.textContent = `The page could not set up a second account (${outcome.spenderSetupFailed}), so the four checks that need one could not run. Run again to retry.`;
+		}
 	} catch (error) {
 		// A throw here is the run never starting — a bad address, an
 		// unreachable node, a refused connection. It is not a verdict, so it

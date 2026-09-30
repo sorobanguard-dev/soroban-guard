@@ -67,17 +67,19 @@ prints `○`.
 - **A full run signs real transactions** and moves real testnet units. `burn`
   and `burn_from` destroy one unit each, irreversibly.
 - **Several approval prompts**, one per write.
-- **On the demo token, all sixteen run from one wallet.** The demo token
-  (`src/data/demo.ts`) is `fixtures/vulnerable-token` built with a public
-  faucet; "Get 5 test VULN" gives the wallet what a full run spends, and with
-  the counterparty field empty the page generates, funds and signs for a
-  second account. Its key lives only in the tab — what it receives is faucet
-  VULN, so nothing of value is stranded.
-- **On any other token, four checks stay UNVERIFIABLE** unless the visitor
-  names a counterparty and runs the CLI with both keys. The page never
-  sends someone's real tokens to an account nobody can recover: without a
-  counterparty it uses a keyless generated address, which the suite's
-  throwaway guards refuse to pay.
+- **All sixteen run from one wallet, on any token.** With the counterparty
+  field empty, `spenderParty` in `src/scripts/run.ts` generates a temporary
+  account, funds it with Friendbot, gives it a trustline when the token is a
+  classic asset (read from the SAC's own `name()`), and signs as it for the
+  four spender-signed checks. Its key lives only in the tab. When the run
+  ends, `returnUnits` tries to send whatever it received back to the holder — best
+  effort and reported, never thrown, since the verdicts are already in.
+- **A named counterparty is used as given, without a signer.** The page
+  cannot sign for an address it did not create, so the four spender-signed
+  checks then report what they would need.
+- **The demo token** (`src/data/demo.ts`) is `fixtures/vulnerable-token`
+  built with a public faucet, for visitors with no token of their own:
+  "Get 5 test VULN" gives the wallet what a full run spends.
 
 ## Commands
 

@@ -32,7 +32,7 @@ const STEPS = [
 	},
 	{
 		title: "Name a contract",
-		body: "Any deployed SEP-41 token on testnet — or the demo token, whose faucet gives any wallet the five units a full run spends, and for which the page creates the second account itself.",
+		body: "Any deployed SEP-41 token on testnet that your wallet holds — or the demo token, whose faucet gives any wallet the five units a full run spends. Leave the counterparty empty and the page creates the second account for the run.",
 	},
 	{
 		title: "Approve each write",
@@ -91,9 +91,9 @@ const STEPS = [
 		<section class="fallback">
 			<h2>Or run it from a terminal</h2>
 			<p>
-				For your own token, the command line takes both keys at once, so the
-				checks that must sign as the spender get a verdict there too — and it
-				drops into a CI pipeline with an exit code to gate on.
+				The same sixteen checks, from a terminal: no wallet prompts, keys from
+				the environment, and a CHECKS.md or JSON report with an exit code a CI
+				pipeline can gate on.
 			</p>
 			<p>
 				<a class="link" href="/#how">See the CLI</a>
