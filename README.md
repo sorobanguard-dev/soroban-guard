@@ -281,19 +281,20 @@ an explorer link for every transaction, and CHECKS.md / JSON export.
 There is no backend. The page talks to Soroban RPC directly and signing
 happens inside the extension, so your secret key never reaches the page.
 
+**One wallet runs all sixteen.** Connect the wallet that holds your token
+and leave the counterparty field empty: the page creates a temporary
+second account for the run — funded by Friendbot, given a trustline if the
+token is a classic Stellar asset — and signs as it for the four checks that
+must be signed by the spender (`transfer_from`, `burn_from`, and the
+unauthorized and expired `transfer_from` cases). Its key lives only in
+that browser tab. When the run ends the page tries to send whatever it
+received back to your wallet, and says whether that worked — a token that
+refuses the transfer, as the vulnerable fixture can, leaves those few
+units in the temporary account.
+
 **No token of your own?** The page offers a demo token: a copy of
 `fixtures/vulnerable-token` with a faucet that gives any wallet the five
-units a full run spends. Leave the counterparty field empty and the page
-generates, funds and signs for a second account itself — its key lives
-only in that browser tab, and all it ever holds is faucet tokens — so one
-wallet runs all sixteen checks and sees the fixture's two defects.
-
-**On any other token,** a wallet signs as one party. The four checks that
-must sign as the spender — `transfer_from`, `burn_from`, and the
-unauthorized and expired `transfer_from` cases — report UNVERIFIABLE and
-name what they need, because the page will not send someone's real tokens
-to an account nobody can recover. For a complete run, use the CLI with
-both keys.
+units a full run spends, so anyone can see the fixture's two defects.
 
 ```sh
 pnpm --filter @soroban-guard/web dev   # run the site locally

@@ -9,11 +9,21 @@
  * how the context is assembled: the CLI reads secrets from the environment,
  * and this asks a wallet.
  */
-import { Keypair, rpc, StrKey, xdr } from "@stellar/stellar-sdk";
+import {
+	Asset,
+	BASE_FEE,
+	Keypair,
+	Operation,
+	rpc,
+	StrKey,
+	TransactionBuilder,
+	xdr,
+} from "@stellar/stellar-sdk";
 import { KeypairSigner, type Signer } from "@stellar/stellar-sdk/contract";
 import { fundAccount } from "soroban-guard/src/core/funding.ts";
 import {
 	addressArg,
+	amountArg,
 	interpretSimulation,
 	simulateRead,
 	submitWrite,
@@ -58,39 +68,202 @@ export interface RunRequest {
 }
 
 /**
- * The second party, when the visitor did not name one.
+ * What a Stellar Asset Contract wraps, read from its own `name()`: the
+ * classic asset for an issued token, `"native"` for XLM, `undefined` for a
+ * custom WASM token or a name that is not in the SAC's `CODE:ISSUER` form.
  *
- * On the demo token, a real second account: generated, funded by Friendbot,
- * and signed for by this page, so the four checks that must sign as the
- * spender run too and a visitor with one wallet gets all sixteen. Its key
- * lives only in this tab and dies with it; what the run sends there is a
- * few units of a token anyone can take from the faucet, so nothing of value
- * is stranded.
- *
- * On any other token, the CLI's rule instead: a generated address with no
- * key, marked throwaway, so the suite refuses to move anyone's real tokens
- * to an account nobody can recover and says what it would need.
+ * Needed because a classic asset can only be received by an account that
+ * trusts it — the temporary spender cannot take a single unit until it has
+ * a trustline, and the checks that send it one would all report the
+ * asset's own refusal instead of the contract's behaviour.
  */
-async function spenderParty(
+async function wrappedAsset(
+	server: rpc.Server,
+	request: RunRequest,
+	source: Awaited<ReturnType<rpc.Server["getAccount"]>>,
+): Promise<Asset | "native" | undefined> {
+	const outcome = interpretSimulation(
+		await simulateRead(
+			server,
+			source,
+			{ contractId: request.contractId.trim(), method: "name", args: [] },
+			request.networkPassphrase,
+		),
+	);
+	if (outcome.kind !== "ok" || typeof outcome.value !== "string") {
+		return undefined;
+	}
+	if (outcome.value === "native") {
+		return "native";
+	}
+	const match = /^([A-Za-z0-9]{1,12}):(G[A-Z2-7]{55})$/.exec(outcome.value);
+	// The issuer is checksummed, not just shape-matched: a name that merely
+	// looks like CODE:ISSUER would otherwise cost a pointless trustline.
+	if (match === null || !StrKey.isValidEd25519PublicKey(match[2])) {
+		return undefined;
+	}
+	return new Asset(match[1], match[2]);
+}
+
+/** Give the temporary account a trustline, and wait for it to land. */
+async function addTrustline(
+	server: rpc.Server,
+	keypair: Keypair,
+	asset: Asset,
+	networkPassphrase: string,
+): Promise<void> {
+	const account = await server.getAccount(keypair.publicKey());
+	const tx = new TransactionBuilder(account, {
+		fee: BASE_FEE,
+		networkPassphrase,
+	})
+		.addOperation(Operation.changeTrust({ asset }))
+		.setTimeout(60)
+		.build();
+	tx.sign(keypair);
+	const sent = await server.sendTransaction(tx);
+	if (sent.status !== "PENDING") {
+		throw new Error(
+			`the temporary account's trustline to ${asset.getCode()} was refused (${sent.status})`,
+		);
+	}
+	const settled = await server.pollTransaction(sent.hash, { attempts: 20 });
+	if (settled.status !== "SUCCESS") {
+		throw new Error(
+			`the temporary account's trustline to ${asset.getCode()} did not land (${settled.status})`,
+		);
+	}
+}
+
+/** The second party the run supplies, with what the page needs to clean up. */
+interface TemporarySpender {
+	readonly party: Party;
+	readonly keypair: Keypair;
+	readonly asset: Asset | "native" | undefined;
+}
+
+/**
+ * The second party, when the visitor did not name one: a temporary account
+ * this page creates, funds and signs for, on any token.
+ *
+ * Four checks must be signed by the spender, and a browser wallet signs as
+ * one party. Supplying a keyed second account is what lets one wallet get
+ * all sixteen verdicts — the CLI gets the same by taking two keys. The
+ * account's key lives only in this tab. It is marked as not throwaway
+ * because the page does hold its key for the whole run. When the run ends
+ * `returnUnits` tries to send whatever it received back to the holder. That
+ * is best effort, not a guarantee: a token that refuses the transfer leaves
+ * the few units a run moves in the temporary account, and the page says so.
+ *
+ * A named counterparty is used as given, without a signer: the page cannot
+ * sign for an address it did not create, so those four checks then say
+ * what they would need.
+ */
+export async function spenderParty(
 	request: RunRequest,
 	server: rpc.Server,
+	source: Awaited<ReturnType<rpc.Server["getAccount"]>>,
+	isAssetContract: boolean,
 	onStage?: (text: string) => void,
-): Promise<Party> {
+): Promise<{
+	party: Party;
+	temporary?: TemporarySpender;
+	setupFailed?: string;
+}> {
 	const named = request.spenderAddress?.trim();
 	if (named !== undefined && named !== "") {
-		return { address: named, isThrowaway: false };
+		return { party: { address: named, isThrowaway: false } };
 	}
 	const keypair = Keypair.random();
-	if (!isDemoContract(request.contractId)) {
-		return { address: keypair.publicKey(), isThrowaway: true };
+	try {
+		onStage?.("Creating a temporary second account to sign as the spender…");
+		await fundAccount(server, keypair.publicKey());
+		// Only a Stellar Asset Contract wraps a classic asset. A custom
+		// token's name is whatever its author chose, and one that happens to
+		// read CODE:ISSUER must not buy a trustline it does not need.
+		const asset = isAssetContract
+			? await wrappedAsset(server, request, source)
+			: undefined;
+		if (asset instanceof Asset) {
+			onStage?.(
+				`Giving the temporary account a trustline to ${asset.getCode()}…`,
+			);
+			await addTrustline(server, keypair, asset, request.networkPassphrase);
+		}
+		const party: Party = {
+			address: keypair.publicKey(),
+			signer: new KeypairSigner(keypair, request.networkPassphrase),
+			isThrowaway: false,
+		};
+		return { party, temporary: { party, keypair, asset } };
+	} catch (error) {
+		// Setup trouble — Friendbot down, a trustline refused — must cost the
+		// four checks that need a second signer, not all sixteen. Fall back
+		// to the keyless generated address the suite already knows how to
+		// report on: the reads and the holder's own writes still run.
+		return {
+			party: { address: keypair.publicKey(), isThrowaway: true },
+			setupFailed: error instanceof Error ? error.message : String(error),
+		};
 	}
-	onStage?.("Funding a second test account to act as the spender…");
-	await fundAccount(server, keypair.publicKey());
-	return {
-		address: keypair.publicKey(),
-		signer: new KeypairSigner(keypair, request.networkPassphrase),
-		isThrowaway: false,
-	};
+}
+
+/**
+ * Send what the temporary account received back to the holder.
+ *
+ * Best effort, and reported rather than thrown: the verdicts are already
+ * in, and a token broken enough to refuse this transfer — the vulnerable
+ * fixture leaves a balance that reads negative — must not turn a finished
+ * run into an error. XLM is left alone: what the account holds there is
+ * almost entirely Friendbot's funding, not the visitor's.
+ */
+async function returnUnits(
+	server: rpc.Server,
+	request: RunRequest,
+	temporary: TemporarySpender,
+): Promise<{ returned: bigint } | { failed: string }> {
+	if (temporary.asset === "native") {
+		return { returned: 0n };
+	}
+	try {
+		const source = await server.getAccount(temporary.party.address);
+		const read = interpretSimulation(
+			await simulateRead(
+				server,
+				source,
+				{
+					contractId: request.contractId.trim(),
+					method: "balance",
+					args: [addressArg(temporary.party.address)],
+				},
+				request.networkPassphrase,
+			),
+		);
+		const held =
+			read.kind === "ok" && typeof read.value === "bigint" ? read.value : 0n;
+		if (held <= 0n || temporary.party.signer === undefined) {
+			return { returned: 0n };
+		}
+		const sent = await submitWrite(
+			server,
+			{
+				contractId: request.contractId.trim(),
+				method: "transfer",
+				args: [
+					addressArg(temporary.party.address),
+					addressArg(request.ownerAddress),
+					amountArg(held),
+				],
+				signer: temporary.party.signer,
+			},
+			request.networkPassphrase,
+		);
+		return sent.kind === "applied"
+			? { returned: held }
+			: { failed: `the transfer back was not applied (${sent.kind})` };
+	} catch (error) {
+		return { failed: error instanceof Error ? error.message : String(error) };
+	}
 }
 
 /** Stroops in one XLM. */
@@ -218,6 +391,18 @@ export async function claimDemoTokens(
 export interface RunOutcome {
 	readonly results: readonly CheckResult[];
 	readonly exitCode: number;
+	/**
+	 * When the run supplied its own second account: how many units went back
+	 * to the holder at the end, or why they could not. Absent when the
+	 * visitor named the counterparty.
+	 */
+	readonly cleanup?: { returned: bigint } | { failed: string };
+	/**
+	 * Why the run could not set up its own second account, when it could
+	 * not. The run went ahead without one: the four spender-signed checks
+	 * then report what they would need.
+	 */
+	readonly spenderSetupFailed?: string;
 }
 
 /**
@@ -271,6 +456,14 @@ export async function runChecks(
 		request.ownerSigner ??
 		freighterSigner(request.ownerAddress, request.networkPassphrase);
 
+	const spender = await spenderParty(
+		request,
+		server,
+		source,
+		inspected.kind === "native",
+		onStage,
+	);
+
 	const ctx: Sep41Context = {
 		server,
 		contractId,
@@ -283,7 +476,7 @@ export async function runChecks(
 				signer,
 				isThrowaway: false,
 			},
-			spender: await spenderParty(request, server, onStage),
+			spender: spender.party,
 		},
 		// Fresh per run, exactly as the CLI builds them.
 		establishedAllowances: new Set(),
@@ -307,5 +500,16 @@ export async function runChecks(
 
 	const assessed = await runSuite(instrumented, ctx);
 	const results = withCoverageGaps(assessed);
-	return { results, exitCode: exitCodeFor(results) };
+	if (spender.temporary === undefined) {
+		return {
+			results,
+			exitCode: exitCodeFor(results),
+			...(spender.setupFailed === undefined
+				? {}
+				: { spenderSetupFailed: spender.setupFailed }),
+		};
+	}
+	onStage?.("Sending the temporary account's units back to your wallet…");
+	const cleanup = await returnUnits(server, request, spender.temporary);
+	return { results, exitCode: exitCodeFor(results), cleanup };
 }

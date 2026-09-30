@@ -48,7 +48,7 @@ describe("forBrowser", () => {
 				"expired-allowance needs both keys: OWNER_SECRET to grant the allowance and SPENDER_SECRET to attempt the spend",
 			),
 		).toBe(
-			"expired-allowance needs a second account that signs as the spender — use the demo token with the counterparty field empty, or the CLI with both keys",
+			"expired-allowance needs a second account that signs as the spender — leave the counterparty field empty and the page supplies one, or use the CLI with both keys",
 		);
 	});
 

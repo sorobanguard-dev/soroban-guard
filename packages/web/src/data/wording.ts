@@ -14,7 +14,7 @@
 const REWRITES: readonly (readonly [RegExp, string])[] = [
 	[
 		/([\w-]+) needs both keys: OWNER_SECRET to grant the allowance and SPENDER_SECRET to (spend it|attempt the spend)/g,
-		"$1 needs a second account that signs as the spender — use the demo token with the counterparty field empty, or the CLI with both keys",
+		"$1 needs a second account that signs as the spender — leave the counterparty field empty and the page supplies one, or use the CLI with both keys",
 	],
 	[
 		/set OWNER_ADDRESS and SPENDER_ADDRESS to a real approving pair/g,

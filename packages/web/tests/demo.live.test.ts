@@ -62,7 +62,11 @@ describe.skipIf(!live)("the demo token, as a new visitor", () => {
 				outcome.results.filter((r) => r.status === status).length;
 
 			// The page funded a second account rather than reusing the holder.
-			expect(stages.some((s) => s.includes("second test account"))).toBe(true);
+			expect(stages.some((s) => s.includes("temporary second account"))).toBe(
+				true,
+			);
+			// A custom WASM token needs no trustline, so the page adds none.
+			expect(stages.some((s) => s.includes("trustline"))).toBe(false);
 			expect(
 				outcome.results
 					// "are the same address" is the refusal to measure; the
