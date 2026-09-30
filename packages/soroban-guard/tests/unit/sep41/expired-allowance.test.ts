@@ -85,6 +85,10 @@ describe("expiredAllowanceCheck", () => {
 		expect(result.status).toBe("PASS");
 		expect(result.actual).toContain("expired at ledger 102");
 		expect(result.actual).toContain("refused");
+		// The evidence names the grant that was confirmed before the wait:
+		// without it, the post-wait allowance alone cannot tell an expired
+		// grant from one that never landed.
+		expect(result.evidence.before?.granted).toBe("1");
 	});
 
 	// The false PASS this check is most exposed to. A contract that accepts
