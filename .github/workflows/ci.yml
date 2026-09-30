@@ -70,7 +70,7 @@ jobs:
           npx --no-install soroban-guard || status=$?
           test "$status" -eq 2
 
-  # Mastra's changed-test gate, scaled down: an outside contributor's PR
+  # Changed-test gate: an outside contributor's PR
   # that changes package sources must change tests too. Maintainers are
   # trusted to judge the exceptions (a comment-only edit, a rename); the
   # rule in CONTRIBUTING applies to them all the same.
