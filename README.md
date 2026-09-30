@@ -16,6 +16,7 @@ or watch the walkthrough — the CLI and the web checker, start to finish:
 - [Status](#status)
 - [Install](#install)
 - [Usage](#usage)
+  - [Example reports](#example-reports)
   - [Checking writes](#checking-writes)
   - [Exit codes](#exit-codes)
 - [Web UI](#web-ui)
@@ -128,10 +129,16 @@ soroban-guard <contract-id> --format json > report.json   # CI, web UI
 soroban-guard <contract-id> --format md > CHECKS.md       # review, diffing
 ```
 
+### Example reports
+
 Two real CHECKS.md files, as the tool wrote them against testnet: a
 [conformant token](docs/examples/CHECKS-conformant.md) (16/16, exit 0) and
 [the vulnerable fixture](docs/examples/CHECKS-vulnerable.md) (9 pass,
 2 violations, 5 unverifiable once its accounting went negative; exit 1).
+
+To get one for your own token without installing anything, run it at
+[sorobanguard.com/run](https://sorobanguard.com/run) and use
+**Copy CHECKS.md** when it finishes.
 
 ### Checking writes
 
@@ -272,6 +279,9 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for the development workflow.
 
 ## Web UI
 
+▶ **[Watch the walkthrough](https://youtu.be/3O7mqaajuCk)** — the CLI and
+this browser checker, from pasting a contract to reading the report.
+
 [**sorobanguard.com/run**](https://sorobanguard.com/run) runs
 the same sixteen checks in the browser, signed by your own Freighter wallet
 on testnet. Paste a contract ID, approve each write as Freighter proposes
@@ -290,7 +300,8 @@ unauthorized and expired `transfer_from` cases). Its key lives only in
 that browser tab. When the run ends the page tries to send whatever it
 received back to your wallet, and says whether that worked — a token that
 refuses the transfer, as the vulnerable fixture can, leaves those few
-units in the temporary account.
+units in the temporary account. On native XLM nothing is sent back: what
+the temporary account holds is Friendbot's funding, not yours.
 
 **No token of your own?** The page offers a demo token: a copy of
 `fixtures/vulnerable-token` with a faucet that gives any wallet the five

@@ -4,7 +4,7 @@
 | --- | --- |
 | Contract | `CBDMISFO47JSINAYSIPLDLJ6RZMP2L3MVLQPBSJ6YQO64V4XERIZZR54` |
 | Network | `https://soroban-testnet.stellar.org` |
-| Run at | 2026-09-30T15:18:54.803Z |
+| Run at | 2026-09-30T20:21:58.864Z |
 | Checks | 16 |
 
 **Violation found — 2 violated of 16 checks. Exit code 1.**
@@ -29,19 +29,19 @@
 
 - expected: u32 decimal precision
 - observed: returned 7
-- ledger: 4951589
+- ledger: 4955226
 
 ### `sep41-name`
 
 - expected: string token name
 - observed: name is "Vulnerable Demo Token"
-- ledger: 4951590
+- ledger: 4955226
 
 ### `sep41-symbol`
 
 - expected: string token symbol
 - observed: symbol is "VULN"
-- ledger: 4951590
+- ledger: 4955226
 
 ## Layer: behavior (6/13 pass)
 
@@ -65,19 +65,19 @@
 
 - expected: non-negative balance for the holder
 - observed: balance is 5
-- ledger: 4951590
+- ledger: 4955226
 
 ### `sep41-allowance`
 
 - expected: non-negative allowance from owner to spender
 - observed: allowance is 0
-- ledger: 4951590
+- ledger: 4955226
 
 ### `sep41-transfer_from-unauthorized`
 
 - expected: transfer_from refuses a spender with no allowance from the holder
 - observed: an unauthorized spend was refused
-- error: `Transaction simulation failed: "HostError: Error(Contract, #2)  Event log (newest first):    0: [Diagnostic Event] contract:CBDMISFO47JSINAYSIPLDLJ6RZMP2L3MVLQPBSJ6YQO64V4XERIZZR54, topics:[error, Error(Contract, #2)], data:"escalating Ok(ScErrorType::Contract) frame-exit to Err"    1: [Diagnostic Event] topics:[fn_call, CBDMISFO47JSINAYSIPLDLJ6RZMP2L3MVLQPBSJ6YQO64V4XERIZZR54, transfer_from], data:[GDMXSZOD6UCHWY63QVTMCOC3CZEN5QMU3ACKDO5JQYNBGZO3WZX65ALA, GB4AXMGJXIAO4MO4FISYVPDRJFXBUL6R7YOL7XMK4HTYGG24CVQXUWPX, GDMXSZOD6UCHWY63QVTMCOC3CZEN5QMU3ACKDO5JQYNBGZO3WZX65ALA, 1] "`
+- error: `Transaction simulation failed: "HostError: Error(Contract, #2)  Event log (newest first):    0: [Diagnostic Event] contract:CBDMISFO47JSINAYSIPLDLJ6RZMP2L3MVLQPBSJ6YQO64V4XERIZZR54, topics:[error, Error(Contract, #2)], data:"escalating Ok(ScErrorType::Contract) frame-exit to Err"    1: [Diagnostic Event] topics:[fn_call, CBDMISFO47JSINAYSIPLDLJ6RZMP2L3MVLQPBSJ6YQO64V4XERIZZR54, transfer_from], data:[GARI7R26ACUZYA6PSAOWUASL5OG6W6F5WVJ4PVQIBWIHAFFGXBOMEIUK, GBDIMO7W6KWXTKHEMKGLRNAYT5QNZ2QM2UMIXPNSG2QDFUTOEHGJWPU4, GARI7R26ACUZYA6PSAOWUASL5OG6W6F5WVJ4PVQIBWIHAFFGXBOMEIUK, 1] "`
 
 ### `sep41-transfer-zero-amount`
 
@@ -85,8 +85,8 @@
 - observed: the call was accepted and both balances held, at 5 and 0
 - before: `{"holder":"5","recipient":"0"}`
 - after: `{"holder":"5","recipient":"0"}`
-- tx: `7b3a0f957ac422976e358516f236279a83966c8a6b41277b4884f40963757a42`
-- ledger: 4951592
+- tx: `21c432328bd0b2600479793ceb64f38e61d4d8cb7d333dafeccc91b99c7cd5e6`
+- ledger: 4955228
 
 ### `sep41-transfer-self`
 
@@ -94,8 +94,8 @@
 - observed: the holder's balance moved from 5 to 6; debiting and crediting the same address must net zero, so a change means one side was applied without the other
 - before: `{"holder":"5"}`
 - after: `{"holder":"6"}`
-- tx: `ad307291ebd3c7aa6731a065751720b867de99014548c4454ca0a208c426e659`
-- ledger: 4951594
+- tx: `8d2f078f25b052c94da826f009d08e64da4c8c95a79758fe870eef804e80364b`
+- ledger: 4955229
 
 ### `sep41-transfer-negative-amount`
 
@@ -103,8 +103,8 @@
 - observed: a transfer of -1 succeeded; the holder gained, consistent with the contract reading it as a transfer in the opposite direction — anyone can withdraw from anyone
 - before: `{"holder":"6","recipient":"0"}`
 - after: `{"holder":"7","recipient":"unreadable (balance() returned -1, which is negative)"}`
-- tx: `7890155908bcbc06191673fa09fd876f73364676a6d1fe69f7c8f96f99b8eab5`
-- ledger: 4951595
+- tx: `1b5ddf1971346d80dc3ca0cccef864fa8c28bcd347e751e30c7617972bbc7e89`
+- ledger: 4955230
 
 ### `sep41-transfer-over-balance`
 
@@ -122,8 +122,8 @@
 - observed: allowance is 2 after approving 2 over 1
 - before: `{"allowance":"0"}`
 - after: `{"allowance":"2"}`
-- tx: `d3365997bb2ae6630100cbf663a3082d13d9f7a8847120bab71b74d80795d7b3`
-- ledger: 4951597
+- tx: `baedc3735571eb2d138670ee10876fa858dbcf0704505ecb9ba451277fa4fdb6`
+- ledger: 4955231
 
 ### `sep41-transfer_from`
 
@@ -136,8 +136,8 @@
 - observed: holder -1
 - before: `{"holder":"7"}`
 - after: `{"holder":"6"}`
-- tx: `7a894e144d1a9a7ca3d04b372cfa216e0ca2c2fe761d18786f59ae5a028873ba`
-- ledger: 4951600
+- tx: `35fb4c5a4168c716f0dd3109d35d993289e37fce8ffa6a0744136339cf05035d`
+- ledger: 4955233
 
 ### `sep41-burn_from`
 
