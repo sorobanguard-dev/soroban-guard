@@ -1,0 +1,7 @@
+User-agent: *
+Allow: /
+
+# No Sitemap line: every page is linked from the header or footer of
+# every other, and @astrojs/sitemap is not installed. Pointing crawlers at /sitemap-index.xml returned a 404 for
+# every bot that followed it. Add the integration and the line together,
+# or neither.

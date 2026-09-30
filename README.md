@@ -262,19 +262,32 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for the development workflow.
 
 ## Web UI
 
-The same sixteen checks run in the browser: paste a contract address,
-connect Freighter (testnet), approve each write as it is proposed, and read
-the same verdicts — with per-check progress, explorer-linked transaction
-hashes, and one-click CHECKS.md / JSON export. No keys ever leave the
-wallet; no backend executes anything.
+[**soroban-guard.pages.dev/run**](https://soroban-guard.pages.dev/run) runs
+the same sixteen checks in the browser, signed by your own Freighter wallet
+on testnet. Paste a contract ID, approve each write as Freighter proposes
+it, and get the verdicts the CLI would print — with live progress,
+an explorer link for every transaction, and CHECKS.md / JSON export.
+
+There is no backend. The page talks to Soroban RPC directly and signing
+happens inside the extension, so your secret key never reaches the page.
+
+**No token of your own?** The page offers a demo token: a copy of
+`fixtures/vulnerable-token` with a faucet that gives any wallet the five
+units a full run spends. Leave the counterparty field empty and the page
+generates, funds and signs for a second account itself — its key lives
+only in that browser tab, and all it ever holds is faucet tokens — so one
+wallet runs all sixteen checks and sees the fixture's two defects.
+
+**On any other token,** a wallet signs as one party. The four checks that
+must sign as the spender — `transfer_from`, `burn_from`, and the
+unauthorized and expired `transfer_from` cases — report UNVERIFIABLE and
+name what they need, because the page will not send someone's real tokens
+to an account nobody can recover. For a complete run, use the CLI with
+both keys.
 
 ```sh
-pnpm --filter @soroban-guard/web dev   # local preview
+pnpm --filter @soroban-guard/web dev   # run the site locally
 ```
-
-Public URL follows deployment. With a single wallet, the four checks that
-must sign *as the spender* report UNVERIFIABLE and say what they need —
-the CLI with two keys remains the complete run.
 
 ## Why
 

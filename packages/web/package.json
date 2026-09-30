@@ -1,0 +1,26 @@
+{
+	"name": "@soroban-guard/web",
+	"version": "0.4.1",
+	"private": true,
+	"description": "soroban-guard website, and an in-browser runner for the SEP-41 checks signed with Freighter",
+	"license": "Apache-2.0",
+	"author": "Sergei Birtanov <arigatosf@gmail.com> (https://github.com/birserg)",
+	"type": "module",
+	"scripts": {
+		"dev": "astro dev",
+		"build": "astro build",
+		"preview": "astro preview",
+		"typecheck": "astro sync && tsc --noEmit",
+		"test": "vitest run tests"
+	},
+	"dependencies": {
+		"@stellar/freighter-api": "6.0.1",
+		"@stellar/stellar-sdk": "17.0.1",
+		"soroban-guard": "workspace:*"
+	},
+	"devDependencies": {
+		"astro": "7.3.5",
+		"typescript": "7.0.2",
+		"vitest": "5.0.0"
+	}
+}

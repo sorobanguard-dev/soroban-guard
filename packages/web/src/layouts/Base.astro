@@ -1,0 +1,152 @@
+---
+/**
+ * The page shell: metadata, structured data, tokens, global styles.
+ *
+ * Everything here is static. A crawler reading this document gets the full
+ * text of the page without executing anything, which is the whole reason
+ * the explanatory content is not inside the interactive island.
+ */
+import { NPM_URL, REPO_URL, X_HANDLE, X_URL } from "../data/links.ts";
+import "../styles/tokens.css";
+
+interface Props {
+	title: string;
+	description: string;
+}
+
+const { title, description } = Astro.props;
+const canonical = new URL(Astro.url.pathname, Astro.site);
+// Absolute, because a crawler fetching the card resolves nothing relative.
+// 1200×630 is the size both X and the Open Graph readers crop to.
+const image = new URL("/og.png", Astro.site);
+
+/**
+ * Structured data, so a search result can say what this is rather than
+ * guessing from the prose. `applicationCategory` and the free `offers` are
+ * what make it eligible for the software rich result.
+ */
+const structuredData = {
+	"@context": "https://schema.org",
+	"@type": "SoftwareApplication",
+	name: "soroban-guard",
+	applicationCategory: "DeveloperApplication",
+	operatingSystem: "Any",
+	description,
+	url: canonical.href,
+	license: "https://www.apache.org/licenses/LICENSE-2.0",
+	codeRepository: REPO_URL,
+	downloadUrl: NPM_URL,
+	// The project's other official presences, so a search result can tie
+	// them to this site rather than guess.
+	sameAs: [REPO_URL, NPM_URL, X_URL],
+	offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
+};
+---
+
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<title>{title}</title>
+		<meta name="description" content={description} />
+		<link rel="canonical" href={canonical.href} />
+
+		<meta property="og:type" content="website" />
+		<meta property="og:title" content={title} />
+		<meta property="og:description" content={description} />
+		<meta property="og:url" content={canonical.href} />
+		<meta property="og:image" content={image.href} />
+		<meta property="og:image:width" content="1200" />
+		<meta property="og:image:height" content="630" />
+		<meta
+			property="og:image:alt"
+			content="soroban-guard: test your Soroban token against SEP-41"
+		/>
+		<meta name="twitter:card" content="summary_large_image" />
+		<meta name="twitter:site" content={`@${X_HANDLE}`} />
+		<meta name="twitter:image" content={image.href} />
+		<meta name="twitter:title" content={title} />
+		<meta name="twitter:description" content={description} />
+
+		{/* Rendered from the logo artwork itself, so the tab, a phone's home
+		    screen and the page header all show the same mark. */}
+		<link rel="icon" href="/favicon-32.png" type="image/png" sizes="32x32" />
+		<link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+		<link rel="manifest" href="/site.webmanifest" />
+		<meta name="theme-color" content="#000000" />
+
+		<link rel="preconnect" href="https://fonts.googleapis.com" />
+		<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+		<link
+			rel="stylesheet"
+			href="https://fonts.googleapis.com/css2?family=Inter:wght@400;450;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap"
+		/>
+
+		<script
+			type="application/ld+json"
+			set:html={JSON.stringify(structuredData)}
+		/>
+	</head>
+	<body>
+		<div class="page">
+			<slot />
+		</div>
+	</body>
+</html>
+
+<style is:global>
+	* {
+		box-sizing: border-box;
+	}
+
+	/*
+	 * Body copy is sans, not mono. Mono appears only where the machine
+	 * speaks: the report, the command, the contract id. Setting the whole
+	 * page in mono made it read as a terminal dump rather than a product.
+	 */
+	body {
+		margin: 0;
+		background: var(--void);
+		color: var(--ink);
+		font-family: var(--sans);
+		font-size: 16px;
+		line-height: 1.6;
+		letter-spacing: -0.011em;
+		overflow-x: hidden;
+		-webkit-font-smoothing: antialiased;
+	}
+
+	.page {
+		max-width: 72rem;
+		margin: 0 auto;
+		padding-inline: var(--space-6);
+	}
+
+	a {
+		color: var(--ink);
+	}
+
+	code {
+		font-family: var(--mono);
+		font-size: 0.9em;
+	}
+
+	/* White, because white is this page's emphasis colour — a coloured ring
+	   would read as a verdict. */
+	:focus-visible {
+		outline: 2px solid var(--ink);
+		outline-offset: 3px;
+		border-radius: 2px;
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		*,
+		*::before,
+		*::after {
+			animation-duration: 0.01ms !important;
+			animation-iteration-count: 1 !important;
+			transition-duration: 0.01ms !important;
+		}
+	}
+</style>

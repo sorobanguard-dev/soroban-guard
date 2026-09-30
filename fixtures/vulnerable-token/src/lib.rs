@@ -127,6 +127,23 @@ impl VulnerableToken {
         Ok(())
     }
 
+    /// Demo build only: five units to anyone who asks.
+    ///
+    /// Exists so a visitor with nothing but a wallet can run the whole
+    /// suite against this token — without it, only the admin holds a
+    /// balance and every write reports UNVERIFIABLE for everyone else.
+    /// Deliberately separate from `mint` rather than a relaxed `mint`: the
+    /// admin path stays exactly as the tabled flaws describe, and no check
+    /// ever calls either, so the four flaws are untouched. Fixed amount, so
+    /// the faucet cannot be used to mint a balance large enough to matter.
+    #[cfg(feature = "demo-faucet")]
+    pub fn faucet(env: Env, to: Address) {
+        let current = Self::balance(env.clone(), to.clone());
+        env.storage()
+            .persistent()
+            .set(&DataKey::Balance(to), &(current + 5));
+    }
+
     // --- Reads: correct, so the interface checks pass ------------------
 
     pub fn decimals(env: Env) -> u32 {

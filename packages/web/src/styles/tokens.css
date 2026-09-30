@@ -1,0 +1,73 @@
+/*
+ * Tokens for the soroban-guard site.
+ *
+ * Single-theme by choice, not omission. The product is read beside a
+ * terminal and its report is a dark surface with coloured glyphs; a light
+ * variant would either invert that relationship or wash the verdict
+ * colours out. Every colour is declared once, and `body` paints its own
+ * background so the page never borrows a host's ground.
+ *
+ * The ground is true black rather than a tinted near-black. Raised
+ * surfaces are lifted by lightness alone, with no border and no texture —
+ * depth comes from the step between surfaces, which is why the steps are
+ * small and even.
+ *
+ * The five verdict colours are semantic: they name `CheckStatus` values
+ * the tool exports, and nothing else may use them.
+ */
+
+:root {
+	/* The page is dark-only; this tells the browser, so native scrollbars,
+	   form controls and autofill render dark instead of light. */
+	color-scheme: dark;
+
+	--void: #000000;
+	--raised: #0f0f0f;
+	--raised-2: #171717;
+	--edge: rgba(255, 255, 255, 0.08);
+
+	--ink: #ffffff;
+	--dim: #a1a1a1;
+	/* #858585, not the earlier #6b6b6b: that sat near 3.9:1 on black and
+	   3.6:1 on the raised cards, under the 4.5:1 body text needs. This
+	   clears 4.5:1 on the lightest card surface. */
+	--faint: #858585;
+
+	/*
+	 * No brand accent. White is the emphasis colour, and the only saturated
+	 * things on the page are verdicts and syntax — so a green row means a
+	 * verdict rather than decoration that happens to be green.
+	 */
+	--pass: #4ade80;
+	--fail: #f87171;
+	--unverifiable: #fbbf24;
+	--skipped: #a78bfa;
+	/*
+	 * Deliberately not `--faint`'s hex, though the two read similarly. The
+	 * verdict colours name CheckStatus values and nothing else may use
+	 * them; sharing a hex with a neutral makes that rule unenforceable by
+	 * inspection — you could no longer tell a verdict from a muted label.
+	 */
+	--not-implemented: #7c8288;
+
+	/*
+	 * One family throughout, in light-to-medium weights. The display sizes
+	 * are large but never heavy: the size carries the emphasis, and a
+	 * weight above 500 at 60px reads as shouting.
+	 */
+	--sans: Inter, -apple-system, "system-ui", "Segoe UI", Helvetica, sans-serif;
+	--mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+
+	--space-1: 4px;
+	--space-2: 8px;
+	--space-3: 12px;
+	--space-4: 16px;
+	--space-6: 24px;
+	--space-10: 40px;
+	--space-16: 64px;
+
+	/* Fully round for controls, gently round for surfaces. */
+	--radius-pill: 999px;
+	--radius-card: 16px;
+	--radius-sm: 8px;
+}

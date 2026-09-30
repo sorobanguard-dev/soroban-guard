@@ -1,0 +1,101 @@
+---
+import type { Block } from "../data/markdown.ts";
+
+/**
+ * Paragraphs and lists parsed from the repository's Markdown.
+ *
+ * `set:html` is safe here: the HTML comes from `inline()`, which escapes
+ * the source text before adding the handful of tags it emits, and the
+ * source is this repository's own files, read at build time.
+ */
+interface Props {
+	blocks: readonly Block[];
+}
+
+const { blocks } = Astro.props;
+---
+
+<div class="prose">
+	{
+		blocks.map((block) =>
+			block.kind === "p" ? (
+				<p set:html={block.html} />
+			) : (
+				<ul>
+					{block.items.map((item) => (
+						<li>
+							{item.map((paragraph) => (
+								<p set:html={paragraph} />
+							))}
+						</li>
+					))}
+				</ul>
+			),
+		)
+	}
+</div>
+
+<style>
+	.prose {
+		display: grid;
+		gap: var(--space-4);
+		color: var(--dim);
+		font-size: 15px;
+		line-height: 1.7;
+		max-width: 68ch;
+	}
+
+	.prose p,
+	.prose ul {
+		margin: 0;
+	}
+
+	.prose ul {
+		padding-left: 1.1em;
+		display: grid;
+		gap: var(--space-3);
+	}
+
+	/* A list item keeps `display: list-item` — a grid here removed the
+	   bullet — and spaces its own paragraphs with margins instead. */
+	.prose li {
+		padding-left: 0.2em;
+	}
+
+	.prose li > p + p {
+		margin-top: var(--space-2);
+	}
+
+	.prose li::marker {
+		color: var(--faint);
+	}
+
+	.prose :global(code) {
+		color: var(--ink);
+		font-size: 0.86em;
+		padding: 1px 5px;
+		border-radius: 5px;
+		background: var(--raised-2);
+		white-space: nowrap;
+	}
+
+	.prose :global(strong) {
+		color: var(--ink);
+		font-weight: 500;
+	}
+
+	.prose :global(em) {
+		color: var(--ink);
+		font-style: italic;
+	}
+
+	.prose :global(a) {
+		color: var(--ink);
+		text-underline-offset: 3px;
+		text-decoration-color: var(--edge);
+	}
+
+	.prose :global(a:hover) {
+		text-decoration-color: var(--ink);
+	}
+</style>

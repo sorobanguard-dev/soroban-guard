@@ -2,5 +2,14 @@ packages:
   - 'packages/*'
 
 # Refuse packages published in the last 24h (supply-chain hardening).
+# Build scripts are denied by default and allowed one at a time, so a
+# postinstall in a transitive dependency cannot run unreviewed.
+allowBuilds:
+  # Pulled in by Vite, which Astro builds on. Vite 8 bundles with Rolldown
+  # (a Rust port of Rollup's API — there is no `rollup` package in this
+  # tree at all), and keeps esbuild for dependency pre-bundling and
+  # transforms. Its install script selects the platform binary, so there is
+  # no way to run it without one.
+  esbuild: true
 minimumReleaseAge: 1440
 saveExact: true

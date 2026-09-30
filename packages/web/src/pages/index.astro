@@ -1,0 +1,1485 @@
+---
+import { STATUS_GLYPH } from "soroban-guard/src/core/types.ts";
+import Masthead from "../components/Masthead.astro";
+import SiteFooter from "../components/SiteFooter.astro";
+import Report from "../components/Report.astro";
+import StellarMark from "../components/StellarMark.astro";
+import {
+	RECORDED_CONTRACT,
+	RECORDED_EXIT,
+	RECORDED_RUN,
+} from "../data/recorded-run.ts";
+import { displayId } from "../data/check-id.ts";
+import { NPM_URL, REPO_URL } from "../data/links.ts";
+import Base from "../layouts/Base.astro";
+
+const title = "soroban-guard — SEP-41 conformance for Soroban tokens";
+const description =
+	"A command-line conformance suite for deployed SEP-41 tokens on Stellar testnet. Writes are performed, not simulated, and a check that cannot reach an answer says so. Run it from your terminal, or try it in the browser.";
+
+/**
+ * The five verdicts, in the order a reader meets them: the two that are
+ * about the contract, then the three that are about the run.
+ */
+const VERDICTS = [
+	{
+		key: "pass",
+		status: "PASS" as const,
+		name: "Pass",
+		text: "The contract was asked, and it answered the way the standard requires.",
+	},
+	{
+		key: "fail",
+		status: "FAIL" as const,
+		name: "Fail",
+		text: "The contract did something the standard forbids. This is a finding against the token, and it sets exit 1.",
+	},
+	{
+		key: "unverifiable",
+		status: "UNVERIFIABLE" as const,
+		name: "Unverifiable",
+		text: "The run could not establish an answer — no counterparty key, an empty balance, a fee paid in the asset being measured. The contract is not implicated, and the row names what would turn it into a verdict.",
+	},
+	{
+		key: "skipped",
+		status: "SKIPPED" as const,
+		name: "Skipped",
+		text: "The check itself did not complete — an unreachable node, a malformed address, a harness fault. That is a failure of this tool, not of the contract, and the error is kept as evidence.",
+	},
+	{
+		key: "not-implemented",
+		status: "NOT_IMPLEMENTED" as const,
+		name: "Not implemented",
+		text: "The contract does not expose the function at all. Absence and defect are different answers.",
+	},
+];
+
+/**
+ * Scope, as two lists: what the tool covers, then what it does not.
+ *
+ * An earlier version listed one thing covered and three not, which read as
+ * a tool mostly defined by its gaps. Both halves are true and both belong
+ * here — the covered list says what a pass is worth, the other says where
+ * it stops. Every claim is checked against the README and the code.
+ */
+const COVERS = [
+	{
+		name: "SEP-41 token interface",
+		text: "All ten members. Five reads observed, five writes signed and submitted, and six checks that assert what a contract must refuse.",
+	},
+	{
+		name: "Both kinds of token",
+		text: "Stellar Asset Contracts, native XLM included, and custom WASM tokens. For a WASM token the contract spec is read first, so a member it does not declare reports NOT IMPLEMENTED without spending a call.",
+	},
+	{
+		name: "Reports you can use",
+		text: "A terminal report, a CHECKS.md, and JSON — with exit codes a CI pipeline can gate on: 0 conformant, 1 a finding, 2 no verdict reached.",
+	},
+];
+
+const EXCLUDES = [
+	{
+		name: "Events",
+		text: "Not observed yet. A token that moves balances correctly while emitting wrong or missing events still passes.",
+	},
+	{
+		name: "Security audit",
+		text: "A pass means the contract honours SEP-41 as this suite exercises it. It says nothing about admin mint, upgradeability or blacklists, all of which are SEP-41-conformant.",
+	},
+	{
+		name: "Other standards",
+		text: "SEP-41 only. It does not review WASM or check arbitrary Soroban contracts or any other SEP.",
+	},
+	{
+		name: "Mainnet writes",
+		text: "Reads work anywhere. The CLI signs writes on a test network only unless given an explicit flag; the browser checker is testnet-only.",
+	},
+];
+
+/**
+ * The terminal's contents, as tokens rather than markup.
+ *
+ * Built as data so each line renders as one element with no incidental
+ * whitespace inside the `pre`, and so the typing animation has lines to
+ * walk through.
+ *
+ * `kind` is the token's role: `c` a comment, `v` a variable name, `a` an
+ * argument placeholder, and undefined for plain text. It is rendered as a
+ * `tok-`-prefixed class, never bare — see the stylesheet for why.
+ */
+type Token = { text: string; kind?: "c" | "v" | "a" };
+
+const TERMINAL: readonly (readonly Token[])[] = [
+	// `npx`, not a path into a clone: the package is on npm, so this runs
+	// with nothing installed. Seven lines exactly — the card reserves that
+	// height so the typing animation never shifts the section below it.
+	[{ text: "# reads only — no install, no keys", kind: "c" }],
+	[
+		{ text: "npx soroban-guard " },
+		{ text: "<contract-id>", kind: "a" },
+	],
+	[],
+	[{ text: "# a full run: both parties sign, all sixteen answer", kind: "c" }],
+	[
+		{ text: "OWNER_SECRET", kind: "v" },
+		{ text: "=$(stellar keys secret owner) \\" },
+	],
+	[
+		{ text: "SPENDER_SECRET", kind: "v" },
+		{ text: "=$(stellar keys secret spender) \\" },
+	],
+	[
+		{ text: "  npx soroban-guard " },
+		{ text: "<contract-id>", kind: "a" },
+	],
+];
+
+/**
+ * The "run it yourself" block: two real commands against a real contract.
+ *
+ * The contract is `fixtures/vulnerable-token`, the deployment the recorded
+ * run above was taken from. The first command needs nothing and anyone can
+ * run it: only the reads can answer without a key. The second is a full
+ * run as the terminal prints it, taken on 2026-09-30 with the fixture's own
+ * two keys. A visitor cannot repeat that one here — only the fixture's
+ * admin can mint it, so nobody else holds a balance to move — which the
+ * copy says plainly; against their own token, with their own keys, it is
+ * the same command.
+ *
+ * Output is verbatim, `sep41-` ids included, since that is what the CLI
+ * prints today; the middle rows are elided and say so. Testnet is reset
+ * from time to time: after a reset the fixture must be redeployed and
+ * `RECORDED_CONTRACT` updated, or the first command stops working.
+ */
+const TRY_COMMAND = `npx soroban-guard ${RECORDED_CONTRACT}`;
+const SHORT_CONTRACT = `${RECORDED_CONTRACT.slice(0, 8)}…${RECORDED_CONTRACT.slice(-7)}`;
+
+type OutLine =
+	| { kind: "group"; text: string }
+	| { kind: "row"; glyph: "✓" | "✗"; id: string; said: string }
+	| { kind: "more"; text: string };
+
+// The CLI pads ids to the widest one in the run.
+const ID_WIDTH = "sep41-transfer_from-unauthorized".length + 2;
+
+const FULL_RUN: readonly OutLine[] = [
+	{ kind: "group", text: "interface (3/3)" },
+	{ kind: "row", glyph: "✓", id: "sep41-decimals", said: "returned 7" },
+	{ kind: "row", glyph: "✓", id: "sep41-name", said: 'name is "Vulnerable Test Token"' },
+	{ kind: "row", glyph: "✓", id: "sep41-symbol", said: 'symbol is "VULN"' },
+	{ kind: "group", text: "behavior (6/13)" },
+	{ kind: "row", glyph: "✓", id: "sep41-balance", said: "balance is 1001" },
+	{
+		kind: "row",
+		glyph: "✓",
+		id: "sep41-transfer_from-unauthorized",
+		said: "an unauthorized spend was refused",
+	},
+	{
+		kind: "row",
+		glyph: "✗",
+		id: "sep41-transfer-self",
+		said: "the holder's balance moved from 1001 to 1002; debiting and crediting the same address must net zero, so a change means one side was applied without the other",
+	},
+	{
+		kind: "row",
+		glyph: "✗",
+		id: "sep41-transfer-negative-amount",
+		said: "a transfer of -1 succeeded; the holder gained, consistent with the contract reading it as a transfer in the opposite direction — anyone can withdraw from anyone",
+	},
+	{
+		kind: "more",
+		text: "… 9 more rows: 4 held, 5 unverifiable once the accounting had gone negative",
+	},
+];
+
+/** The figures the tool's own design is built around. */
+const FACTS = [
+	{ figure: "16", label: "Checks per run" },
+	{ figure: "5", label: "Verdicts, not two" },
+	{ figure: "0", label: "Simulated writes" },
+];
+
+/**
+ * The three cards under the hero, drawn from the recorded run rather than
+ * written by hand.
+ *
+ * An earlier version used illustrative rows, and they contradicted each
+ * other and the report below them: `balance` passed and was unverifiable in
+ * the same card, `transfer_from expired` showed a pass the real run never
+ * produced. The sixteen checks split exactly into five reads, five writes
+ * and six refusals, so each card now shows its own real rows — no row
+ * appears twice, and every verdict matches the report further down.
+ */
+const byId = new Map(RECORDED_RUN.map((row) => [row.id, row]));
+const pick = (ids: readonly string[]) =>
+	ids.map((id) => {
+		const row = byId.get(id);
+		if (row === undefined) {
+			throw new Error(`sample card names a check the recorded run lacks: ${id}`);
+		}
+		return { status: row.status, id: row.id, said: row.actual };
+	});
+
+const SAMPLES = [
+	{
+		key: "reads",
+		title: "Reads",
+		explore: "Observed, not assumed",
+		rows: pick([
+			"sep41-decimals",
+			"sep41-balance",
+			"sep41-allowance",
+			"sep41-name",
+			"sep41-symbol",
+		]),
+	},
+	{
+		key: "writes",
+		title: "Writes",
+		explore: "Signed and submitted",
+		rows: pick([
+			"sep41-transfer",
+			"sep41-approve",
+			"sep41-transfer_from",
+			"sep41-burn",
+			"sep41-burn_from",
+		]),
+	},
+	{
+		key: "refusals",
+		title: "Refusals",
+		explore: "What a contract must reject",
+		rows: pick([
+			"sep41-transfer_from-unauthorized",
+			"sep41-transfer-over-balance",
+			"sep41-transfer-negative-amount",
+			"sep41-transfer-zero-amount",
+			"sep41-transfer-self",
+			"sep41-transfer_from-expired",
+		]),
+	},
+];
+---
+
+<Base title={title} description={description}>
+	<Masthead page="home" />
+
+	<main>
+		<section class="hero">
+			<a class="badge" href="/run">
+				<span class="badge-tag">New</span>
+				Try it in your browser — no install
+				<span class="badge-arrow" aria-hidden="true">↗</span>
+			</a>
+
+			{/*
+				"Built for", not "Built on": this is a command-line tool made for
+				the Stellar ecosystem, not something deployed there — "on" read as
+				a claim about where the tool runs. It names no standard: SEP-41 is
+				in the headline directly below, and repeating it here made the
+				tool read smaller than the ecosystem it serves.
+			*/}
+			<p class="built-on">
+				Built for <StellarMark height={17} />
+			</p>
+
+			{/*
+				The headline says what the tool does. The earlier "conformance
+				testing for everything it can't prove" read backwards — as if it
+				tested nothing it could prove. What sets it apart (saying so when a
+				check cannot reach an answer) is a supporting point, so it moved to
+				the lede.
+			*/}
+			<h1>
+				Test your Soroban token<br />against SEP-41.
+			</h1>
+
+			<p class="lede">
+				Sixteen checks run on-chain from your terminal. Every verdict carries
+				its evidence — and a check that cannot reach an answer says so instead
+				of guessing.
+			</p>
+
+			<div class="actions">
+				<a class="btn primary" href="#how">Get the CLI <span aria-hidden="true">›</span></a>
+				<a class="btn" href="/run">Try it in your browser</a>
+			</div>
+		</section>
+
+		<section class="samples" aria-label="What the report prints">
+			{
+				SAMPLES.map((sample, index) => (
+					<article class="sample">
+						{/*
+							The viewport is shorter than the list, and the track
+							inside it drifts upward on a loop. The rows are emitted
+							twice: the animation travels exactly one copy's height,
+							so the second copy is in the first's position when it
+							restarts and the wrap is invisible.
+						*/}
+						<div class="sample-view">
+							<div
+								class="sample-track"
+								style={`animation-duration:${18 + index * 4}s`}
+							>
+								{[0, 1].map((copy) =>
+									sample.rows.map((row) => (
+										<div
+											class="sample-row"
+											data-v={row.status}
+											aria-hidden={copy === 1 ? "true" : undefined}
+										>
+											<span class="sg" aria-hidden="true">
+												{STATUS_GLYPH[row.status]}
+											</span>
+											<span class="sid" title={row.id}>
+												{displayId(row.id).member}
+												{displayId(row.id).qualifier !== undefined && (
+													<span class="squal">{displayId(row.id).qualifier}</span>
+												)}
+											</span>
+											<span class="ssaid">{row.said}</span>
+										</div>
+									)),
+								)}
+							</div>
+						</div>
+						<footer class="sample-foot">
+							<span class="sample-title">{sample.title}</span>
+							<span class="sample-explore">{sample.explore}</span>
+						</footer>
+					</article>
+				))
+			}
+		</section>
+
+		<section class="showcase" aria-label="A recorded run">
+			<h2 class="showcase-head">A real run, printed in full</h2>
+			<p class="sub">
+				The logged run of 2026-09-27 against{" "}
+				<code>fixtures/vulnerable-token</code>, row for row — not an
+				illustration. Open any row to see the clause it asserts, and what an
+				unverifiable one would need.
+			</p>
+			<Report
+				rows={RECORDED_RUN}
+				contractId={RECORDED_CONTRACT}
+				exitCode={RECORDED_EXIT}
+			/>
+			<p class="provenance">
+				The <code>transfer-self</code> defect was not planted — the fixture was
+				written with three deliberate flaws and the tool found a fourth.
+			</p>
+		</section>
+
+		<section class="split" id="how">
+			<div class="prose">
+				<p class="eyebrow">For developers</p>
+				<h2>One command.<br />Sixteen checks.</h2>
+				<p>
+					On npm as <code>soroban-guard</code>. Run it with <code>npx</code> on
+					Node 24 — nothing to install and nothing to configure. Point it at a
+					deployed contract and it reports every clause it could exercise.
+				</p>
+				<div class="actions">
+					{/*
+						npm first: the copy above says "run it with npx", and the
+						package page is where that promise is kept — version,
+						install size, the README. The source is one click further.
+					*/}
+					<a class="btn primary" href={NPM_URL}>View on npm</a>
+					<a class="btn" href={REPO_URL}>Source on GitHub</a>
+				</div>
+				<dl class="facts">
+					{
+						FACTS.map((fact) => (
+							<div class="fact">
+								<dt>{fact.figure}</dt>
+								<dd>{fact.label}</dd>
+							</div>
+						))
+					}
+				</dl>
+			</div>
+
+			<div class="code-card">
+				<div class="code-bar">
+					<i class="dot red" aria-hidden="true"></i>
+					<i class="dot amber" aria-hidden="true"></i>
+					<i class="dot green" aria-hidden="true"></i>
+					<span class="code-label">zsh</span>
+				</div>
+				{/*
+					Rendered from `TERMINAL` with no incidental whitespace: inside
+					a `pre` every space between children is significant, and the
+					hand-written version broke lines apart at each token.
+
+					Each line ships complete and visible. The typing effect is a
+					progressive reveal layered on top by script, so a reader
+					without JavaScript gets the commands rather than an empty box.
+				*/}
+				<pre class="code-out"><code>{
+					TERMINAL.map((line, lineIndex) => (
+						<span class="code-line" data-line={lineIndex}>{
+							line.length === 0
+								? " "
+								: line.map((token) =>
+										token.kind === undefined ? (
+											token.text
+										) : (
+											<span class={`tok-${token.kind}`}>{token.text}</span>
+										),
+									)
+						}</span>
+					))
+				}</code></pre>
+				<p class="exits">
+					Exits <b>0</b> conformant · <b>1</b> a finding · <b>2</b> no verdict
+					reached — so a pipeline gates on the answer instead of parsing text.
+				</p>
+			</div>
+		</section>
+
+		<script>
+			import "../scripts/terminal-typing.ts";
+		</script>
+
+		<section class="try" id="try">
+			<div class="try-copy">
+				<h2>Run it yourself</h2>
+				<p>
+					<code>fixtures/vulnerable-token</code> is live on testnet: a SEP-41
+					token written with three deliberate flaws. Paste the command and the
+					reads answer in seconds, no keys needed.
+				</p>
+				<p>
+					The writes need an account that holds the token, so a full run takes
+					two keys. Here is one, with the fixture's own. Point the same command
+					at your token, with your keys, and you get the same report about
+					yours.
+				</p>
+				<p>
+					No keys to hand? The <a href="/run">browser checker</a> runs all
+					sixteen against a demo copy of this token: connect Freighter, take
+					five test units from its faucet, press run.
+				</p>
+			</div>
+
+			<div class="try-card">
+				<p class="try-label">Try now — no keys</p>
+				<div class="try-cmd">
+					<code id="try-command">{TRY_COMMAND}</code>
+					<button type="button" class="copy" data-copy="try-command">
+						Copy
+					</button>
+				</div>
+
+				<p class="try-label">A full run, both keys</p>
+				{/* One block per line with no whitespace between children:
+				    inside a `pre` every space is significant. */}
+				<pre class="try-out"><code><span class="try-prompt">{"$ OWNER_SECRET=$(stellar keys secret alice) \\"}</span><span class="try-prompt">{"  SPENDER_SECRET=$(stellar keys secret bob) \\"}</span><span class="try-prompt">{`  npx soroban-guard ${SHORT_CONTRACT}`}</span><span class="try-head">{`SEP-41 Conformance  ${SHORT_CONTRACT}`}</span>{
+					FULL_RUN.map((line) =>
+						line.kind === "row" ? (
+							<span class="try-line" data-g={line.glyph} style={`--id:${ID_WIDTH}ch`}><span class="tg">{line.glyph}</span><span class="tid">{line.id}</span><span class="tsaid">{line.said}</span></span>
+						) : (
+							<span class={line.kind === "group" ? "try-group" : "try-more"}>{line.text}</span>
+						),
+					)
+				}<span class="try-sum"><span class="bad">2 violations found</span>{" · 9/16 checks held"}</span></code></pre>
+				<p class="try-exit">
+					Exits <b>1</b>: a finding. The balances move by one on every run —
+					the self-transfer flaw adds a unit each time it is exercised.
+				</p>
+			</div>
+		</section>
+
+		<script>
+			import "../scripts/copy-command.ts";
+		</script>
+
+		<section class="band" id="verdicts">
+			<h2>Five verdicts, not two</h2>
+			<p class="sub">
+				Pass and fail are the only two about the contract. The other three are
+				about the run — and each names what would turn it into a verdict.
+			</p>
+			<div class="vlist">
+				{
+					VERDICTS.map((verdict) => (
+						<div class="v" data-k={verdict.key}>
+							<span class="vg" aria-hidden="true">
+								{STATUS_GLYPH[verdict.status]}
+							</span>
+							<span class="vn">{verdict.name}</span>
+							<span class="vd">{verdict.text}</span>
+						</div>
+					))
+				}
+			</div>
+		</section>
+
+		<section class="band" id="scope">
+			<h2>What it covers</h2>
+			<p class="sub">
+				Conformance, not security: a pass shows the contract honours the SEP-41
+				interface as this suite exercises it.
+			</p>
+
+			<div class="scope-cols">
+				<div>
+					<h3 class="scope-head covers">Covers</h3>
+					<ul class="scope-list">
+						{
+							COVERS.map((row) => (
+								<li class="s covers">
+									<span class="mark" aria-hidden="true">✓</span>
+									<span class="sn">{row.name}</span>
+									<span class="sd">{row.text}</span>
+								</li>
+							))
+						}
+					</ul>
+				</div>
+
+				<div>
+					<h3 class="scope-head excludes">Does not cover</h3>
+					<ul class="scope-list">
+						{
+							EXCLUDES.map((row) => (
+								<li class="s excludes">
+									<span class="mark" aria-hidden="true">–</span>
+									<span class="sn">{row.name}</span>
+									<span class="sd">{row.text}</span>
+								</li>
+							))
+						}
+					</ul>
+				</div>
+			</div>
+		</section>
+
+		<SiteFooter />
+	</main>
+</Base>
+
+<style>
+	/* ── hero ─────────────────────────────────────────────────── */
+	.hero {
+		text-align: center;
+		padding-block: 120px 64px;
+		max-width: 60rem;
+		margin-inline: auto;
+	}
+
+	/* On a phone 120px of black above the badge is most of a screen. */
+	@media (max-width: 40rem) {
+		.hero {
+			padding-block: 48px 48px;
+		}
+	}
+
+	/* The one pill above the headline: an announcement, not a label. */
+	.badge {
+		display: inline-flex;
+		align-items: center;
+		gap: 10px;
+		margin-bottom: var(--space-10);
+		padding: 7px 8px 7px 9px;
+		border-radius: var(--radius-pill);
+		background: var(--raised-2);
+		font-size: 14.5px;
+		color: var(--ink);
+		text-decoration: none;
+	}
+
+	.badge:hover {
+		background: #222222;
+	}
+
+	.badge-tag {
+		padding: 2px 9px;
+		border-radius: var(--radius-pill);
+		background: rgba(251, 191, 36, 0.14);
+		color: var(--unverifiable);
+		font-size: 13px;
+	}
+
+	.badge-arrow {
+		display: grid;
+		place-items: center;
+		width: 24px;
+		height: 24px;
+		border-radius: 50%;
+		background: rgba(255, 255, 255, 0.07);
+		font-size: 12px;
+		color: var(--dim);
+	}
+
+	/*
+	 * Attribution, not a badge: it states where the tool runs, so it is set
+	 * as quiet text rather than given a pill of its own. A second pill above
+	 * the headline would compete with the announcement.
+	 */
+	/*
+	 * Flex rather than inline flow, so the logo centres against the text's
+	 * optical middle instead of hanging off its baseline — the mark has no
+	 * baseline of its own, and matching one by eye drifts with font size.
+	 * `--dim` rather than `--faint`: beside a pure-white mark, the fainter
+	 * grey read as a different, dimmer statement.
+	 */
+	.built-on {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		gap: 12px;
+		margin: 0 0 var(--space-6);
+		font-size: 15px;
+		color: var(--dim);
+		line-height: 1;
+	}
+
+	h1 {
+		margin: 0 0 var(--space-6);
+		/* Large, but light: the size carries the emphasis. A heavy weight at
+		   this scale reads as shouting. */
+		font-size: clamp(34px, 5.2vw, 58px);
+		font-weight: 450;
+		letter-spacing: -0.032em;
+		line-height: 1.08;
+		text-wrap: balance;
+	}
+
+
+	.lede {
+		margin: 0 auto var(--space-10);
+		font-size: clamp(16px, 2vw, 20px);
+		color: var(--dim);
+		max-width: 46rem;
+		line-height: 1.5;
+	}
+
+	.actions {
+		display: flex;
+		gap: var(--space-3);
+		flex-wrap: wrap;
+	}
+
+	.hero .actions {
+		justify-content: center;
+	}
+
+	/* Fully round, two weights: filled for the primary path, raised for the
+	   secondary. No third style and no accent colour. */
+	.btn {
+		font: inherit;
+		font-size: 15px;
+		font-weight: 500;
+		padding: 12px 22px;
+		border-radius: var(--radius-pill);
+		border: 0;
+		cursor: pointer;
+		text-decoration: none;
+		white-space: nowrap;
+		background: var(--raised-2);
+		color: var(--ink);
+	}
+
+	.btn:hover {
+		background: #222222;
+	}
+
+	.btn.primary {
+		background: var(--ink);
+		color: var(--void);
+	}
+
+	.btn.primary:hover {
+		background: var(--dim);
+	}
+
+	/* ── the three sample cards ───────────────────────────────── */
+	.samples {
+		display: grid;
+		gap: var(--space-4);
+		padding-bottom: 120px;
+		grid-template-columns: minmax(0, 1fr);
+	}
+
+	@media (min-width: 56rem) {
+		.samples {
+			grid-template-columns: repeat(3, minmax(0, 1fr));
+		}
+	}
+
+	/*
+	 * Rows, then a divider, then the label — sized to that content and
+	 * nothing more. `align-content: space-between` here pushed the surplus
+	 * to the bottom of the card and left a dead band under the label; the
+	 * cards match each other by stretching in the parent grid instead.
+	 */
+	.sample {
+		background: var(--raised);
+		border-radius: var(--radius-card);
+		padding: var(--space-6) var(--space-6) 18px;
+		display: grid;
+		grid-template-rows: auto auto;
+		gap: 14px;
+	}
+
+	/*
+	 * A fixed window onto a longer list. The fade at both ends is what makes
+	 * the drift read as a report scrolling past rather than a block sliding
+	 * out of a box.
+	 */
+	/*
+	 * Height is derived from the row rhythm rather than picked: a round
+	 * value like 13rem lands mid-row and clips a line in half at the
+	 * bottom edge. Four rows plus their gaps is a whole number of lines.
+	 */
+	.sample-view {
+		--row-h: 36px;
+		--row-gap: 10px;
+		height: calc(var(--row-h) * 4 + var(--row-gap) * 3);
+		overflow: hidden;
+		mask-image: linear-gradient(
+			to bottom,
+			transparent,
+			#000 26px,
+			#000 calc(100% - 26px),
+			transparent
+		);
+	}
+
+	.sample-track {
+		display: grid;
+		/* Must match `--row-gap` above, or the window stops landing on a
+		   row boundary and the bottom line clips again. */
+		gap: var(--row-gap, 10px);
+		font-family: var(--mono);
+		font-size: 12px;
+		line-height: 1.5;
+		/* Duration is set per card so the three do not march in lockstep. */
+		animation-name: sample-drift;
+		animation-timing-function: linear;
+		animation-iteration-count: infinite;
+	}
+
+	/*
+	 * Exactly half the track: the rows are rendered twice, so at -50% the
+	 * second copy occupies the first copy's starting position and the reset
+	 * to 0 is invisible. A pixel value here would need the row height
+	 * hard-coded and would break the moment a line wrapped.
+	 */
+	@keyframes sample-drift {
+		to {
+			transform: translateY(-50%);
+		}
+	}
+
+	/* Hovering a card holds the rows still so one can actually be read. */
+	.sample:hover .sample-track,
+	.sample:focus-within .sample-track {
+		animation-play-state: paused;
+	}
+
+	/*
+	 * The global reduced-motion rule collapses every animation to 0.01ms
+	 * with one iteration, which for this loop would snap the track to -50%
+	 * and leave the duplicate copy showing. Removing the animation outright
+	 * is the correct stop: the rows sit where they were authored.
+	 */
+	@media (prefers-reduced-motion: reduce) {
+		.sample-track {
+			animation: none !important;
+			transform: none;
+		}
+	}
+
+	/*
+	 * A fixed row height, so the window's `calc` describes something true.
+	 * The two lines inside are set to fill it exactly: an `id` line and a
+	 * wrapped description would otherwise make rows of differing heights
+	 * and the loop would no longer travel a whole number of them.
+	 */
+	.sample-row {
+		display: grid;
+		grid-template-columns: 0.9rem minmax(0, 1fr);
+		gap: 2px 8px;
+		align-content: center;
+		height: var(--row-h, 36px);
+		overflow: hidden;
+	}
+
+	.sg {
+		font-weight: 700;
+	}
+
+	.sample-row[data-v="PASS"] .sg {
+		color: var(--pass);
+	}
+	.sample-row[data-v="FAIL"] .sg {
+		color: var(--fail);
+	}
+	.sample-row[data-v="UNVERIFIABLE"] .sg {
+		color: var(--unverifiable);
+	}
+
+	.sid {
+		color: var(--ink);
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+
+	/* The case, dimmed beside its member — same treatment as the report. */
+	.squal {
+		margin-left: 0.55em;
+		color: var(--dim);
+	}
+
+	/* One line, clipped with an ellipsis: a wrap would push the row past
+	   its fixed height and break the loop's row arithmetic. */
+	.ssaid {
+		grid-column: 2;
+		color: var(--faint);
+		font-family: var(--sans);
+		font-size: 12.5px;
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+
+	/* The rule is drawn here rather than left to the mask's lower fade, so
+	   the label reads as a caption under the rows rather than as another
+	   row that happens to be fading. */
+	.sample-foot {
+		display: flex;
+		align-items: baseline;
+		justify-content: space-between;
+		gap: var(--space-4);
+		padding-top: 14px;
+		border-top: 1px solid var(--edge);
+	}
+
+	.sample-title {
+		font-size: 16px;
+		font-weight: 500;
+	}
+
+	.sample-explore {
+		font-size: 13px;
+		color: var(--faint);
+	}
+
+	/* ── the recorded run ─────────────────────────────────────── */
+	.showcase {
+		padding-bottom: 120px;
+	}
+
+	.showcase-head {
+		margin: 0 0 var(--space-4);
+		font-size: clamp(30px, 4vw, 44px);
+		font-weight: 450;
+		letter-spacing: -0.03em;
+		line-height: 1.1;
+	}
+
+	.provenance {
+		margin: var(--space-4) 0 0;
+		color: var(--faint);
+		font-size: 13.5px;
+		line-height: 1.6;
+		max-width: 72ch;
+	}
+
+	.provenance code {
+		color: var(--dim);
+	}
+
+	/* ── the CLI block ────────────────────────────────────────── */
+	.split {
+		display: grid;
+		gap: var(--space-10);
+		padding-bottom: 96px;
+		align-items: center;
+	}
+
+	@media (min-width: 58rem) {
+		.split {
+			/* The card is the wider half: the command is the thing being
+			   shown, and the copy only introduces it. */
+			grid-template-columns: minmax(0, 0.72fr) minmax(0, 1fr);
+			gap: var(--space-16);
+		}
+	}
+
+	h2 {
+		margin: 0 0 var(--space-4);
+		font-size: clamp(30px, 4vw, 44px);
+		font-weight: 450;
+		letter-spacing: -0.03em;
+		line-height: 1.1;
+	}
+
+	.prose > p:not(.eyebrow) {
+		margin: 0 0 var(--space-6);
+		color: var(--dim);
+		font-size: 16px;
+		line-height: 1.6;
+		max-width: 38rem;
+	}
+
+	/* Figures under the copy, the way a spec sheet sits under a claim. */
+	/* Three fixed columns rather than a wrapping flex row: wrapping left
+	   the third figure alone on a second line at phone width. */
+	.facts {
+		display: grid;
+		grid-template-columns: repeat(3, max-content);
+		gap: var(--space-6) var(--space-10);
+		margin: var(--space-10) 0 0;
+	}
+
+	@media (max-width: 30rem) {
+		.facts {
+			grid-template-columns: repeat(3, minmax(0, 1fr));
+			gap: var(--space-4);
+		}
+	}
+
+	.fact dt {
+		font-size: 26px;
+		font-weight: 450;
+		letter-spacing: -0.03em;
+		font-variant-numeric: tabular-nums;
+	}
+
+	.fact dd {
+		margin: 2px 0 0;
+		font-size: 13.5px;
+		color: var(--faint);
+	}
+
+	/*
+	 * The card sits on a soft glow rather than a border: the light falls
+	 * from the top-right, which is what lifts it off a pure-black ground
+	 * without drawing an edge.
+	 */
+	.code-card {
+		position: relative;
+		background: var(--raised);
+		border-radius: var(--radius-card);
+		overflow: hidden;
+		isolation: isolate;
+	}
+
+	.code-card::before {
+		content: "";
+		position: absolute;
+		inset: -40% -30% auto -10%;
+		height: 90%;
+		z-index: -1;
+		background: radial-gradient(
+			60% 60% at 78% 8%,
+			rgba(255, 255, 255, 0.1),
+			transparent 70%
+		);
+		pointer-events: none;
+	}
+
+	.code-bar {
+		display: flex;
+		align-items: center;
+		gap: 7px;
+		padding: 14px 16px;
+	}
+
+	.code-label {
+		margin-left: auto;
+		font-family: var(--mono);
+		font-size: 12px;
+		color: var(--faint);
+	}
+
+	.dot {
+		width: 11px;
+		height: 11px;
+		border-radius: 50%;
+	}
+
+	.dot.red {
+		background: #ff5f57;
+	}
+	.dot.amber {
+		background: #febc2e;
+	}
+	.dot.green {
+		background: #28c840;
+	}
+
+	.code-card pre {
+		margin: 0;
+		padding: 0 20px 18px;
+		overflow-x: auto;
+		font-family: var(--mono);
+		font-size: 13px;
+		line-height: 1.85;
+		color: var(--ink);
+		/* Reserves the finished block's height, so revealing lines does not
+		   grow the card and shove the section below it down. */
+		min-height: calc(13px * 1.85 * 7);
+	}
+
+	/*
+	 * One line per element, so the reveal can work a line at a time. The
+	 * default state carries no `data-typed`, which is what a reader without
+	 * JavaScript sees: every line, visible.
+	 */
+	.code-line {
+		display: block;
+		white-space: pre;
+	}
+
+	.code-line[data-typed="out"] {
+		visibility: hidden;
+	}
+
+	.code-line[data-typed="in"] {
+		animation: code-line-in 0.18s ease-out;
+	}
+
+	@keyframes code-line-in {
+		from {
+			opacity: 0;
+		}
+	}
+
+	/* A block cursor after the line being written. */
+	.code-line[data-cursor="on"]::after {
+		content: "";
+		display: inline-block;
+		width: 7px;
+		height: 1em;
+		margin-left: 2px;
+		vertical-align: -0.16em;
+		background: var(--ink);
+		animation: code-blink 1.05s steps(2) infinite;
+	}
+
+	@keyframes code-blink {
+		50% {
+			opacity: 0;
+		}
+	}
+
+	/*
+	 * The script never starts under a reduced-motion preference, so no line
+	 * carries `data-typed` and the block stands complete. This only stops
+	 * the global 0.01ms collapse from turning a blinking cursor into a
+	 * strobe if one were ever left on.
+	 */
+	@media (prefers-reduced-motion: reduce) {
+		.code-line[data-cursor="on"]::after {
+			animation: none !important;
+			opacity: 1;
+		}
+	}
+
+	/*
+	 * The only saturated colour outside a verdict: syntax.
+	 *
+	 * Prefixed `tok-` because the bare names collided. A variable name was
+	 * `<span class="v">`, and `.v` is also the verdict row — `display: grid`
+	 * with card padding — so `OWNER_SECRET` rendered as a block on a line of
+	 * its own with a gap above and below. The markup text was correct; the
+	 * damage was done entirely by a stylesheet rule meant for something else.
+	 */
+	.code-card .tok-c {
+		color: var(--faint);
+	}
+	/* Not `--fail`'s red, which it used to share: verdict colours name
+	   verdicts and nothing else, and a red variable name beside a red ✗
+	   row reads as a second finding. */
+	.code-card .tok-v {
+		color: #f0abfc;
+	}
+	.code-card .tok-a {
+		color: #7dd3fc;
+	}
+
+	.exits {
+		margin: 0;
+		padding: 14px 20px 18px;
+		border-top: 1px solid var(--edge);
+		font-size: 13px;
+		color: var(--faint);
+		line-height: 1.6;
+	}
+
+	.exits b {
+		color: var(--dim);
+		font-family: var(--mono);
+		font-weight: 500;
+	}
+
+	/* ── try it ───────────────────────────────────────────────── */
+	.try {
+		display: grid;
+		gap: var(--space-10);
+		padding-bottom: 96px;
+		align-items: start;
+	}
+
+	@media (min-width: 58rem) {
+		.try {
+			grid-template-columns: minmax(0, 0.72fr) minmax(0, 1fr);
+			gap: var(--space-16);
+		}
+	}
+
+	.try-copy p {
+		margin: 0 0 var(--space-4);
+		color: var(--dim);
+		line-height: 1.6;
+		max-width: 38rem;
+	}
+
+	.try-copy a {
+		color: var(--ink);
+		text-underline-offset: 3px;
+		text-decoration-color: var(--edge);
+	}
+
+	.try-copy a:hover {
+		text-decoration-color: var(--ink);
+	}
+
+	.try-card {
+		background: var(--raised);
+		border-radius: var(--radius-card);
+		overflow: hidden;
+		min-width: 0;
+	}
+
+	.try-cmd {
+		display: flex;
+		align-items: center;
+		gap: var(--space-3);
+		padding: 12px 12px 12px 20px;
+		background: var(--raised-2);
+	}
+
+	/* The id is 56 characters; it scrolls inside its own strip rather than
+	   widening the page. */
+	.try-cmd code {
+		flex: 1;
+		min-width: 0;
+		overflow-x: auto;
+		white-space: nowrap;
+		font-size: 13px;
+		color: var(--ink);
+		scrollbar-width: none;
+		/* The fade says the id continues past the button; Copy takes all of
+		   it either way. */
+		mask-image: linear-gradient(to right, #000 calc(100% - 32px), transparent);
+	}
+
+	.copy {
+		flex: none;
+		font: inherit;
+		font-size: 13px;
+		font-weight: 500;
+		padding: 6px 14px;
+		border: 0;
+		border-radius: var(--radius-pill);
+		background: var(--ink);
+		color: var(--void);
+		cursor: pointer;
+	}
+
+	.copy:hover {
+		background: var(--dim);
+	}
+
+	.try-out {
+		margin: 0;
+		padding: 18px 20px;
+		overflow-x: auto;
+		font-family: var(--mono);
+		font-size: 12.5px;
+		line-height: 1.8;
+		color: var(--dim);
+	}
+
+	.try-label {
+		margin: 0;
+		padding: 14px 20px 8px;
+		font-size: 12.5px;
+		color: var(--faint);
+	}
+
+	.try-label + .try-cmd {
+		margin-inline: 12px;
+		border-radius: var(--radius-sm);
+	}
+
+	.try-cmd + .try-label {
+		margin-top: var(--space-2);
+		border-top: 1px solid var(--edge);
+		padding-top: 16px;
+	}
+
+	.try-out {
+		padding-top: 4px;
+	}
+
+	/*
+	 * One block per line, laid out as the terminal lays it out: groups at
+	 * two spaces, rows at four, a long diagnostic wrapping under its own
+	 * column rather than under the id. On a phone that column would leave
+	 * a few characters per line, so there the block scrolls sideways
+	 * instead, as a terminal narrower than its report would.
+	 */
+	.try-prompt,
+	.try-head,
+	.try-group,
+	.try-line,
+	.try-more,
+	.try-sum {
+		display: block;
+		white-space: pre;
+	}
+
+	.try-prompt {
+		color: var(--ink);
+	}
+
+	.try-head {
+		margin-block: 1.2em 0.6em;
+		color: var(--ink);
+		font-weight: 500;
+	}
+
+	.try-group {
+		margin-top: 0.6em;
+		padding-left: 2ch;
+		color: var(--dim);
+	}
+
+	.try-line,
+	.try-more {
+		padding-left: 4ch;
+	}
+
+	/*
+	 * Glyph, id and message in three columns, the CLI's own layout. A grid
+	 * rather than padded text with a hanging indent: ✓ and ✗ come from a
+	 * fallback face wider than one column, and the indent arithmetic left
+	 * every wrapped line one character out of line with the first.
+	 */
+	.try-line {
+		display: grid;
+		grid-template-columns: 2ch var(--id, 36ch) max-content;
+	}
+
+	@media (min-width: 58rem) {
+		.try-line {
+			grid-template-columns: 2ch var(--id, 36ch) minmax(0, 1fr);
+		}
+
+		.try-line .tsaid {
+			white-space: pre-wrap;
+		}
+	}
+
+	.try-line .tid {
+		color: var(--ink);
+	}
+
+	.try-line[data-g="✓"] .tg {
+		color: var(--pass);
+	}
+
+	.try-line[data-g="✗"] .tg,
+	.try-sum .bad {
+		color: var(--fail);
+	}
+
+	.try-more {
+		color: var(--faint);
+	}
+
+	.try-sum {
+		margin-top: 1em;
+		padding-left: 2ch;
+		color: var(--ink);
+	}
+
+	.try-exit {
+		margin: 0;
+		padding: 14px 20px 18px;
+		border-top: 1px solid var(--edge);
+		font-size: 13px;
+		color: var(--faint);
+	}
+
+	.try-exit b {
+		color: var(--dim);
+		font-family: var(--mono);
+		font-weight: 500;
+	}
+
+	/* ── bands ────────────────────────────────────────────────── */
+	.band {
+		padding-bottom: 96px;
+	}
+
+	.sub {
+		margin: 0 0 var(--space-10);
+		color: var(--dim);
+		max-width: 52rem;
+		font-size: 16px;
+		line-height: 1.6;
+	}
+
+	.vlist {
+		display: grid;
+		gap: var(--space-2);
+	}
+
+	.v,
+	.s {
+		background: var(--raised);
+		border-radius: var(--radius-card);
+		padding: 20px var(--space-6);
+	}
+
+	.v {
+		display: grid;
+		grid-template-columns: 2rem minmax(0, 10rem) minmax(0, 1fr);
+		gap: var(--space-4);
+		align-items: baseline;
+	}
+
+	@media (max-width: 44rem) {
+		.v {
+			grid-template-columns: 1.6rem minmax(0, 1fr);
+		}
+		.v .vd {
+			grid-column: 2;
+		}
+	}
+
+	.vg {
+		font-family: var(--mono);
+		font-size: 17px;
+		font-weight: 700;
+		text-align: center;
+	}
+
+	.vn {
+		font-size: 15px;
+		font-weight: 500;
+	}
+
+	.vd {
+		font-size: 14.5px;
+		color: var(--dim);
+		line-height: 1.6;
+	}
+
+	.v[data-k="pass"] .vg {
+		color: var(--pass);
+	}
+	.v[data-k="fail"] .vg {
+		color: var(--fail);
+	}
+	.v[data-k="unverifiable"] .vg {
+		color: var(--unverifiable);
+	}
+	.v[data-k="skipped"] .vg {
+		color: var(--skipped);
+	}
+	.v[data-k="not-implemented"] .vg {
+		color: var(--not-implemented);
+	}
+
+	/* The verdict the product exists for is the one raised card. */
+	.v[data-k="unverifiable"] {
+		background: var(--raised-2);
+	}
+
+	/*
+	 * Covers and does-not-cover, side by side on wide screens and stacked
+	 * on narrow ones. Equal weight on purpose: the covered list says what a
+	 * pass is worth, the other says where it stops, and neither should read
+	 * as the footnote to the other.
+	 */
+	.scope-cols {
+		display: grid;
+		gap: var(--space-10);
+	}
+
+	@media (min-width: 56rem) {
+		.scope-cols {
+			grid-template-columns: repeat(2, minmax(0, 1fr));
+			gap: var(--space-6);
+		}
+	}
+
+	.scope-head {
+		margin: 0 0 var(--space-3);
+		font-size: 14px;
+		font-weight: 500;
+	}
+
+	.scope-head.covers {
+		color: var(--pass);
+	}
+
+	.scope-head.excludes {
+		color: var(--dim);
+	}
+
+	.scope-list {
+		list-style: none;
+		margin: 0;
+		padding: 0;
+		display: grid;
+		gap: var(--space-2);
+	}
+
+	.s {
+		display: grid;
+		grid-template-columns: 1.2rem minmax(0, 1fr);
+		gap: 4px var(--space-3);
+		align-items: baseline;
+	}
+
+	.s .mark {
+		grid-row: span 2;
+		font-family: var(--mono);
+		font-weight: 700;
+		text-align: center;
+	}
+
+	.s.covers .mark {
+		color: var(--pass);
+	}
+
+	.s.excludes .mark {
+		color: var(--faint);
+	}
+
+	.sn {
+		font-size: 15px;
+		font-weight: 500;
+	}
+
+	.sd {
+		color: var(--dim);
+		font-size: 14px;
+		line-height: 1.6;
+	}
+
+</style>

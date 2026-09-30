@@ -1,0 +1,391 @@
+---
+import Checker from "../components/Checker.astro";
+import Masthead from "../components/Masthead.astro";
+import SiteFooter from "../components/SiteFooter.astro";
+import Base from "../layouts/Base.astro";
+
+/**
+ * The browser checker, on its own route.
+ *
+ * Split out of the home page for two reasons. It is a tool rather than a
+ * pitch — someone arriving to check a contract wants the form, not four
+ * sections of argument above it — and it is the only part of the site that
+ * needs the 674 kB Stellar SDK, which now cannot reach a visitor who never
+ * asked for it.
+ */
+
+const title = "Run SEP-41 checks in your browser — soroban-guard";
+const description =
+	"Paste a deployed SEP-41 contract and run the same sixteen conformance checks the CLI runs, signed by your own Freighter wallet. Testnet only.";
+
+/**
+ * What a run actually involves, in order.
+ *
+ * A numbered sequence is the right structure here because it *is* one: each
+ * step depends on the one before it, and the third is where a visitor
+ * meets something they have to decide about rather than just read.
+ */
+const STEPS = [
+	{
+		title: "Connect a wallet",
+		body: "Freighter signs every write. Your secret key stays in the extension — this page never sees it, and never asks for it.",
+	},
+	{
+		title: "Name a contract",
+		body: "Any deployed SEP-41 token on testnet — or the demo token, whose faucet gives any wallet the five units a full run spends, and for which the page creates the second account itself.",
+	},
+	{
+		title: "Approve each write",
+		body: "Five members are read, eleven are exercised. Each write is a real transaction you approve in Freighter, and burn and burn_from each destroy one unit for good.",
+	},
+	{
+		title: "Read the verdicts",
+		body: "Sixteen rows, each with the clause it asserts and the numbers behind it. Copy the whole thing as CHECKS.md or JSON.",
+	},
+];
+---
+
+<Base title={title} description={description}>
+	<Masthead page="run" />
+
+	<main>
+		<section class="opening">
+			<h1>Paste a contract,<br />run sixteen checks</h1>
+
+			<div class="opening-aside">
+				<p>
+					The same suite the CLI runs, signed by your own wallet. There is
+					no soroban-guard server: this page talks to Soroban RPC directly,
+					and your secret key never leaves the extension.
+				</p>
+				<a class="more" href="#run">
+					Start a run <span aria-hidden="true">→</span>
+				</a>
+			</div>
+		</section>
+
+		<section class="how">
+			<h2>How a run works</h2>
+
+			{/*
+				An ordered list, because the steps are genuinely ordered — each
+				one depends on the last. The rail and its dots are decoration
+				over that list, not a substitute for it, so the sequence still
+				reads as a sequence with styles off.
+			*/}
+			<ol class="steps">
+				{
+					STEPS.map((step, index) => (
+						<li class="step" style={`--i: ${index}`}>
+							<span class="dot" aria-hidden="true"></span>
+							<h3>{step.title}</h3>
+							<p>{step.body}</p>
+						</li>
+					))
+				}
+			</ol>
+		</section>
+
+		<Checker />
+
+		<section class="fallback">
+			<h2>Or run it from a terminal</h2>
+			<p>
+				For your own token, the command line takes both keys at once, so the
+				checks that must sign as the spender get a verdict there too — and it
+				drops into a CI pipeline with an exit code to gate on.
+			</p>
+			<p>
+				<a class="link" href="/#how">See the CLI</a>
+			</p>
+		</section>
+
+		<script>
+			import "../scripts/steps-rail.ts";
+		</script>
+
+		<SiteFooter />
+	</main>
+</Base>
+
+<style>
+	/*
+	 * Headline and prose on one baseline, with the gap between them left
+	 * empty. The space is the point: it separates the claim from its
+	 * explanation without a rule or a card doing the work.
+	 */
+	.opening {
+		display: grid;
+		gap: var(--space-6);
+		padding-block: 104px 72px;
+		align-items: start;
+	}
+
+	@media (min-width: 62rem) {
+		.opening {
+			grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+			gap: var(--space-16);
+		}
+	}
+
+	h1 {
+		margin: 0;
+		font-size: clamp(34px, 4.6vw, 52px);
+		font-weight: 450;
+		letter-spacing: -0.034em;
+		line-height: 1.06;
+		max-width: 12ch;
+	}
+
+	.opening-aside {
+		display: grid;
+		gap: var(--space-6);
+		justify-items: start;
+		max-width: 34rem;
+	}
+
+	.opening-aside p {
+		margin: 0;
+		font-size: clamp(17px, 1.8vw, 21px);
+		color: var(--dim);
+		line-height: 1.45;
+		letter-spacing: -0.014em;
+	}
+
+	/* A link, not a button: the page's own control is the form below, and a
+	   second pill here would compete with it. */
+	.more {
+		display: inline-flex;
+		align-items: center;
+		gap: 8px;
+		color: var(--dim);
+		text-decoration: none;
+		font-size: 16px;
+	}
+
+	.more:hover {
+		color: var(--ink);
+	}
+
+	.more span {
+		transition: transform 0.15s ease;
+	}
+
+	.more:hover span {
+		transform: translateX(3px);
+	}
+
+	/* ── how a run works ──────────────────────────────────────── */
+	.how {
+		padding-bottom: 96px;
+	}
+
+	.how h2 {
+		margin: 0 0 var(--space-10);
+		font-size: clamp(28px, 3.4vw, 40px);
+		font-weight: 450;
+		letter-spacing: -0.03em;
+	}
+
+	.steps {
+		list-style: none;
+		margin: 0;
+		padding: 0;
+		display: grid;
+		gap: var(--space-10) var(--space-6);
+		grid-template-columns: minmax(0, 1fr);
+		position: relative;
+	}
+
+	@media (min-width: 52rem) {
+		.steps {
+			grid-template-columns: repeat(4, minmax(0, 1fr));
+			gap: 0 var(--space-6);
+		}
+
+		/*
+		 * The rail is one line behind all four steps, drawn with a scaled
+		 * pseudo-element rather than an animated `width` — transform is
+		 * composited, width is not, and this runs while the page scrolls.
+		 */
+		.steps::before {
+			content: "";
+			position: absolute;
+			top: 5px;
+			left: 0;
+			right: 0;
+			height: 1px;
+			background: var(--edge);
+			transform-origin: left;
+		}
+
+		/*
+		 * Drawn is the default. The animation is attached only once the
+		 * script has marked the list (`data-seen="no"`), which rewinds it to
+		 * its first frame; it plays when the list scrolls into view. Where
+		 * the script never runs — blocked, failed, a crawler — nothing is
+		 * rewound, so the rail and every step stay visible. An earlier
+		 * version started hidden and relied on the script to reveal it.
+		 */
+		.steps[data-seen]::before {
+			animation: rail-draw 1.6s cubic-bezier(0.32, 0.72, 0.3, 1) both;
+			animation-play-state: paused;
+		}
+
+		.steps[data-seen="yes"]::before {
+			animation-play-state: running;
+		}
+	}
+
+	@keyframes rail-draw {
+		from {
+			transform: scaleX(0);
+		}
+		to {
+			transform: scaleX(1);
+		}
+	}
+
+	.step {
+		position: relative;
+		padding-top: var(--space-6);
+	}
+
+	@media (min-width: 52rem) {
+		.step {
+			padding-top: 32px;
+			padding-right: var(--space-6);
+		}
+	}
+
+	/*
+	 * Each dot lights as the rail reaches it. The delay is derived from the
+	 * step's index against the rail's own duration, so adding a fifth step
+	 * needs no new timing.
+	 */
+	.dot {
+		position: absolute;
+		top: 0;
+		left: 0;
+		width: 11px;
+		height: 11px;
+		border-radius: 50%;
+		background: var(--ink);
+		box-shadow: 0 0 0 4px var(--void);
+	}
+
+	/* Lit by default, like the rail; the landing animation only runs once
+	   the script has rewound it. */
+	@media (min-width: 52rem) {
+		.steps[data-seen] .dot {
+			animation: dot-land 0.4s cubic-bezier(0.2, 1.4, 0.4, 1) both;
+			animation-delay: calc(var(--i) * 0.36s + 0.15s);
+			animation-play-state: paused;
+		}
+
+		.steps[data-seen="yes"] .dot {
+			animation-play-state: running;
+		}
+	}
+
+	@keyframes dot-land {
+		from {
+			transform: scale(0.7);
+			background: var(--raised-2);
+		}
+		to {
+			transform: scale(1);
+			background: var(--ink);
+		}
+	}
+
+	/* The first dot stays amber: it is the step a visitor is actually on
+	   when they arrive, and the colour is the page's own "attend to this". */
+	.step:first-child .dot {
+		background: var(--unverifiable);
+	}
+
+	@media (min-width: 52rem) {
+		.steps[data-seen] .step:first-child .dot {
+			animation-name: dot-land-first;
+		}
+	}
+
+	@keyframes dot-land-first {
+		from {
+			transform: scale(0.7);
+			background: var(--raised-2);
+		}
+		to {
+			transform: scale(1);
+			background: var(--unverifiable);
+		}
+	}
+
+	.step h3 {
+		margin: 0 0 var(--space-2);
+		font-size: 16px;
+		font-weight: 500;
+		letter-spacing: -0.012em;
+	}
+
+	.step p {
+		margin: 0;
+		font-size: 14.5px;
+		color: var(--dim);
+		line-height: 1.6;
+	}
+
+	/*
+	 * With motion reduced the rail and dots stand drawn rather than
+	 * animating in — the global rule would otherwise collapse them to a
+	 * 0.01ms flash of their end state.
+	 */
+	@media (prefers-reduced-motion: reduce) {
+		.steps::before {
+			animation: none !important;
+			transform: scaleX(1);
+		}
+
+		.dot {
+			animation: none !important;
+			transform: scale(1);
+			background: var(--ink);
+		}
+
+		.step:first-child .dot {
+			background: var(--unverifiable);
+		}
+	}
+
+	.fallback {
+		padding-block: var(--space-10) 72px;
+		max-width: 46rem;
+	}
+
+	.fallback h2 {
+		margin: 0 0 var(--space-3);
+		font-size: 22px;
+		font-weight: 450;
+		letter-spacing: -0.02em;
+	}
+
+	.fallback p {
+		margin: 0 0 var(--space-4);
+		color: var(--dim);
+		font-size: 15px;
+		line-height: 1.6;
+	}
+
+	.link {
+		color: var(--ink);
+		text-decoration: underline;
+		text-underline-offset: 4px;
+		text-decoration-color: var(--edge);
+	}
+
+	.link:hover {
+		text-decoration-color: var(--ink);
+	}
+
+</style>

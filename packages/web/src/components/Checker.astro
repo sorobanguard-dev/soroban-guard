@@ -1,0 +1,436 @@
+---
+import { DEMO_FAUCET_UNITS } from "../data/demo.ts";
+// The live result rows share their rules with the recorded report.
+import "../styles/report.css";
+
+/**
+ * The interactive island.
+ *
+ * Its markup is server-rendered like everything else, so the form and the
+ * warning are readable before any script runs. The script import below is
+ * what pulls in the Stellar SDK, and it is the only part of the page that
+ * does — a visitor who never scrolls this far never pays for it.
+ *
+ * The element ids are a contract with `scripts/checker.ts`, which looks
+ * each one up by name and throws at startup if it is missing. `run-button`
+ * rather than `run`, because the section owns `#run` as a scroll anchor and
+ * a lookup of `run` would find the section, cast it to a button, and leave
+ * the control permanently disabled without ever failing.
+ */
+---
+
+<section class="checker" id="run">
+	{/*
+		No heading of its own: this now sits on /run, whose h1 introduces it.
+		A second "Run it on your token" under that would say the same thing
+		twice and put an h2 where the page needs none.
+	*/}
+
+	{/*
+		One card, so the form reads as a single object rather than a column
+		of loose parts on a black ground. The warning sits inside it as a
+		labelled panel: it belongs to this form, and floating it above with
+		only a left rule made it look like a separate section.
+	*/}
+	<form id="run-form" class="panel" novalidate>
+		<div class="warn" role="note">
+			<h3>Before you run this</h3>
+			<ul>
+				<li>
+					<strong>It signs real transactions.</strong> Each write is one
+					approval prompt in Freighter, and <code>burn</code> and{" "}
+					<code>burn_from</code> destroy a unit for good.
+				</li>
+				<li>
+					<strong>Your wallet needs testnet XLM and a balance of the token.</strong>{" "}
+					A classic Stellar asset also needs a trustline. On the demo token,
+					the faucet button supplies the balance. A row of{" "}
+					<code>UNVERIFIABLE</code> usually means an unfunded wallet rather
+					than a faulty contract.
+				</li>
+			</ul>
+		</div>
+
+		<div class="fields">
+			<div class="field">
+				<label for="contract">Contract ID</label>
+				<input
+					id="contract"
+					name="contract"
+					type="text"
+					spellcheck="false"
+					autocomplete="off"
+					placeholder="C…"
+					aria-describedby="contract-hint"
+					required
+				/>
+				<p id="contract-hint" class="hint">
+					56 characters, starting with <code>C</code>. No token of your own?{" "}
+					<button type="button" id="use-demo" class="inline-action">
+						Use the demo token
+					</button>{" "}
+					— the vulnerable fixture, with a faucet so any wallet can run all
+					sixteen.
+				</p>
+			</div>
+
+			<div class="field">
+				<label for="spender">
+					Counterparty address <span class="opt">optional</span>
+				</label>
+				<input
+					id="spender"
+					name="spender"
+					type="text"
+					spellcheck="false"
+					autocomplete="off"
+					placeholder="G…"
+					aria-describedby="spender-hint"
+				/>
+				<p id="spender-hint" class="hint">
+					A second account to receive transfers and hold allowances. Leave it
+					empty on the demo token and the page creates and funds one for the
+					run; on any other token, the checks that need a real counterparty
+					say so rather than guess.
+				</p>
+			</div>
+		</div>
+
+		<footer class="form-foot">
+			<div class="actions">
+				<button type="button" id="connect" class="btn ghost">
+					Connect Freighter
+				</button>
+				{/* Shown only for the demo token with a wallet connected. */}
+				<button type="button" id="faucet" class="btn ghost" hidden>
+					Get {DEMO_FAUCET_UNITS} test VULN
+				</button>
+				<!--
+					Ships disabled and labelled with its own precondition. The
+					checker module is loaded on first interaction, and it replaces
+					this label as soon as it runs — so the pre-hydration state has
+					to be true rather than aspirational.
+				-->
+				<button type="submit" id="run-button" class="btn" disabled>
+					Paste a contract, connect a wallet
+				</button>
+			</div>
+
+			<p id="wallet-state" class="state" role="status" aria-live="polite">
+				Not connected.
+			</p>
+		</footer>
+	</form>
+
+	<div id="report" class="live-report" hidden>
+		<p id="progress" class="state" role="status" aria-live="polite"></p>
+		<ol id="rows" class="rows"></ol>
+		<!-- The tally is the run's answer; announcing it means a screen
+		     reader hears the verdict without hunting for it. -->
+		<p id="summary" class="state" role="status" aria-live="polite"></p>
+		<div class="actions">
+			<button type="button" id="copy-md" class="btn ghost">Copy CHECKS.md</button>
+			<button type="button" id="copy-json" class="btn ghost">Copy JSON</button>
+		</div>
+	</div>
+</section>
+
+<script>
+	// The lazy loader lives in a .ts module, where Biome and tsc can see it.
+	import "../scripts/checker-loader.ts";
+</script>
+
+<style>
+	.checker {
+		padding-block: 0 60px;
+	}
+
+	/*
+	 * One card for the whole form. Everything used to float on the page's
+	 * black ground, so the warning, the fields and the results read as one
+	 * undifferentiated column with no boundary telling you where the form
+	 * began or ended.
+	 */
+	.panel {
+		display: grid;
+		gap: var(--space-6);
+		background: var(--raised);
+		border-radius: var(--radius-card);
+		padding: var(--space-6);
+	}
+
+	/*
+	 * Wide screens: fields and actions on the left, the warning beside
+	 * them. A single 48rem column left the right third of the page empty
+	 * next to a card that was itself mostly empty space. The warning stays
+	 * first in the markup, so a screen reader still hears it before the
+	 * inputs; only its position on the grid moves.
+	 */
+	@media (min-width: 60rem) {
+		.panel {
+			grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr);
+			grid-template-areas:
+				"fields warn"
+				"foot   warn";
+			column-gap: var(--space-10);
+			align-items: start;
+			padding: var(--space-10);
+		}
+
+		.fields {
+			grid-area: fields;
+		}
+
+		.warn {
+			grid-area: warn;
+		}
+
+		.form-foot {
+			grid-area: foot;
+		}
+	}
+
+	/*
+	 * The warning lives inside the card as a recessed panel, not floating
+	 * above it behind a left rule. It belongs to this form: reading it
+	 * somewhere else, with its own border, made it look like a separate
+	 * section of the page.
+	 */
+	.warn {
+		background: rgba(251, 191, 36, 0.05);
+		border: 1px solid rgba(251, 191, 36, 0.16);
+		border-radius: var(--radius-sm);
+		padding: var(--space-4) 18px;
+	}
+
+	.warn h3 {
+		margin: 0 0 10px;
+		font-size: 14px;
+		font-weight: 500;
+		color: var(--unverifiable);
+		letter-spacing: -0.008em;
+	}
+
+	/* A list, because it is two separate conditions rather than a
+	   paragraph — each one is its own thing to check. */
+	.warn ul {
+		margin: 0;
+		padding: 0;
+		list-style: none;
+		display: grid;
+		gap: 8px;
+	}
+
+	.warn li {
+		position: relative;
+		padding-left: 16px;
+		color: var(--dim);
+		font-size: 13.5px;
+		line-height: 1.6;
+	}
+
+	.warn li::before {
+		content: "";
+		position: absolute;
+		left: 0;
+		top: 0.6em;
+		width: 5px;
+		height: 5px;
+		border-radius: 50%;
+		background: rgba(251, 191, 36, 0.5);
+	}
+
+	.warn strong {
+		color: var(--ink);
+		font-weight: 500;
+	}
+
+	.warn code {
+		color: var(--unverifiable);
+	}
+
+	.fields {
+		display: grid;
+		gap: var(--space-6);
+	}
+
+	.field {
+		display: grid;
+		gap: 7px;
+	}
+
+	/*
+	 * Sentence case, not tracked-out caps. At 11px with 0.08em tracking the
+	 * labels read as decoration; a field label's job is to name the field.
+	 */
+	label {
+		font-size: 13.5px;
+		font-weight: 500;
+		color: var(--ink);
+		letter-spacing: -0.008em;
+	}
+
+	.opt {
+		font-weight: 400;
+		color: var(--faint);
+	}
+
+	/* Actions sit below a rule inside the card, so the card has a clear
+	   "this is where you act" edge rather than ending in loose buttons. */
+	.form-foot {
+		display: grid;
+		gap: var(--space-4);
+		padding-top: var(--space-6);
+		border-top: 1px solid var(--edge);
+	}
+
+	/*
+	 * A step up from the card, not down to the page's black. An input at
+	 * `--void` on a `--raised` card reads as a hole punched through it
+	 * rather than a field sitting on it.
+	 */
+	input {
+		width: 100%;
+		padding: 12px 14px;
+		font-family: var(--mono);
+		font-size: 13px;
+		color: var(--ink);
+		background: var(--raised-2);
+		border: 1px solid transparent;
+		border-radius: var(--radius-sm);
+	}
+
+	input::placeholder {
+		color: var(--faint);
+	}
+
+	input:focus {
+		outline: 0;
+		border-color: var(--ink);
+	}
+
+	input[aria-invalid="true"] {
+		border-color: var(--fail);
+	}
+
+	.hint {
+		margin: 0;
+		font-size: 12px;
+		color: var(--faint);
+	}
+
+	.actions {
+		display: flex;
+		gap: 10px;
+		flex-wrap: wrap;
+	}
+
+	.btn {
+		font: inherit;
+		font-size: 15px;
+		font-weight: 500;
+		padding: 12px 22px;
+		border: 0;
+		border-radius: var(--radius-pill);
+		cursor: pointer;
+		background: var(--ink);
+		color: var(--void);
+		white-space: nowrap;
+	}
+
+	.btn.ghost {
+		background: var(--raised-2);
+		color: var(--ink);
+	}
+
+	/* `hidden` loses to the class's own display otherwise. */
+	.btn[hidden] {
+		display: none;
+	}
+
+	/* A button that reads as a link inside a hint: it acts on the page, so
+	   it is a button, but it sits in a sentence. */
+	.inline-action {
+		font: inherit;
+		padding: 0;
+		border: 0;
+		background: none;
+		color: var(--ink);
+		text-decoration: underline;
+		text-underline-offset: 3px;
+		text-decoration-color: var(--edge);
+		cursor: pointer;
+	}
+
+	.inline-action:hover {
+		text-decoration-color: var(--ink);
+	}
+
+	.btn:hover:not(:disabled) {
+		background: var(--dim);
+	}
+
+	.btn.ghost:hover:not(:disabled) {
+		background: #222222;
+	}
+
+	/*
+	 * Stated colours, not opacity. Fading a white fill toward a black ground
+	 * lands on grey — which is this page's *raised* colour, so the disabled
+	 * primary came out lighter and more prominent than the live button next
+	 * to it. A disabled control has to recede.
+	 */
+	.btn:disabled {
+		background: #141414;
+		color: var(--faint);
+		cursor: not-allowed;
+	}
+
+	.btn.ghost:disabled {
+		background: #121212;
+		color: var(--faint);
+	}
+
+	.state {
+		margin: 0;
+		font-size: 12.5px;
+		color: var(--dim);
+		word-break: break-all;
+	}
+
+	.state[data-tone="error"] {
+		color: var(--fail);
+	}
+
+	.state[data-tone="ready"] {
+		color: var(--pass);
+	}
+
+	/*
+	 * `display: grid` on the class beats `[hidden]`'s `display: none` on
+	 * equal specificity, so without this guard the results card — copy
+	 * buttons and all — showed before a run had produced anything.
+	 */
+	.live-report[hidden] {
+		display: none;
+	}
+
+	.live-report {
+		display: grid;
+		gap: var(--space-4);
+		margin-top: var(--space-4);
+		background: var(--raised);
+		border-radius: var(--radius-card);
+		padding: var(--space-6);
+	}
+
+	/* The live rows reuse the report's global rules; this only removes the
+	   list styling the ordered list brings with it. */
+	.rows {
+		list-style: none;
+		margin: 0;
+		padding: 0;
+		background: var(--raised);
+		box-shadow: inset 0 0 0 1px var(--edge);
+	}
+</style>
