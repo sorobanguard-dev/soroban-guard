@@ -1,0 +1,19 @@
+{
+	// The published build. Development still runs the TypeScript sources
+	// directly through Node's type stripping, but that stops at the
+	// node_modules boundary: Node refuses to strip types from any file under
+	// node_modules (ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING), which is
+	// exactly where an npm install puts this package. So what ships is
+	// compiled JavaScript, with `.ts` import specifiers rewritten to `.js`
+	// (rewriteRelativeImportExtensions, set in the base config).
+	"extends": "./tsconfig.json",
+	"compilerOptions": {
+		"rootDir": "src",
+		"outDir": "dist",
+		"noEmit": false,
+		// Source maps point into src/, which is not published; declarations
+		// are what a consumer of the library API actually needs.
+		"sourceMap": false
+	},
+	"include": ["src/**/*.ts"]
+}

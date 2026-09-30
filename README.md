@@ -1,10 +1,23 @@
 # soroban-guard
 
-[![CI](https://github.com/birserg/soroban-guard/actions/workflows/ci.yml/badge.svg)](https://github.com/birserg/soroban-guard/actions/workflows/ci.yml)
+[![CI](https://github.com/sorobanguard-dev/soroban-guard/actions/workflows/ci.yml/badge.svg)](https://github.com/sorobanguard-dev/soroban-guard/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 
 Conformance testing for deployed [SEP-41](https://github.com/stellar/stellar-protocol/blob/master/ecosystem/sep-0041.md)
-Soroban token contracts on Stellar **testnet**.
+Soroban token contracts on Stellar **testnet**. Point it at a contract,
+it exercises the interface for real — reads, writes, and refusals — and
+reports which clauses hold, with evidence.
+
+- [Status](#status)
+- [Install](#install)
+- [Usage](#usage)
+  - [Checking writes](#checking-writes)
+  - [Exit codes](#exit-codes)
+- [Web UI](#web-ui)
+- [Why](#why)
+- [Scope](#scope)
+- [Current limitations](#current-limitations)
+- [License](#license)
 
 > **Scope, stated plainly:** this checks **SEP-41 token contracts only**,
 > and is built for **testnet**. Reads work against any network; the writes
@@ -16,31 +29,35 @@ Soroban token contracts on Stellar **testnet**.
 > interface as this suite exercises it; that is not a security audit, and
 > no run of this tool should be read as one.
 
-> **Status: early.** All ten SEP-41 members are checked against testnet.
-> The five reads (`decimals`, `balance`, `allowance`, `name`, `symbol`) are
-> observed; the five writes (`transfer`, `approve`, `transfer_from`, `burn`,
-> `burn_from`) are performed — signed, submitted, and asserted against the
-> balances and allowances they moved.
->
-> Six further checks assert what a contract must *refuse* or must leave
-> alone — an unauthorized spend, more than the balance, a negative amount,
-> a lapsed allowance, a zero transfer, a self-transfer. These are the shape
-> that catches a missing allowance check or a missing bounds check,
-> because a contract lacking either behaves identically to a correct one
-> whenever the request is legitimate. See
-> [docs/check-reference.md](docs/check-reference.md) for what each proves
-> and [docs/verification.md](docs/verification.md) for a run and its
-> transaction hashes.
+## Status
 
-## Usage
+| Area | Status |
+|---|---|
+| Reads (`decimals`, `balance`, `allowance`, `name`, `symbol`) | Done, live on testnet |
+| Writes (`transfer`, `approve`, `transfer_from`, `burn`, `burn_from`) | Done, asserted against on-chain deltas |
+| Negative checks (unauthorized, over-balance, negative, expired, zero, self) | Done, proven to fire against `fixtures/vulnerable-token` |
+| Reports (terminal, `md`, `json`) | Done — `--format` |
+| Browser UI | In progress, same suite via Freighter |
+| Events layer | Not started — balances asserted, topics unread |
+| Custom WASM proof | Open — passing runs are SAC so far |
 
-Requires **Node 24** — the CLI runs its TypeScript sources directly via
-type stripping, so there is no build step. Nothing else to configure:
+## Install
+
+Requires **Node 24**.
+
+```sh
+npm install -g soroban-guard
+soroban-guard <contract-id>
+```
+
+Or from source (TypeScript runs directly via type stripping, no build step):
 
 ```sh
 pnpm install
 node packages/soroban-guard/src/cli.ts <contract-id>
 ```
+
+## Usage
 
 Against a real testnet token, with **nothing configured** — no keys, no
 addresses. This is the first run, and it is mostly question marks by
@@ -60,14 +77,14 @@ SEP-41 Conformance — CA5UTUUPHYL5K22UBRUVC37EARZUGYOSGK3IKIXG2JLCC5ZZLI4BDWDM
   ✓ sep41-symbol  symbol is "CPAL"
   ? sep41-transfer_from-unauthorized  no signing authority for the spender; set SPENDER_SECRET to attempt a spend the contract should refuse
     expected: transfer_from refuses a spender with no allowance from the holder
+  ? sep41-transfer-over-balance  no signing authority for the holder; set OWNER_SECRET to attempt a transfer the contract should refuse
+    expected: transfer refuses to move more than the holder's balance
+  ? sep41-transfer-negative-amount  no signing authority for the holder; set OWNER_SECRET to attempt a transfer the contract should refuse
+    expected: transfer refuses a negative amount
   ? sep41-transfer-zero-amount  no signing authority for the holder; set OWNER_SECRET to attempt a transfer that must not move value
     expected: a transfer of zero leaves both balances unchanged
   ? sep41-transfer-self  no signing authority for the holder; set OWNER_SECRET to attempt a transfer that must not move value
     expected: a transfer to oneself leaves the balance unchanged
-  ? sep41-transfer-negative-amount  no signing authority for the holder; set OWNER_SECRET to attempt a transfer the contract should refuse
-    expected: transfer refuses a negative amount
-  ? sep41-transfer-over-balance  no signing authority for the holder; set OWNER_SECRET to attempt a transfer the contract should refuse
-    expected: transfer refuses to move more than the holder's balance
   ? sep41-transfer  no signing authority for the holder; set OWNER_SECRET to an account that both signs and holds this token
     expected: transfer moves the amount from holder to recipient
   ? sep41-approve  no signing authority for the holder; set OWNER_SECRET to the account granting the allowance
@@ -96,7 +113,14 @@ actually holds the token for a real assertion:
 
 ```sh
 OWNER_ADDRESS=G... SPENDER_ADDRESS=G... \
-  node packages/soroban-guard/src/cli.ts <contract-id>
+  soroban-guard <contract-id>
+```
+
+Machine-readable and committable reports:
+
+```sh
+soroban-guard <contract-id> --format json > report.json   # CI, web UI
+soroban-guard <contract-id> --format md > CHECKS.md       # review, diffing
 ```
 
 ### Checking writes
@@ -112,7 +136,7 @@ run alone:
 ```sh
 OWNER_SECRET=$(stellar keys secret owner) \
 SPENDER_SECRET=$(stellar keys secret spender) \
-  node packages/soroban-guard/src/cli.ts <contract-id>
+  soroban-guard <contract-id>
 ```
 
 With both keys configured, every row carries a verdict — this is a real
@@ -127,10 +151,10 @@ SEP-41 Conformance — CARQGEM3RDSWA2SRZDL6LDBOEQWQHS74BOL5V62QXIGMOBIMIX5YTYYN
   ✓ sep41-name  name is "TEST:GAY3IYUGLOBCIFRCDULGBSR4VYREU4BITUAIYTUD64KN232LJBOHSUGY"
   ✓ sep41-symbol  symbol is "TEST"
   ✓ sep41-transfer_from-unauthorized  an unauthorized spend was refused
+  ✓ sep41-transfer-over-balance  a transfer of 898999961 against a balance of 898999960 was refused
+  ✓ sep41-transfer-negative-amount  a transfer of -1 was refused
   ✓ sep41-transfer-zero-amount  the call was accepted and both balances held, at 898999960 and 14
   ✓ sep41-transfer-self  the call was accepted and the balance held at 898999960
-  ✓ sep41-transfer-negative-amount  a transfer of -1 was refused
-  ✓ sep41-transfer-over-balance  a transfer of 898999961 against a balance of 898999960 was refused
   ✓ sep41-transfer  holder -1, recipient +1
   ✓ sep41-approve  allowance is 2 after approving 2 over 1
   ✓ sep41-transfer_from  holder -1, recipient +1, allowance -1
@@ -236,6 +260,22 @@ not exercise is unknown, not conformant.
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for the development workflow.
 
+## Web UI
+
+The same sixteen checks run in the browser: paste a contract address,
+connect Freighter (testnet), approve each write as it is proposed, and read
+the same verdicts — with per-check progress, explorer-linked transaction
+hashes, and one-click CHECKS.md / JSON export. No keys ever leave the
+wallet; no backend executes anything.
+
+```sh
+pnpm --filter @soroban-guard/web dev   # local preview
+```
+
+Public URL follows deployment. With a single wallet, the four checks that
+must sign *as the spender* report UNVERIFIABLE and say what they need —
+the CLI with two keys remains the complete run.
+
 ## Why
 
 SEP-41 is the standard token interface for Soroban. A Stellar Asset
@@ -321,7 +361,7 @@ is a violation of the clause as written, not a variation the tool tolerates.
   a deliberate policy gate, not an accident. SEP-41 declares both members
   with no exemption in its text, so the clause is genuinely unmet and the
   verdict stands; the report names the case rather than implying a defect
-  you can fix. See [issue #13](https://github.com/birserg/soroban-guard/issues/13).
+  you can fix. See [issue #1](https://github.com/sorobanguard-dev/soroban-guard/issues/1).
 
   `transfer` and `transfer_from` report **UNVERIFIABLE**. Soroban fees are
   paid in XLM by the transaction's source account, which on this contract
@@ -341,17 +381,6 @@ is a violation of the clause as written, not a variation the tool tolerates.
   judge any run the issuer takes part in — sending from one mints and
   sending to one burns, so neither side's delta means what it appears to —
   and reports UNVERIFIABLE before spending a ledger close.
-
-  SEP-41 itself draws none of these distinctions: a SAC and a custom token
-  implement the same interface, and every check calls members by name
-  without asking which it is talking to. What differs is what the *guard*
-  infers. Two of those inferences are value-based rather than type-based,
-  so a custom token could trip them by coincidence: a balance of exactly
-  `i64::MAX` is read as an issuer sentinel, and a trap whose text matches
-  the SAC host's trustline wording is downgraded to UNVERIFIABLE. Both
-  fail safe — they withhold a verdict rather than invent one — but a
-  custom token holding 922 billion units of a 7-decimal asset would be
-  skipped where a SAC issuer would be.
 * Events are not observed. The writes land and their deltas are asserted,
   but no check reads the topics a contract emits — so a token that moves
   balances correctly while emitting wrong or missing `transfer` events

@@ -23,3 +23,9 @@ target/
 # unread by every tool here; gitignored so it never leaks into the repo and
 # Biome (which reads this file) never lints it.
 .claude/settings.local.json
+
+# Generated at pack time by scripts/prepare-package.mjs (copies of the root
+# README and LICENSE with rewritten links). Never committed; the root files
+# are the source of truth.
+packages/soroban-guard/README.md
+packages/soroban-guard/LICENSE
