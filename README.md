@@ -291,7 +291,8 @@ an explorer link for every transaction, and CHECKS.md / JSON export.
 There is no backend. The page talks to Soroban RPC directly and signing
 happens inside the extension, so your secret key never reaches the page.
 
-**One wallet runs all sixteen.** Connect the wallet that holds your token
+**One wallet runs all sixteen**, when the page can set up its temporary
+account. Connect the wallet that holds your token
 and leave the counterparty field empty: the page creates a temporary
 second account for the run — funded by Friendbot, given a trustline if the
 token is a classic Stellar asset — and signs as it for the four checks that
@@ -300,8 +301,12 @@ unauthorized and expired `transfer_from` cases). Its key lives only in
 that browser tab. When the run ends the page tries to send whatever it
 received back to your wallet, and says whether that worked — a token that
 refuses the transfer, as the vulnerable fixture can, leaves those few
-units in the temporary account. On native XLM nothing is sent back: what
-the temporary account holds is Friendbot's funding, not yours.
+units in the temporary account, and when retrying could help the page
+offers to try again while it still holds that account's key. On native
+XLM nothing is sent back: what the temporary account holds is
+Friendbot's funding, not yours. If the temporary account cannot be set
+up at all — Friendbot down, a trustline refused — the run goes ahead
+without it, and the four spender-signed checks say what they need.
 
 **No token of your own?** The page offers a demo token: a copy of
 `fixtures/vulnerable-token` with a faucet that gives any wallet the five

@@ -221,7 +221,7 @@ async function returnUnits(
 	server: rpc.Server,
 	request: RunRequest,
 	temporary: TemporarySpender,
-): Promise<{ returned: bigint } | { failed: string }> {
+): Promise<{ returned: bigint } | { failed: string; retryable: boolean }> {
 	if (temporary.asset === "native") {
 		return { returned: 0n };
 	}
@@ -239,8 +239,31 @@ async function returnUnits(
 				request.networkPassphrase,
 			),
 		);
-		const held =
-			read.kind === "ok" && typeof read.value === "bigint" ? read.value : 0n;
+		// An unreadable balance is not an empty one: reporting it as "0
+		// returned" would say the cleanup finished while units may still be
+		// sitting in the temporary account.
+		if (read.kind !== "ok" || typeof read.value !== "bigint") {
+			return {
+				failed:
+					read.kind === "ok"
+						? "the token's balance() did not return a number for the temporary account"
+						: `the temporary account's balance could not be read (${read.diagnostics})`,
+				// Usually a passing RPC problem; reading again may succeed.
+				retryable: true,
+			};
+		}
+		const held = read.value;
+		// A negative balance is invalid token accounting, not an empty
+		// account: returning "no units" for it would report a finished
+		// cleanup over money that should not exist.
+		if (held < 0n) {
+			return {
+				failed: `the token reports a balance of ${held} for the temporary account`,
+				// Impossible accounting: no retry can return units the token
+				// itself says do not exist.
+				retryable: false,
+			};
+		}
 		if (held <= 0n || temporary.party.signer === undefined) {
 			return { returned: 0n };
 		}
@@ -260,9 +283,15 @@ async function returnUnits(
 		);
 		return sent.kind === "applied"
 			? { returned: held }
-			: { failed: `the transfer back was not applied (${sent.kind})` };
+			: {
+					failed: `the transfer back was not applied (${sent.kind})`,
+					retryable: true,
+				};
 	} catch (error) {
-		return { failed: error instanceof Error ? error.message : String(error) };
+		return {
+			failed: error instanceof Error ? error.message : String(error),
+			retryable: true,
+		};
 	}
 }
 
@@ -280,8 +309,9 @@ const BASE_RESERVE = 5_000_000n;
  * the reserve of an account with no trustlines — and every write it signs
  * then comes back from the network as `tx_insufficient_balance`. Read before
  * a run so the page says so up front rather than reporting a check that did
- * not complete. Sponsorships and liabilities are ignored: a wallet
- * sophisticated enough to have them is not the one this protects.
+ * not complete. Sponsorships move the reserve both ways and are counted;
+ * liabilities are still ignored: a wallet sophisticated enough to have them
+ * is not the one this protects.
  *
  * `null` when the account does not exist on the network yet — a wallet
  * created in Freighter but never funded — which the page answers with
@@ -317,8 +347,43 @@ export async function spendableXlm(
 	}
 	// Plain fields in SDK 17's generated XDR, not accessor methods.
 	const entry = found.val.value;
-	const reserve = (2n + BigInt(entry.numSubEntries)) * BASE_RESERVE;
+	// Sponsorships move the reserve both ways: entries others sponsor for
+	// this account still count, entries it sponsors elsewhere do not. A
+	// sponsored wallet can therefore spend below the naive two-reserve
+	// floor, and ignoring the counters would block it from running at all.
+	// Absent extension data means no sponsorships, not zero information.
+	const { numSponsoring, numSponsored } = sponsorship(entry);
+	const reserve =
+		(2n +
+			BigInt(entry.numSubEntries) +
+			BigInt(numSponsoring) -
+			BigInt(numSponsored)) *
+		BASE_RESERVE;
 	return entry.balance - reserve;
+}
+
+/**
+ * How many reserves this account sponsors elsewhere, and how many of its
+ * own are sponsored — both zero when the ledger entry carries no extension
+ * data at all.
+ */
+export function sponsorship(entry: xdr.AccountEntry): {
+	numSponsoring: number;
+	numSponsored: number;
+} {
+	const none = { numSponsoring: 0, numSponsored: 0 };
+	const ext = entry.ext;
+	if (ext.type !== "v1") {
+		return none;
+	}
+	const inner = ext.v1.ext;
+	if (inner.type !== "v2") {
+		return none;
+	}
+	return {
+		numSponsoring: inner.v2.numSponsoring,
+		numSponsored: inner.v2.numSponsored,
+	};
 }
 
 /**
@@ -388,6 +453,15 @@ export async function claimDemoTokens(
 	}
 }
 
+/**
+ * What happened to the temporary account's units at the end of a run.
+ * `retry`, when present, tries again with the same account — the only way
+ * back to it, since its key lives nowhere but this tab.
+ */
+export type Cleanup =
+	| { readonly returned: bigint }
+	| { readonly failed: string; readonly retry?: () => Promise<Cleanup> };
+
 export interface RunOutcome {
 	readonly results: readonly CheckResult[];
 	readonly exitCode: number;
@@ -396,7 +470,7 @@ export interface RunOutcome {
 	 * to the holder at the end, or why they could not. Absent when the
 	 * visitor named the counterparty.
 	 */
-	readonly cleanup?: { returned: bigint } | { failed: string };
+	readonly cleanup?: Cleanup;
 	/**
 	 * Why the run could not set up its own second account, when it could
 	 * not. The run went ahead without one: the four spender-signed checks
@@ -510,6 +584,19 @@ export async function runChecks(
 		};
 	}
 	onStage?.("Sending the temporary account's units back to your wallet…");
-	const cleanup = await returnUnits(server, request, spender.temporary);
+	const temporary = spender.temporary;
+	// A failed return keeps the temporary account's key alive in `retry`, so
+	// the page can try again instead of stranding the units: the key exists
+	// nowhere else, and dropping it here made them unrecoverable.
+	const attempt = async (): Promise<Cleanup> => {
+		const outcome = await returnUnits(server, request, temporary);
+		if ("returned" in outcome) {
+			return outcome;
+		}
+		return outcome.retryable
+			? { failed: outcome.failed, retry: attempt }
+			: { failed: outcome.failed };
+	};
+	const cleanup = await attempt();
 	return { results, exitCode: exitCodeFor(results), cleanup };
 }

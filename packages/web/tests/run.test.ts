@@ -1,5 +1,10 @@
+import type { xdr } from "@stellar/stellar-sdk";
 import { describe, expect, it } from "vitest";
-import { looksLikeAccountId, looksLikeContractId } from "../src/scripts/run.ts";
+import {
+	looksLikeAccountId,
+	looksLikeContractId,
+	sponsorship,
+} from "../src/scripts/run.ts";
 
 /**
  * Only the browser-specific logic is pinned here. The sixteen checks are
@@ -103,5 +108,33 @@ describe("looksLikeAccountId", () => {
 				"CA5UTUUPHYL5K22UBRUVC37EARZUGYOSGK3IKIXG2JLCC5ZZLI4BDWDM",
 			),
 		).toBe(false);
+	});
+});
+
+describe("sponsorship", () => {
+	// Most accounts carry no extension data: reserves are simply
+	// 2 + subentries, and there is nothing to add or subtract.
+	it("is zero without extension data", () => {
+		const entry = { ext: { type: "v0" } } as unknown as xdr.AccountEntry;
+		expect(sponsorship(entry)).toEqual({ numSponsoring: 0, numSponsored: 0 });
+	});
+
+	it("is zero for a v1 entry without v2", () => {
+		const entry = {
+			ext: { type: "v1", v1: { ext: { type: "v0" } } },
+		} as unknown as xdr.AccountEntry;
+		expect(sponsorship(entry)).toEqual({ numSponsoring: 0, numSponsored: 0 });
+	});
+
+	it("reads v2 counters when present", () => {
+		const entry = {
+			ext: {
+				type: "v1",
+				v1: {
+					ext: { type: "v2", v2: { numSponsoring: 3, numSponsored: 1 } },
+				},
+			},
+		} as unknown as xdr.AccountEntry;
+		expect(sponsorship(entry)).toEqual({ numSponsoring: 3, numSponsored: 1 });
 	});
 });
