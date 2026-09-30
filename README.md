@@ -8,6 +8,11 @@ Soroban token contracts on Stellar **testnet**. Point it at a contract,
 it exercises the interface for real — reads, writes, and refusals — and
 reports which clauses hold, with evidence.
 
+Try it in the browser at **[sorobanguard.com](https://sorobanguard.com)**,
+or watch the walkthrough — the CLI and the web checker, start to finish:
+
+[![soroban-guard walkthrough on YouTube](https://img.youtube.com/vi/3O7mqaajuCk/hqdefault.jpg)](https://youtu.be/3O7mqaajuCk)
+
 - [Status](#status)
 - [Install](#install)
 - [Usage](#usage)
