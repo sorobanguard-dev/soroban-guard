@@ -128,6 +128,27 @@ Two traps, both of which produce confusing errors:
   `can't find crate for 'core'`. Check with `which -a rustc`; prepend
   `~/.cargo/bin` to `PATH` if Homebrew's comes first.
 
+## The demo build
+
+The website's browser checker needs a copy of this token that any wallet
+can hold. Building with `--features demo-faucet` adds one function,
+`faucet(to)`, which gives five units to anyone, exactly what a full run
+spends. `mint` stays admin-only, no check calls either function, and the
+four tabled flaws are unchanged, so a run against the demo copy reports the
+same `9 pass, 2 fail, 5 unverifiable`.
+
+```sh
+stellar contract build --features demo-faucet --out-dir target/demo
+# deploy target/demo/vulnerable_token.wasm exactly as below, named
+# "Vulnerable Demo Token", then set DEMO_CONTRACT in
+# packages/web/src/data/demo.ts to the new id — i.e. run the deploy command
+# below with --wasm target/demo/vulnerable_token.wasm in place of the
+# release path it shows
+```
+
+Both builds write through the same `target/wasm32v1-none/release`, so
+rebuild without the feature afterwards if you need the plain WASM.
+
 ## Deploying and running the guard against it
 
 Three funded testnet identities, named here by the role each plays. Create

@@ -1,0 +1,381 @@
+/*
+ * The report surface, shared by the recorded report and the live checker.
+ *
+ * A standalone stylesheet rather than a global <style> inside Report.astro.
+ * That component used to be the only carrier of these rules, so the live
+ * rows on /run were styled only because a Report happened to render on the
+ * same page — remove it and every live result would have lost its layout.
+ * Both components import this file, so neither depends on the other.
+ */
+
+/*
+ * Global, not scoped: `scripts/checker.ts` builds rows for a live run
+ * and Astro's scoped styles only reach markup present at build time.
+ * One set of rules for both, so the two cannot diverge.
+ */
+.term {
+	background: var(--raised);
+	border-radius: var(--radius-card);
+	overflow: hidden;
+	display: grid;
+	grid-template-rows: auto auto auto 1fr auto;
+}
+
+.term-bar {
+	display: flex;
+	align-items: center;
+	gap: var(--space-2);
+	flex-wrap: wrap;
+	padding: 11px 14px;
+	border-bottom: 1px solid var(--edge);
+	font-size: 11px;
+	color: var(--dim);
+	letter-spacing: 0.04em;
+}
+
+.term-bar .live {
+	width: 6px;
+	height: 6px;
+	border-radius: 50%;
+	background: var(--ink);
+	flex: none;
+	animation: guard-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes guard-pulse {
+	50% {
+		opacity: 0.25;
+	}
+}
+
+.term-bar .sp {
+	flex: 1;
+}
+/* The exit code carries the run's answer, so it takes the matching
+   colour: amber for a run that found something, pass green for a clean
+   one. Hard-coding amber told a conformant contract it had failed. */
+.term-bar .exit b {
+	font-weight: 700;
+}
+
+.term-bar .exit[data-code="clean"] b {
+	color: var(--pass);
+}
+
+.term-bar .exit[data-code="flagged"] b {
+	color: var(--unverifiable);
+}
+
+/*
+ * Counters in normal inline flow. As flex or grid items the last one
+ * absorbed the row's leftover space and a single digit rendered far
+ * wider than its glyph; inline-block sizes each number to its own
+ * content and nothing can stretch it.
+ */
+.counts {
+	display: block;
+	padding: 12px 14px;
+	border-bottom: 1px solid var(--edge);
+}
+
+.tally-item {
+	white-space: nowrap;
+}
+
+.counts .tally-item + .tally-item {
+	margin-left: 20px;
+}
+
+.tally-item .n {
+	display: inline-block;
+	font-size: 22px;
+	font-weight: 450;
+	letter-spacing: -0.03em;
+	/* Tabular figures and a floor, so 9 → 10 does not shift the row. */
+	font-variant-numeric: tabular-nums;
+	min-width: 1.1em;
+	margin-right: 5px;
+}
+
+.tally-item .l {
+	font-size: 11px;
+	color: var(--dim);
+	letter-spacing: 0.04em;
+}
+
+.tally-item.pass .n {
+	color: var(--pass);
+}
+.tally-item.fail .n {
+	color: var(--fail);
+}
+.tally-item.unverifiable .n {
+	color: var(--unverifiable);
+}
+.tally-item.skipped .n {
+	color: var(--skipped);
+}
+.tally-item.not-implemented .n {
+	color: var(--not-implemented);
+}
+
+.fill {
+	display: flex;
+	height: 3px;
+	background: var(--raised-2);
+}
+
+.fill i {
+	display: block;
+	transition: width 0.4s cubic-bezier(0.2, 0.7, 0.3, 1);
+}
+
+.fill i[data-fill="pass"] {
+	background: var(--pass);
+}
+.fill i[data-fill="fail"] {
+	background: var(--fail);
+}
+.fill i[data-fill="unverifiable"] {
+	background: var(--unverifiable);
+}
+.fill i[data-fill="skipped"] {
+	background: var(--skipped);
+}
+.fill i[data-fill="not-implemented"] {
+	background: var(--not-implemented);
+}
+
+.rows {
+	padding-block: 4px;
+}
+
+.row {
+	display: grid;
+	grid-template-columns: 1.4rem minmax(0, 15rem) minmax(0, 1fr) auto;
+	gap: 10px;
+	padding-inline: 14px;
+	align-items: baseline;
+	font-size: 12.5px;
+}
+
+.row > * {
+	padding-block: 7px;
+}
+
+/* Rows the checker appends animate in; the ones rendered here are
+   already visible, so the class is applied rather than assumed. */
+.row.landing {
+	opacity: 0;
+	transform: translateY(5px);
+	animation: guard-land 0.32s cubic-bezier(0.2, 0.7, 0.3, 1) forwards;
+}
+
+@keyframes guard-land {
+	to {
+		opacity: 1;
+		transform: none;
+	}
+}
+
+/* The finding announces itself, once. */
+.row.landing[data-v="FAIL"] {
+	animation:
+		guard-land 0.32s cubic-bezier(0.2, 0.7, 0.3, 1) forwards,
+		guard-jolt 0.34s ease 0.16s;
+}
+
+@keyframes guard-jolt {
+	25% {
+		transform: translateX(-3px);
+	}
+	55% {
+		transform: translateX(3px);
+	}
+	80% {
+		transform: translateX(-1px);
+	}
+	100% {
+		transform: none;
+	}
+}
+
+@media (max-width: 46rem) {
+	.row {
+		grid-template-columns: 1.3rem minmax(0, 1fr) auto;
+		/* The cells carry their own vertical padding; a row gap on top of
+		   it split each check from its own result. */
+		row-gap: 0;
+	}
+	.row .said {
+		grid-column: 2 / -1;
+		padding-top: 0;
+	}
+	/* Pinned to the first line beside the id. Left to auto-placement it
+	   followed `.said` onto a third line of its own, and sixteen rows ran
+	   to nearly two thousand pixels on a phone. */
+	.row .why {
+		grid-column: 3;
+		grid-row: 1;
+	}
+}
+
+.row .g {
+	font-weight: 700;
+	text-align: center;
+}
+
+/*
+ * The member in ink, the case beside it dimmed: `transfer_from  expired`.
+ * The prefix is gone because the header already names the standard, so
+ * every row now leads with the part that tells it apart from the rest.
+ */
+.row .rid {
+	color: var(--ink);
+	font-weight: 500;
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0 0.55em;
+	align-items: baseline;
+}
+
+.rid .qual {
+	color: var(--dim);
+	font-weight: 400;
+}
+
+.term-bar .std {
+	color: var(--ink);
+	font-weight: 500;
+}
+
+.row .said {
+	color: var(--dim);
+	line-height: 1.5;
+}
+
+.row .why {
+	font: inherit;
+	font-size: 10.5px;
+	font-weight: 700;
+	letter-spacing: 0.08em;
+	background: none;
+	border: 0;
+	cursor: pointer;
+	color: var(--faint);
+	white-space: nowrap;
+}
+
+.row .why:hover {
+	color: var(--ink);
+}
+
+.row[data-v="PASS"] .g {
+	color: var(--pass);
+}
+.row[data-v="FAIL"] .g {
+	color: var(--fail);
+}
+.row[data-v="UNVERIFIABLE"] .g {
+	color: var(--unverifiable);
+}
+.row[data-v="SKIPPED"] .g {
+	color: var(--skipped);
+}
+.row[data-v="NOT_IMPLEMENTED"] .g {
+	color: var(--not-implemented);
+}
+
+.row[data-v="FAIL"] {
+	box-shadow: inset 2px 0 0 var(--fail);
+}
+.row[data-v="UNVERIFIABLE"] {
+	box-shadow: inset 2px 0 0 var(--unverifiable);
+}
+
+/* `display: grid` on the class would beat `[hidden]` on specificity, so
+   the attribute has to win explicitly or every drawer renders open. */
+.drawer[hidden] {
+	display: none;
+}
+
+.drawer {
+	grid-column: 1 / -1;
+	display: grid;
+	gap: 6px;
+	padding: 2px 0 12px 2.4rem;
+	max-width: 74ch;
+}
+
+.drawer dl {
+	margin: 0;
+	display: grid;
+	gap: 2px;
+}
+
+.drawer dt {
+	font-size: 10px;
+	font-weight: 700;
+	letter-spacing: 0.1em;
+	color: var(--faint);
+}
+
+.drawer dd {
+	margin: 0;
+	color: var(--dim);
+	font-size: 12.5px;
+	line-height: 1.55;
+}
+
+/* The one thing an unverifiable row exists to say. */
+.drawer .need {
+	color: var(--unverifiable);
+}
+
+/*
+ * Transaction links, for recorded and live rows alike. A 64-character
+ * hash has no break opportunities, so it would otherwise force the
+ * drawer wider than the report on a narrow screen.
+ */
+.drawer dd a {
+	color: var(--dim);
+	font-family: var(--mono);
+	font-size: 12px;
+	word-break: break-all;
+	text-decoration: underline;
+	text-decoration-color: var(--edge);
+	text-underline-offset: 3px;
+}
+
+.drawer dd a:hover {
+	color: var(--ink);
+	text-decoration-color: var(--ink);
+}
+
+.term-foot {
+	display: flex;
+	gap: 14px;
+	align-items: center;
+	flex-wrap: wrap;
+	padding: 10px 14px;
+	border-top: 1px solid var(--edge);
+	font-size: 11.5px;
+	color: var(--dim);
+}
+
+.term-foot .sp {
+	flex: 1;
+}
+
+/* From a verdict to the reasoning behind it, on /checks. */
+.drawer .more-link {
+	justify-self: start;
+	font-size: 12px;
+	color: var(--dim);
+	text-underline-offset: 3px;
+	text-decoration-color: var(--edge);
+}
+
+.drawer .more-link:hover {
+	color: var(--ink);
+}

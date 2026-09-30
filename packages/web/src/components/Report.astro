@@ -1,0 +1,150 @@
+---
+import { STATUS_GLYPH } from "soroban-guard/src/core/types.ts";
+import type { CheckStatus } from "soroban-guard/src/core/types.ts";
+import { checkAnchor, displayId } from "../data/check-id.ts";
+import { TALLY_ORDER } from "../data/verdicts.ts";
+import "../styles/report.css";
+
+/**
+ * The report surface, server-rendered from a recorded run.
+ *
+ * Two jobs. It is the hero — a crawler and a reader with JavaScript off get
+ * a real report rather than a screenshot of one — and it is the stylesheet
+ * for the live checker, whose rows are built by `scripts/checker.ts` using
+ * these same class names. One set of rules, so a live verdict and a
+ * recorded one cannot look different.
+ *
+ * Glyphs come from `STATUS_GLYPH` in core rather than a copy. A second
+ * table drifts, and this one already had — it printed an em dash for
+ * SKIPPED where the CLI prints ○.
+ */
+
+interface Row {
+	readonly status: CheckStatus;
+	readonly id: string;
+	/** What the contract actually did, in the report's own words. */
+	readonly actual: string;
+	/** The clause, shown when the row is expanded. */
+	readonly expected: string;
+	/** For a verdict the run could not reach: what would be needed. */
+	readonly need?: string;
+	readonly txHash?: string;
+}
+
+interface Props {
+	rows: readonly Row[];
+	/** Shown in the header. A recorded run states which contract it ran on. */
+	contractId: string;
+	exitCode: number;
+}
+
+const { rows, contractId, exitCode } = Astro.props;
+
+/** Counted here rather than hard-coded: the page cannot disagree with itself. */
+const tally = (status: CheckStatus) =>
+	rows.filter((row) => row.status === status).length;
+
+
+const short = `${contractId.slice(0, 8)}…${contractId.slice(-7)}`;
+---
+
+<div class="term recorded-report">
+	<div class="term-bar">
+		<i class="live" aria-hidden="true"></i>
+		<span class="std">SEP-41</span>
+		<span class="cid">{short}</span>
+		<span class="sp"></span>
+		<span class="exit" data-code={exitCode === 0 ? "clean" : "flagged"}>
+			exit <b>{exitCode}</b>
+		</span>
+	</div>
+
+	<div class="counts">
+		{
+			TALLY_ORDER.map((entry) => (
+				<span class={`tally-item ${entry.key}`}>
+					<span class="n" data-count={entry.key}>{tally(entry.status)}</span>
+					<span class="l">{entry.label}</span>
+				</span>
+			))
+		}
+	</div>
+
+	<div class="fill" aria-hidden="true">
+		{
+			TALLY_ORDER.map((entry) => (
+				<i
+					data-fill={entry.key}
+					style={`width:${((tally(entry.status) / rows.length) * 100).toFixed(2)}%`}
+				/>
+			))
+		}
+	</div>
+
+	<div class="rows">
+		{
+			rows.map((row) => (
+				<div class="row" data-v={row.status}>
+					<span class="g" aria-hidden="true">{STATUS_GLYPH[row.status]}</span>
+					<span class="rid" title={row.id}>
+						<span class="member">{displayId(row.id).member}</span>
+						{displayId(row.id).qualifier !== undefined && (
+							<span class="qual">{displayId(row.id).qualifier}</span>
+						)}
+					</span>
+					<span class="said">{row.actual}</span>
+					<button
+						class="why"
+						type="button"
+						aria-expanded="false"
+						aria-controls={`drawer-${row.id}`}
+					>
+						WHY
+					</button>
+					<div class="drawer" id={`drawer-${row.id}`} hidden>
+						<dl>
+							<dt>EXPECTED</dt>
+							<dd>{row.expected}</dd>
+							{row.need !== undefined && (
+								<>
+									<dt>TO REACH A VERDICT</dt>
+									<dd class="need">{row.need}</dd>
+								</>
+							)}
+							{row.txHash !== undefined && (
+								<>
+									<dt>TRANSACTION</dt>
+									{/* A link, matching live rows: the hash is the one piece
+									    of evidence a reader can check for themselves. */}
+									<dd>
+										<a
+											class="tx"
+											href={`https://stellar.expert/explorer/testnet/tx/${row.txHash}`}
+											rel="noopener noreferrer"
+											target="_blank"
+										>
+											{row.txHash}
+										</a>
+									</dd>
+								</>
+							)}
+						</dl>
+						<a class="more-link" href={`/checks#${checkAnchor(row.id)}`}>
+							What this check proves
+						</a>
+					</div>
+				</div>
+			))
+		}
+	</div>
+
+	<div class="term-foot">
+		<span>Recorded run</span>
+		<span class="sp"></span>
+		<span>{rows.length} checks</span>
+	</div>
+</div>
+
+<script>
+	import "../scripts/report-disclosure.ts";
+</script>

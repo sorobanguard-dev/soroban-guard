@@ -1,0 +1,12 @@
+{
+	"extends": "astro/tsconfigs/strict",
+	"compilerOptions": {
+		"types": ["astro/client"],
+		"allowImportingTsExtensions": true,
+		"paths": {
+			"soroban-guard/*": ["../soroban-guard/*"]
+		}
+	},
+	"include": [".astro/types.d.ts", "src", "tests", "astro.config.mjs"],
+	"exclude": ["dist"]
+}

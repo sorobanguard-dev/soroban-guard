@@ -1,0 +1,98 @@
+---
+import Masthead from "../components/Masthead.astro";
+import SiteFooter from "../components/SiteFooter.astro";
+import { PAGES } from "../data/pages.ts";
+import Base from "../layouts/Base.astro";
+
+/**
+ * Built to `404.html`, which Cloudflare Pages serves for any path it has no
+ * file for. Without it a mistyped link got the host's generic error page,
+ * with no way back to the site.
+ */
+---
+
+<Base
+	title="Page not found — soroban-guard"
+	description="This address has no page on the soroban-guard site."
+>
+	<Masthead />
+
+	<main>
+		<section class="lost">
+			<p class="code">404</p>
+			<h1>No page at this address</h1>
+			<p class="text">
+				It may have moved, or the link was mistyped. These are the pages the
+				site has:
+			</p>
+			<div class="actions">
+				{
+					PAGES.map((page, index) => (
+						<a class={index === 0 ? "btn primary" : "btn"} href={page.href}>
+							{page.label}
+						</a>
+					))
+				}
+			</div>
+		</section>
+
+		<SiteFooter />
+	</main>
+</Base>
+
+<style>
+	.lost {
+		padding-block: 120px 140px;
+		max-width: 40rem;
+	}
+
+	.code {
+		margin: 0 0 var(--space-4);
+		font-family: var(--mono);
+		font-size: 14px;
+		color: var(--unverifiable);
+	}
+
+	h1 {
+		margin: 0 0 var(--space-4);
+		font-size: clamp(30px, 4vw, 44px);
+		font-weight: 450;
+		letter-spacing: -0.03em;
+		line-height: 1.1;
+	}
+
+	.text {
+		margin: 0 0 var(--space-10);
+		color: var(--dim);
+		line-height: 1.6;
+	}
+
+	.actions {
+		display: flex;
+		gap: var(--space-3);
+		flex-wrap: wrap;
+	}
+
+	.btn {
+		font-size: 15px;
+		font-weight: 500;
+		padding: 12px 22px;
+		border-radius: var(--radius-pill);
+		text-decoration: none;
+		background: var(--raised-2);
+		color: var(--ink);
+	}
+
+	.btn:hover {
+		background: #222222;
+	}
+
+	.btn.primary {
+		background: var(--ink);
+		color: var(--void);
+	}
+
+	.btn.primary:hover {
+		background: var(--dim);
+	}
+</style>

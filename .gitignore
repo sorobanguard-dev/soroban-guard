@@ -1,6 +1,10 @@
 node_modules/
 dist/
 
+# Astro's generated types. Rebuilt by `astro sync` on every build, and
+# gitignored so Biome (which reads this file) never lints machine output.
+.astro/
+
 # Rust build output for the test fixtures. The contract source is committed;
 # its compiled artifacts are not — they are rebuilt with `stellar contract
 # build` and would otherwise be linted as if they were project sources.

@@ -1,0 +1,215 @@
+---
+import { REPO_URL, X_URL } from "../data/links.ts";
+import Mark from "./Mark.astro";
+
+interface Props {
+	/**
+	 * Which page the bar sits on. On /run the action would otherwise link to
+	 * the page the reader is already on, so there it offers the other way
+	 * to use the tool — the CLI — instead.
+	 */
+	page?: "home" | "run" | "checks" | "changelog" | "other";
+}
+
+const { page = "other" } = Astro.props;
+
+/**
+ * Pages, not anchors. The bar used to jump to #verdicts and #scope on the
+ * home page; with /checks and /changelog there are real destinations, and
+ * a nav of anchors into one page reads as a site with only one page.
+ */
+const LINKS = [
+	{ href: "/#how", label: "How it works", page: undefined },
+	{ href: "/checks", label: "Checks", page: "checks" },
+	{ href: "/changelog", label: "Changelog", page: "changelog" },
+] as const;
+// `short` is what fits a phone: at 390px the full label pushed the button
+// past the right edge of the bar.
+const action =
+	page === "run"
+		? { href: "/#how", label: "Get the CLI", short: "Get the CLI" }
+		: { href: "/run", label: "Try it in your browser", short: "Try it" };
+
+/**
+ * The top bar: the brand on the left, everything else grouped on the right.
+ *
+ * One group rather than links beside the brand and actions at the far
+ * edge: that split left a wide dead gap in the middle of the bar, and the
+ * links read as unrelated to the controls next to them. Grouped, the bar
+ * has two things — who this is, and where you can go.
+ *
+ * /run is reached through the action button, not the nav: it is the
+ * one thing on the bar that is an action rather than a place.
+ */
+---
+
+<header class="masthead">
+	<a class="brand" href="/">
+		<Mark size={20} decorative />
+		<span class="wordmark">soroban-guard</span>
+	</a>
+
+	<div class="end">
+		<nav aria-label="Sections">
+			{
+				LINKS.map((link) => (
+					<a
+						href={link.href}
+						aria-current={link.page === page ? "page" : undefined}
+					>
+						{link.label}
+					</a>
+				))
+			}
+		</nav>
+
+		{/*
+			The repository, with its mark and its name. An icon alone asks the
+			reader to recognise a logo; the word says where the link goes.
+			GitHub's own mark, the Octicon `mark-github` path.
+		*/}
+		<a class="github" href={REPO_URL}>
+			<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+				<path
+					fill="currentColor"
+					d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"
+				></path>
+			</svg>
+			GitHub
+		</a>
+
+		{/*
+			The mark alone: "X" as a word beside "GitHub" reads as a stray
+			letter, and the logo is recognised on its own. Labelled for screen
+			readers, since the icon carries no text.
+		*/}
+		<a class="social" href={X_URL} aria-label="soroban-guard on X">
+			<svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
+				<path
+					fill="currentColor"
+					d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"
+				></path>
+			</svg>
+		</a>
+
+		<a class="action" href={action.href} aria-label={action.label}>
+			<span class="long">{action.label}</span>
+			<span class="short" aria-hidden="true">{action.short}</span>
+		</a>
+	</div>
+</header>
+
+<style>
+	.masthead {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: var(--space-6);
+		padding-block: var(--space-6);
+	}
+
+	.brand {
+		display: flex;
+		align-items: center;
+		gap: var(--space-2);
+		text-decoration: none;
+		color: var(--ink);
+		flex: none;
+	}
+
+	.wordmark {
+		font-size: 15px;
+		font-weight: 500;
+		letter-spacing: -0.02em;
+	}
+
+	/* One consistent gap between every item on the right — links, GitHub
+	   and the button — so none of them reads as belonging to another. */
+	.end {
+		display: flex;
+		align-items: center;
+		gap: 28px;
+	}
+
+	nav {
+		display: flex;
+		align-items: center;
+		gap: 28px;
+	}
+
+	nav a,
+	.github {
+		font-size: 14px;
+		font-weight: 450;
+		color: var(--dim);
+		text-decoration: none;
+		white-space: nowrap;
+		transition: color 0.14s ease;
+	}
+
+	.social {
+		display: inline-flex;
+		align-items: center;
+		color: var(--dim);
+		transition: color 0.14s ease;
+	}
+
+	nav a:hover,
+	.github:hover,
+	.social:hover,
+	nav a[aria-current="page"] {
+		color: var(--ink);
+	}
+
+	.github {
+		display: inline-flex;
+		align-items: center;
+		gap: 7px;
+	}
+
+	/*
+	 * A raised pill, not a filled one. The hero already owns the filled
+	 * white button; making the bar's action match it would give the page
+	 * two primaries competing at the same moment.
+	 */
+	.action {
+		font-size: 14px;
+		font-weight: 500;
+		padding: 10px 18px;
+		border-radius: var(--radius-pill);
+		background: var(--raised-2);
+		color: var(--ink);
+		text-decoration: none;
+		white-space: nowrap;
+		transition: background 0.14s ease;
+	}
+
+	.action:hover {
+		background: #242424;
+	}
+
+	/* Narrow: the section links go first, since they are anchors into a page
+	   the reader can scroll; GitHub and the button stay. */
+	@media (max-width: 54rem) {
+		nav {
+			display: none;
+		}
+
+		.end {
+			gap: var(--space-4);
+		}
+	}
+
+	.action .short {
+		display: none;
+	}
+
+	@media (max-width: 30rem) {
+		.action .long {
+			display: none;
+		}
+		.action .short {
+			display: inline;
+		}
+	}
+</style>

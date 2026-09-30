@@ -1,0 +1,49 @@
+---
+/**
+ * The Stellar logo, from SDF's own press kit.
+ *
+ * Not redrawn. An earlier version traced the mark by hand and got it
+ * subtly wrong — the bars stop at the rim in a trace, where the official
+ * mark runs them past it on both sides. A brand mark is the one graphic
+ * where "close enough" is not, so this ships the supplied file.
+ *
+ * The white RGB variant, downscaled from the kit's 6231px original to 680
+ * — four times the height it renders at, so it stays crisp on a retina
+ * display. Used only in the "Built for Stellar" attribution: that phrasing
+ * states a technical fact, and the footer says plainly that this project
+ * is not affiliated with the Stellar Development Foundation.
+ */
+interface Props {
+	/** Rendered height in px. Width follows the mark's own ratio. */
+	height?: number;
+}
+
+const { height = 17 } = Astro.props;
+---
+
+<img
+	class="stellar"
+	src="/brand/stellar-white.png"
+	alt="Stellar"
+	width={Math.round(height * 4)}
+	height={height}
+	style={`height:${height}px`}
+	loading="lazy"
+	decoding="async"
+/>
+
+<style>
+	/*
+	 * Width is left to the intrinsic ratio: the `width` attribute above is
+	 * only there so the browser reserves the right box before the image
+	 * loads, and `width: auto` keeps the real proportions.
+	 *
+	 * No `vertical-align` here. Callers place this in a flex row and centre
+	 * it; a baseline nudge as well would double-correct and sink the mark.
+	 */
+	.stellar {
+		width: auto;
+		display: block;
+		flex: none;
+	}
+</style>

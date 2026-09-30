@@ -1,0 +1,90 @@
+---
+/**
+ * The soroban-guard mark: an unclosed brace, and a dot where its partner
+ * should be.
+ *
+ * Every Soroban contract is braces; an unclosed one is the state of a thing
+ * not yet proven to balance. The dot sits in the closing brace's place
+ * without being one — the tool's own `?` standing in for a conclusion it
+ * will not fabricate. Deliberately not a shield, a lock, or a tick: the
+ * product's distinguishing claim is that it refuses to certify what it
+ * cannot measure, and a badge would say the opposite in the one place
+ * everybody looks.
+ */
+interface Props {
+	/** Rendered size in px. The viewBox is always 48. */
+	size?: number;
+	/** Omitted from the accessibility tree when the mark sits beside the name. */
+	decorative?: boolean;
+}
+
+const { size = 22, decorative = false } = Astro.props;
+
+/**
+ * Optical sizing, the axis a text face and a display face differ on.
+ *
+ * The path is fixed in a 48-unit box, so rendering it at 200px multiplies
+ * its stroke by more than seven. A weight that reads as confident beside
+ * 15px type reads as bloated at hero size, and a hairline that works at 48
+ * disappears at 16 — so weight is a function of how large the mark will
+ * appear, and the dot tracks it.
+ */
+const weight = size <= 20 ? "hairline" : size <= 64 ? "text" : "display";
+const stroke = weight === "hairline" ? 5.4 : weight === "text" ? 4.4 : 2.6;
+const dotRadius = weight === "hairline" ? 5.4 : weight === "text" ? 4.4 : 3.2;
+const dotX = 28.5 + (weight === "hairline" ? 11 : weight === "text" ? 10 : 8);
+
+/**
+ * The brace, drawn as two shoulders meeting at a point.
+ *
+ * What makes the glyph legible as a brace rather than a chevron is that the
+ * centre is a corner, not an arc: the curve straightens as it approaches
+ * the waist, touches a single leftmost point, and turns. The control points
+ * either side of the waist sit close to it so the approach flattens rather
+ * than swings.
+ */
+const path = [
+	"M28.5 5.5",
+	"C22.5 5.5 22.5 15.5 21 19.5",
+	"C19.8 22.6 16.5 23.4 13.2 24",
+	"C16.5 24.6 19.8 25.4 21 28.5",
+	"C22.5 32.5 22.5 42.5 28.5 42.5",
+].join(" ");
+
+const a11y = decorative
+	? { "aria-hidden": "true" as const }
+	: { role: "img" as const, "aria-label": "soroban-guard" };
+---
+
+<svg
+	width={size}
+	height={size}
+	viewBox="0 0 48 48"
+	fill="none"
+	class="mark"
+	{...a11y}
+>
+	<path
+		d={path}
+		stroke="currentColor"
+		stroke-width={stroke}
+		stroke-linecap="round"
+		stroke-linejoin="round"
+	/>
+	<circle cx={dotX} cy="24" r={dotRadius} class="dot" />
+</svg>
+
+<style>
+	/* The brace inherits the surrounding text colour so the mark works on
+	   any surface without a variant per background. */
+	.mark {
+		color: var(--ink);
+		flex: none;
+	}
+
+	/* The dot does not inherit: it is the unverifiable verdict, and that is
+	   the one part of the mark that carries meaning. */
+	.dot {
+		fill: var(--unverifiable);
+	}
+</style>

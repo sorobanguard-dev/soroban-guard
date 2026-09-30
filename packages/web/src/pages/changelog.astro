@@ -1,0 +1,244 @@
+---
+import Blocks from "../components/Blocks.astro";
+import Masthead from "../components/Masthead.astro";
+import SiteFooter from "../components/SiteFooter.astro";
+import { LATEST, RELEASES } from "../data/changelog.ts";
+import { NPM_URL, REPO_URL } from "../data/links.ts";
+import Base from "../layouts/Base.astro";
+
+/**
+ * Every release, newest first, built from CHANGELOG.md on each deploy.
+ *
+ * Two columns on a wide screen: the version and date stay pinned beside
+ * the entry while it scrolls, so a long release never loses its label.
+ * Each release has an anchor (`/changelog#0.4.1`) to link a fix to.
+ */
+const title = "Changelog — soroban-guard";
+const description =
+	"Every soroban-guard release: what was added, changed and fixed, with dates. Built from the repository's CHANGELOG.md.";
+
+/** An anchor per release; `Unreleased` becomes `#unreleased`. */
+const anchor = (version: string) => version.toLowerCase();
+
+function formatDate(iso: string | undefined): string | undefined {
+	if (iso === undefined) {
+		return undefined;
+	}
+	// Fixed locale and UTC, so the build machine's settings cannot change
+	// the date a reader sees.
+	return new Date(`${iso}T00:00:00Z`).toLocaleDateString("en-GB", {
+		day: "numeric",
+		month: "long",
+		year: "numeric",
+		timeZone: "UTC",
+	});
+}
+---
+
+<Base title={title} description={description}>
+	<Masthead page="changelog" />
+
+	<main>
+		<header class="intro">
+			<h1>Changelog</h1>
+			<p>
+				Every release of the CLI, newest first. Versions follow SemVer; before
+				1.0, anything may change.
+				{
+					LATEST !== undefined && (
+						<>
+							{" "}The latest is on npm as{" "}
+							<a href={NPM_URL}>
+								<code>soroban-guard@{LATEST.version}</code>
+							</a>
+							.
+						</>
+					)
+				}
+			</p>
+		</header>
+
+		<ol class="releases">
+			{
+				RELEASES.map((release) => (
+					<li class="release" id={anchor(release.version)}>
+						<div class="meta">
+							<a class="version" href={`#${anchor(release.version)}`}>
+								{release.version}
+							</a>
+							{release.date === undefined ? (
+								<span class="latest">Not released yet</span>
+							) : (
+								<time datetime={release.date}>
+									{formatDate(release.date)}
+								</time>
+							)}
+							{release === LATEST && <span class="latest">Latest</span>}
+						</div>
+
+						<div class="entry">
+							{release.summary.length > 0 && (
+								<Blocks blocks={release.summary} />
+							)}
+							{release.sections.map((section) => (
+								<section class="part">
+									<h2>{section.title}</h2>
+									<Blocks blocks={section.blocks} />
+								</section>
+							))}
+						</div>
+					</li>
+				))
+			}
+		</ol>
+
+		<p class="source">
+			Kept in the repository as 
+			<a href={`${REPO_URL}/blob/main/CHANGELOG.md`}> CHANGELOG.md</a>, in the 
+			<a href="https://keepachangelog.com/en/1.1.0/"> Keep a Changelog</a> format.
+		</p>
+
+		<SiteFooter />
+	</main>
+</Base>
+
+<style>
+	.intro {
+		padding-block: 96px 56px;
+		max-width: 44rem;
+	}
+
+	h1 {
+		margin: 0 0 var(--space-4);
+		font-size: clamp(34px, 4.6vw, 52px);
+		font-weight: 450;
+		letter-spacing: -0.034em;
+		line-height: 1.06;
+	}
+
+	.intro p {
+		margin: 0;
+		color: var(--dim);
+		font-size: 17px;
+		line-height: 1.6;
+	}
+
+	.intro a {
+		color: var(--ink);
+	}
+
+	.intro code {
+		font-size: 0.88em;
+	}
+
+	.releases {
+		list-style: none;
+		margin: 0;
+		padding: 0;
+	}
+
+	.release {
+		display: grid;
+		gap: var(--space-4);
+		padding-block: var(--space-10);
+		border-top: 1px solid var(--edge);
+		/* Clear the sticky label when jumping to an anchor. */
+		scroll-margin-top: var(--space-6);
+	}
+
+	@media (min-width: 52rem) {
+		.release {
+			grid-template-columns: 12rem minmax(0, 1fr);
+			gap: var(--space-10);
+		}
+
+		.meta {
+			position: sticky;
+			top: var(--space-6);
+			align-self: start;
+		}
+	}
+
+	.meta {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: baseline;
+		gap: var(--space-2) var(--space-3);
+	}
+
+	@media (min-width: 52rem) {
+		.meta {
+			flex-direction: column;
+			align-items: flex-start;
+			gap: var(--space-1);
+		}
+	}
+
+	.version {
+		font-family: var(--mono);
+		font-size: 20px;
+		font-weight: 500;
+		color: var(--ink);
+		text-decoration: none;
+		letter-spacing: -0.01em;
+	}
+
+	.version:hover {
+		text-decoration: underline;
+		text-underline-offset: 4px;
+		text-decoration-color: var(--edge);
+	}
+
+	time {
+		font-size: 14px;
+		color: var(--faint);
+	}
+
+	.latest {
+		font-size: 12px;
+		padding: 2px 9px;
+		border-radius: var(--radius-pill);
+		background: var(--raised-2);
+		color: var(--ink);
+	}
+
+	@media (min-width: 52rem) {
+		.latest {
+			margin-top: var(--space-2);
+		}
+	}
+
+	.entry {
+		display: grid;
+		gap: var(--space-6);
+		min-width: 0;
+	}
+
+	/* The first block of an entry is its summary: set one step larger, so a
+	   reader skimming releases can stop at the sentence that says what the
+	   release was for. */
+	.entry > :global(.prose:first-child > p:first-child) {
+		color: var(--ink);
+		font-size: 16px;
+	}
+
+	.part h2 {
+		margin: 0 0 var(--space-3);
+		font-size: 14px;
+		font-weight: 500;
+		color: var(--ink);
+		letter-spacing: 0;
+	}
+
+	.source {
+		margin: 0;
+		padding-block: var(--space-10) 72px;
+		border-top: 1px solid var(--edge);
+		font-size: 14px;
+		color: var(--faint);
+	}
+
+	.source a {
+		color: var(--dim);
+	}
+</style>

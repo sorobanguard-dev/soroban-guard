@@ -1,0 +1,62 @@
+---
+import { LOGGED_RUNS_URL, NPM_URL, REPO_URL, X_URL } from "../data/links.ts";
+
+/**
+ * One footer for every page. The two pages used to carry their own copies,
+ * which had already drifted apart: different links, different status line,
+ * and the same stylesheet pasted twice.
+ */
+---
+
+<footer class="site-foot">
+	<span>Apache-2.0</span>
+	<span>Writes on testnet by default</span>
+	<span class="sp"></span>
+	<a href="/run">Run in browser</a>
+	<a href={NPM_URL}>npm</a>
+	<a href={REPO_URL}>GitHub</a>
+	<a href={X_URL}>X</a>
+	<a href="/checks">What each check proves</a>
+	<a href="/changelog">Changelog</a>
+	<a href={LOGGED_RUNS_URL}>Logged runs</a>
+	{/*
+		The hero shows Stellar's mark under the press kit's terms; this is
+		the plain statement that using it claims no endorsement.
+	*/}
+	<p class="disclaimer">
+		An independent project, not affiliated with or endorsed by the Stellar
+		Development Foundation.
+	</p>
+</footer>
+
+<style>
+	.site-foot {
+		border-top: 1px solid var(--edge);
+		padding-block: var(--space-10) 72px;
+		font-size: 14px;
+		color: var(--faint);
+		display: flex;
+		gap: var(--space-3) var(--space-6);
+		flex-wrap: wrap;
+		align-items: center;
+	}
+
+	.sp {
+		flex: 1;
+	}
+
+	.disclaimer {
+		flex-basis: 100%;
+		margin: var(--space-3) 0 0;
+		font-size: 13px;
+	}
+
+	a {
+		color: var(--faint);
+		text-decoration: none;
+	}
+
+	a:hover {
+		color: var(--ink);
+	}
+</style>
