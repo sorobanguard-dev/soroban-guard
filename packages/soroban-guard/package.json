@@ -1,6 +1,6 @@
 {
 	"name": "soroban-guard",
-	"version": "0.4.1",
+	"version": "0.4.2",
 	"description": "Conformance testing for deployed SEP-41 Soroban token contracts",
 	"keywords": [
 		"stellar",
