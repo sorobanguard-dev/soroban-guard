@@ -15,6 +15,23 @@ log, not here.
 
 ## [Unreleased]
 
+## [0.4.2] — 2026-10-01
+
+### Added
+
+- `sep41-transfer_from-expired` evidence records the grant it confirmed
+  before the wait, as `granted`, beside the allowance read after it. A
+  refusal was always tested against a grant that had landed; the report now
+  shows it, so an expired grant cannot be mistaken for one that never
+  existed. ([#4](https://github.com/sorobanguard-dev/soroban-guard/pull/4))
+
+### Changed
+
+- The CHECKS.md footer no longer says a verdict is reproducible by re-running
+  against the same contract. Writes move balances and allowances, so a later
+  run is a fresh check of the contract as it then stands, not a replay; the
+  footer now says so. ([#4](https://github.com/sorobanguard-dev/soroban-guard/pull/4))
+
 ## [0.4.1] — 2026-09-29
 
 ### Fixed
