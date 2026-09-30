@@ -93,14 +93,16 @@ pnpm --filter @soroban-guard/web typecheck
 
 ## Deploying
 
-`dist/` is a plain static bundle — no server, no API. With Cloudflare Pages:
+`dist/` is a plain static bundle — no server, no API. It is live at
+<https://sorobanguard.com> (also at `soroban-guard.pages.dev`), deployed by Cloudflare Pages from `main`
+on every push, with a preview URL for every other branch.
 
 | Setting | Value |
 | ------- | ----- |
 | Production branch | `main` |
 | Root directory | *(empty — the repository root)* |
 | Build command | `corepack enable && corepack prepare pnpm@12.3.4 --activate && pnpm install --frozen-lockfile && pnpm --filter @soroban-guard/web build` |
-| Output directory | `packages/web/dist` |
+| Build output directory | `packages/web/dist` |
 | `NODE_VERSION` | `24` (also read from `.nvmrc`) |
 | `SKIP_DEPENDENCY_INSTALL` | `true` |
 
@@ -110,8 +112,13 @@ with the exact pnpm the repository pins, against the frozen lockfile. The
 site imports the CLI's TypeScript sources directly, so nothing else needs
 building first.
 
-Change `site` in `astro.config.mjs` to the real domain before deploying: the
-canonical URL, the Open Graph tags and `robots.txt` all derive from it.
+Pages are built as `run.html` rather than `run/index.html`
+(`build.format: "file"`), which Pages serves at `/run` — the address every
+link uses. Built as directories, each link answered with a 308 to `/run/`.
+
+`site` in `astro.config.mjs` is the live domain: the canonical URLs, the
+Open Graph tags and the share image all derive from it, so change it if the
+site moves.
 
 ## Two toolchain notes
 

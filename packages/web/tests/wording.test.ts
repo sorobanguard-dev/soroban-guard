@@ -1,7 +1,7 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { forBrowser } from "../src/data/wording.ts";
+import { explainFailure, forBrowser } from "../src/data/wording.ts";
 
 /**
  * Every hint the checks can print, read from their source rather than
@@ -52,6 +52,32 @@ describe("forBrowser", () => {
 		);
 	});
 
+	it("leaves text without CLI settings alone", () => {
+		expect(forBrowser("allowance is 2 after approving 2 over 1")).toBe(
+			"allowance is 2 after approving 2 over 1",
+		);
+	});
+});
+
+describe("explainFailure", () => {
+	// Verbatim from a visitor's run: a wallet holding exactly its 1 XLM
+	// reserve, every write refused before it reached the ledger.
+	const refused =
+		'Sending the transaction to the network failed!\n{ "status": "ERROR", "hash": "2c9cd2c7f8a4e31bdd83e7fb7b8d2f16368c2fd0d827f360f37e1135292f5aa3", "latestLedger": 4951784, "latestLedgerCloseTime": "1790782507", "errorResult": { "fee_charged": "134010", "result": "tx_insufficient_balance", "ext": "v0" } }';
+
+	it("names an underfunded wallet in the wallet's terms", () => {
+		expect(explainFailure(refused)).toMatch(/too little XLM/);
+	});
+
+	it("says nothing about an error it does not recognise", () => {
+		expect(explainFailure("fetch failed")).toBeUndefined();
+		expect(
+			explainFailure('{ "errorResult": { "result": "tx_something_new" } }'),
+		).toBeUndefined();
+	});
+});
+
+describe("forBrowser, unchanged text", () => {
 	it("leaves text without CLI settings alone", () => {
 		expect(forBrowser("allowance is 2 after approving 2 over 1")).toBe(
 			"allowance is 2 after approving 2 over 1",

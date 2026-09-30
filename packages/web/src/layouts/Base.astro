@@ -15,7 +15,13 @@ interface Props {
 }
 
 const { title, description } = Astro.props;
-const canonical = new URL(Astro.url.pathname, Astro.site);
+// The address a visitor uses, not the file behind it: pages build as
+// `run.html` (see astro.config.mjs) but are served at `/run`, and the home
+// page is `/`, not `/index.html`.
+const path =
+	Astro.url.pathname.replace(/(^|\/)index\.html$/, "$1").replace(/\.html$/, "") ||
+	"/";
+const canonical = new URL(path, Astro.site);
 // Absolute, because a crawler fetching the card resolves nothing relative.
 // 1200×630 is the size both X and the Open Graph readers crop to.
 const image = new URL("/og.png", Astro.site);

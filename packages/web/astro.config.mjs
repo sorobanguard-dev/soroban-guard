@@ -15,8 +15,17 @@ import { defineConfig } from "astro/config";
  * bundle in front of the first paint.
  */
 export default defineConfig({
-	site: "https://soroban-guard.pages.dev",
+	site: "https://sorobanguard.com",
 	output: "static",
+	/*
+	 * Pages as `run.html`, not `run/index.html`, and addresses without a
+	 * trailing slash. Cloudflare Pages serves `run.html` at `/run`, which is
+	 * how every link on the site spells it; built as a directory, each of
+	 * those links answered with a 308 to `/run/` first, and the canonical
+	 * URL disagreed with the links pointing at it.
+	 */
+	build: { format: "file" },
+	trailingSlash: "never",
 	vite: {
 		/*
 		 * Pre-bundled when the dev server starts, not on first use. The

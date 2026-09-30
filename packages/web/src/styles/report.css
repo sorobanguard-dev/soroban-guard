@@ -379,3 +379,12 @@
 .drawer .more-link:hover {
 	color: var(--ink);
 }
+
+/* A harness error can be a long diagnostic dump; it wraps rather than
+   widening the drawer past the report. */
+.drawer .error-text {
+	color: var(--dim);
+	font-family: var(--mono);
+	font-size: 11.5px;
+	overflow-wrap: anywhere;
+}
