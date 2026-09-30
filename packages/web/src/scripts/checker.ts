@@ -134,10 +134,16 @@ function refreshRunButton(): void {
 }
 
 /**
- * Enough XLM above the reserve for a full run's fees. A run signs about
- * fifteen transactions at roughly 0.01–0.02 XLM each; one XLM leaves room.
+ * Enough XLM above the reserve for a full run's fees, with room to spare.
+ *
+ * A run signs about fifteen transactions at roughly 0.01–0.02 XLM each —
+ * the one observed on testnet charged 0.0134 — so the worst case is near
+ * 0.3 XLM. Half an XLM covers that with margin. It was a whole XLM, about
+ * three times the need, which turned away wallets that could pay; and an
+ * existing wallet cannot be topped up by Friendbot, so a threshold set too
+ * high is a dead end, not a nudge.
  */
-const MIN_SPENDABLE = STROOPS_PER_XLM;
+const MIN_SPENDABLE = STROOPS_PER_XLM / 2n;
 
 /**
  * Why this wallet cannot pay for a run, or `undefined` if it can.
@@ -160,7 +166,7 @@ async function xlmShortfall(address: string): Promise<string | undefined> {
 		return undefined;
 	}
 	const shown = (Number(spendable < 0n ? 0n : spendable) / 1e7).toFixed(2);
-	return `This wallet has ${shown} XLM available above the reserve every Stellar account must keep, and each write costs a fee. Send it at least 1 testnet XLM from another account — or create a new account in Freighter and fund it with Friendbot — then run again.`;
+	return `This wallet has ${shown} XLM available above the reserve every Stellar account must keep, and each write costs a fee. A full run needs about half an XLM. Send it some testnet XLM from another account — or create a new account in Freighter and fund it with Friendbot — then run again.`;
 }
 
 /**
@@ -329,9 +335,12 @@ function renderRow(result: CheckResult): HTMLLIElement {
 	// left the visitor nothing to act on — a rejected Freighter prompt and a
 	// dropped connection looked identical. The reason goes on the row itself
 	// (first line, trimmed), and in full in the drawer below.
-	const failure = result.evidence.error;
-	if (result.status === "SKIPPED" && failure !== undefined && failure !== "") {
-		const firstLine = failure.split("\n")[0] ?? failure;
+	// Trimmed once, here: an error that opens with a newline gave an empty
+	// reason, and one of whitespace alone opened an empty drawer.
+	const failure = result.evidence.error?.trim() ?? "";
+	if (result.status === "SKIPPED" && failure !== "") {
+		// Trimmed, so the first line is the first thing the error says.
+		const [firstLine = ""] = failure.split("\n");
 		const reason =
 			explainFailure(failure) ??
 			(firstLine.length > 160 ? `${firstLine.slice(0, 157)}…` : firstLine);
@@ -360,7 +369,7 @@ function renderRow(result: CheckResult): HTMLLIElement {
 	expectedValue.textContent = result.expected;
 	list.append(expectedTerm, expectedValue);
 
-	if (failure !== undefined && failure !== "") {
+	if (failure !== "") {
 		const errorTerm = document.createElement("dt");
 		errorTerm.textContent =
 			result.status === "SKIPPED" ? "WHY IT DID NOT COMPLETE" : "ERROR";

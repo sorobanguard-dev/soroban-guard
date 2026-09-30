@@ -125,8 +125,8 @@ soroban-guard <contract-id> --format md > CHECKS.md       # review, diffing
 
 Two real CHECKS.md files, as the tool wrote them against testnet: a
 [conformant token](docs/examples/CHECKS-conformant.md) (16/16, exit 0) and
-[the vulnerable fixture](docs/examples/CHECKS-vulnerable.md) (two violations,
-exit 1).
+[the vulnerable fixture](docs/examples/CHECKS-vulnerable.md) (9 pass,
+2 violations, 5 unverifiable once its accounting went negative; exit 1).
 
 ### Checking writes
 
