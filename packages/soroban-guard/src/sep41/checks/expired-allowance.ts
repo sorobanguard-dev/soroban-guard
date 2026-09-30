@@ -368,6 +368,12 @@ export const expiredAllowanceCheck = {
 					// SPEND_AMOUNT, and evidence that reports a balance which
 					// was not true at submission misdescribes the run.
 					before: {
+						// The grant as read back right after approving, then
+						// the amount reported after the wait. Without the first,
+						// "0" reads the same as a grant that never landed —
+						// and it is the confirmed grant that makes this PASS
+						// a statement about the deadline.
+						granted: `${granted.amount}`,
 						allowance: reported,
 						holder: `${fresh.amount}`,
 						recipient: `${freshRecipient.amount}`,
@@ -388,6 +394,7 @@ export const expiredAllowanceCheck = {
 				// balances it cites have to be the ones that were true when
 				// the spend was submitted.
 				before: {
+					granted: `${granted.amount}`,
 					allowance: reported,
 					holder: `${fresh.amount}`,
 					recipient: `${freshRecipient.amount}`,
