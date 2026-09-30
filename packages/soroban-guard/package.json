@@ -31,7 +31,7 @@
 	],
 	"scripts": {
 		"build": "tsc -p tsconfig.build.json",
-		"prepack": "node scripts/prepare-package.mjs && pnpm run build",
+		"prepack": "node scripts/prepare-package.mjs && npx --no-install tsc -p tsconfig.build.json",
 		"typecheck": "tsc --noEmit",
 		"soroban-guard": "node src/cli.ts",
 		"test": "vitest run tests/unit",

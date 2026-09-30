@@ -59,6 +59,17 @@ misbehaving, and **FAILs**, whether it was taken to establish a premise or
 to assert one. The reason is consistency: `sep41-balance` FAILs that same
 response, and one contract must not get two answers in a run.
 
+**Two inferences are value-based, not type-based.** A balance of exactly
+`i64::MAX` is read as the SAC issuer's sentinel, and a trap whose text
+matches the SAC host's trustline wording is downgraded to UNVERIFIABLE —
+both on the *value observed*, never on proof of what contract produced it.
+A custom token could trip either by coincidence (a genuine 922-billion-unit
+holding, an error string that happens to match), and would then be skipped
+rather than judged. Both fail safe — they withhold a verdict rather than
+invent one — but the Status table's coverage claims should be read with
+this in mind: "assessed" means observed and judged, except where these two
+rules declined to judge.
+
 ## Reads
 
 ### `sep41-decimals` — interface
