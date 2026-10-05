@@ -61,7 +61,7 @@ function accountLedgerKey(publicKey: string): xdr.LedgerKey {
  * Plain-object rejects in other shapes are treated as unknown failures,
  * not absence: only the verified message counts.
  *
- * Verified against SDK 17.0.1 on testnet — an absent account rejects with:
+ * Verified against SDK 17.2.1 on testnet — an absent account rejects with:
  *
  *     instanceof Error : true
  *     message          : "failed to find an entry for key …"
