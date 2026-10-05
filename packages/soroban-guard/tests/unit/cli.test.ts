@@ -32,6 +32,18 @@ function run(args: string[], env: Record<string, string> = {}) {
 }
 
 describe("cli arguments", () => {
+	it("prints the manifest version and exits 0 for --version", () => {
+		const { code, out } = run(["--version"]);
+		expect(code).toBe(0);
+		expect(out.trim()).toMatch(/^\d+\.\d+\.\d+$/);
+	});
+
+	it("prints the version even alongside a contract id", () => {
+		const { code, out } = run(["--version", CONTRACT]);
+		expect(code).toBe(0);
+		expect(out.trim()).toMatch(/^\d+\.\d+\.\d+$/);
+	});
+
 	it("prints usage and exits 0 for --help", () => {
 		const { code, out } = run(["--help"]);
 		expect(code).toBe(0);

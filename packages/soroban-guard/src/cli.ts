@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { readFileSync } from "node:fs";
 import { parseArgs } from "node:util";
 import { type Account, Keypair, rpc, StrKey } from "@stellar/stellar-sdk";
 import { KeypairSigner } from "@stellar/stellar-sdk/contract";
@@ -16,7 +17,27 @@ import type { Party, Sep41Context } from "./sep41/context.ts";
 import { sep41Suite, withCoverageGaps } from "./sep41/index.ts";
 
 const USAGE =
-	"usage: soroban-guard <contract-id> [--rpc-url URL] [--passphrase P] [--format text|md|json] [--no-color] [--allow-http] [--allow-non-testnet-write]";
+	"usage: soroban-guard <contract-id> [--rpc-url URL] [--passphrase P] [--format text|md|json] [--no-color] [--allow-http] [--allow-non-testnet-write] [--version]";
+
+/**
+ * The version in the manifest next to this file — `package.json` sits
+ * beside both `src/cli.ts` and the compiled `dist/cli.js`, so one relative
+ * path serves development and the published binary alike.
+ */
+function packageVersion(): string {
+	try {
+		const manifest = JSON.parse(
+			readFileSync(new URL("../package.json", import.meta.url), "utf8"),
+		) as { version?: unknown };
+		if (typeof manifest.version === "string" && manifest.version !== "") {
+			return manifest.version;
+		}
+	} catch {
+		// Fall through to unknown below: a version command must never fail
+		// because metadata is unreadable.
+	}
+	return "unknown";
+}
 
 const FORMATS = ["text", "md", "json"] as const;
 type Format = (typeof FORMATS)[number];
@@ -34,6 +55,7 @@ let values: {
 	"allow-http"?: boolean;
 	"allow-non-testnet-write"?: boolean;
 	help?: boolean;
+	version?: boolean;
 };
 try {
 	({ positionals, values } = parseArgs({
@@ -46,6 +68,7 @@ try {
 			"allow-http": { type: "boolean" },
 			"allow-non-testnet-write": { type: "boolean" },
 			help: { type: "boolean", short: "h" },
+			version: { type: "boolean", short: "V" },
 		},
 	}));
 } catch (error) {
@@ -57,6 +80,12 @@ try {
 }
 
 const [rawContractId, ...extraPositionals] = positionals;
+// Lenient unlike --help: every major CLI prints its version regardless of
+// what else was passed, and a version probe must not become a usage error.
+if (values.version) {
+	console.log(packageVersion());
+	process.exit(0);
+}
 // Any positional alongside --help is a usage error, not a help request:
 // `--help extra-garbage` used to slip through because only 2+
 // positionals were rejected before the help branch.
