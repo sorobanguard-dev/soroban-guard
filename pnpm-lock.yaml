@@ -119,8 +119,8 @@ importers:
   packages/soroban-guard:
     dependencies:
       '@stellar/stellar-sdk':
-        specifier: 17.0.1
-        version: 17.0.1(debug@4.4.3)
+        specifier: 17.2.1
+        version: 17.2.1(debug@4.4.3)
     devDependencies:
       '@types/node':
         specifier: 24.13.4
@@ -135,8 +135,8 @@ importers:
         specifier: 6.0.1
         version: 6.0.1
       '@stellar/stellar-sdk':
-        specifier: 17.0.1
-        version: 17.0.1(debug@4.4.3)
+        specifier: 17.2.1
+        version: 17.2.1(debug@4.4.3)
       soroban-guard:
         specifier: workspace:*
         version: link:../soroban-guard
@@ -885,8 +885,8 @@ packages:
     resolution: {integrity: sha512-HBDNKnxr+ecdaEmbZ0mcKkirOF8tXXEbWSw34P3wT40Tn3g+u+cCH17xAWZymzscq8cojHB8340pR8QNVaD32w==}
     engines: {node: '>=22.0.0', pnpm: '>=10.0.0'}
 
-  '@stellar/stellar-sdk@17.0.1':
-    resolution: {integrity: sha512-fsHHbzJ14N5Ttq5Qpz4AX0ytmPSLCzcy4XC3uIgSQz0cBkEgv0Zb4KE6tWEd3nDQUk/1qP8ZX9cRonIaUXO3Sw==}
+  '@stellar/stellar-sdk@17.2.1':
+    resolution: {integrity: sha512-kIyfnZ2zCOqV8SUJcsk9buBOvhH1wsLU7KAzqAJyY7AgmD+KdvLTMpI1gcYdhGSakuDG5s6xSO4EN9HZTxpm8g==}
     engines: {node: '>=22.12.0'}
     hasBin: true
 
@@ -1096,8 +1096,8 @@ packages:
   asynckit@0.4.0:
     resolution: {integrity: sha512-Oei9OH4tRh0YqU3GxhX79dM/mwVgvbZJaSNaRk+bshkj0S5cfHcgYakreBjrHwatXKbz+IoIdYLxrKim2MjW0Q==}
 
-  axios@1.18.0:
-    resolution: {integrity: sha512-E32NzpYKp++W7XRe52rHiXV2ehxmh3wbdgO7MHeFM+vqxLBYHzt0ElkiImtOBxtOmyp0yoC8C6uESVV84Y2/hw==}
+  axios@1.20.0:
+    resolution: {integrity: sha512-r8aOh8j9cGKpgQAqpzrUHnSIc6a59Y3Xf/cv8sy1DrHCkZHzQGEuoq1tARk6qSyDdtQGSDgpb9kFlruzPvrgwg==}
 
   axobject-query@4.1.0:
     resolution: {integrity: sha512-qIj0G9wZbMGNLjLmg1PT6v2mE9AH2zlnADJD/2tC6E00hgmhUOfEB6greHPAfLRSufHqROIUTkw6E+M3lH0PTQ==}
@@ -2529,14 +2529,14 @@ snapshots:
 
   '@stellar/js-xdr@5.0.0': {}
 
-  '@stellar/stellar-sdk@17.0.1(debug@4.4.3)':
+  '@stellar/stellar-sdk@17.2.1(debug@4.4.3)':
     dependencies:
       '@exodus/bytes': 1.15.1(@noble/hashes@2.4.0)
       '@noble/ed25519': 3.2.0
       '@noble/hashes': 2.4.0
       '@stellar/js-xdr': 5.0.0
       '@types/json-schema': 7.0.15
-      axios: 1.18.0(debug@4.4.3)
+      axios: 1.20.0(debug@4.4.3)
       bignumber.js: 11.1.5
       commander: 14.0.3
       eventsource: 4.1.1
@@ -2770,7 +2770,7 @@ snapshots:
 
   asynckit@0.4.0: {}
 
-  axios@1.18.0(debug@4.4.3):
+  axios@1.20.0(debug@4.4.3):
     dependencies:
       follow-redirects: 1.16.0(debug@4.4.3)
       form-data: 4.0.6
