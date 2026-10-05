@@ -83,7 +83,13 @@ const [rawContractId, ...extraPositionals] = positionals;
 // Lenient unlike --help: every major CLI prints its version regardless of
 // what else was passed, and a version probe must not become a usage error.
 if (values.version) {
-	console.log(packageVersion());
+	// Drain-safe write: console.log + process.exit can truncate piped
+	// output, because the write may still sit in userland when the process
+	// dies. The write callback fires once the bytes are flushed, so exiting
+	// there cannot cut the output short.
+	await new Promise<void>((resolve) => {
+		process.stdout.write(`${packageVersion()}\n`, () => resolve());
+	});
 	process.exit(0);
 }
 // Any positional alongside --help is a usage error, not a help request:
