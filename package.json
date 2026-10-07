@@ -14,7 +14,7 @@
 		"test:live": "pnpm -r test:live"
 	},
 	"devDependencies": {
-		"@biomejs/biome": "2.5.13",
+		"@biomejs/biome": "2.5.15",
 		"typescript": "7.0.2"
 	},
 	"devEngines": {
