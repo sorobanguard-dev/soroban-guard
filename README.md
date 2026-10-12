@@ -2,6 +2,7 @@
 
 [![CI](https://github.com/sorobanguard-dev/soroban-guard/actions/workflows/ci.yml/badge.svg)](https://github.com/sorobanguard-dev/soroban-guard/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
+[![npm](https://img.shields.io/npm/v/soroban-guard.svg)](https://www.npmjs.com/package/soroban-guard)
 
 Conformance testing for deployed [SEP-41](https://github.com/stellar/stellar-protocol/blob/master/ecosystem/sep-0041.md)
 Soroban token contracts on Stellar **testnet**. Point it at a contract,
