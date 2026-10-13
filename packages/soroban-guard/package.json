@@ -1,13 +1,17 @@
 {
 	"name": "soroban-guard",
-	"version": "0.4.2",
+	"version": "0.4.3",
 	"description": "Conformance testing for deployed SEP-41 Soroban token contracts",
 	"keywords": [
 		"stellar",
 		"soroban",
 		"sep-41",
 		"conformance",
-		"testing"
+		"testing",
+		"token",
+		"smart-contract",
+		"audit",
+		"ci"
 	],
 	"license": "Apache-2.0",
 	"author": "Sergei Birtanov <arigatosf@gmail.com> (https://github.com/birserg)",
@@ -45,7 +49,7 @@
 		"node": ">=24"
 	},
 	"devDependencies": {
-		"@types/node": "24.13.4",
+		"@types/node": "26.6.4",
 		"vitest": "5.0.3"
 	},
 	"repository": {

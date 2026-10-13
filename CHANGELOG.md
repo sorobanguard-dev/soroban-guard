@@ -15,6 +15,13 @@ log, not here.
 
 ## [Unreleased]
 
+## [0.4.3] — 2026-10-12
+
+### Changed
+
+- Wider npm keywords (`token`, `smart-contract`, `audit`, `ci`) so the
+  package surfaces for what it is, plus an npm version badge in the README.
+
 ## [0.4.2] — 2026-10-01
 
 ### Added
