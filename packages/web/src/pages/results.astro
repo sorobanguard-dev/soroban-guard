@@ -1,0 +1,387 @@
+---
+import Masthead from "../components/Masthead.astro";
+import SiteFooter from "../components/SiteFooter.astro";
+import { checkAnchor, displayId } from "../data/check-id.ts";
+import { CHECK_REFERENCE } from "../data/check-reference.ts";
+import {
+	CONFORMANCE_DATE,
+	CONFORMANCE_NETWORK,
+	CONFORMANCE_RUNS,
+	CONFORMANCE_VERSION,
+	RUN_ORDER,
+	type ConformanceRun,
+} from "../data/conformance-table.ts";
+import { STATUS_GLYPH } from "soroban-guard/src/core/types.ts";
+import type { CheckStatus } from "soroban-guard/src/core/types.ts";
+import Base from "../layouts/Base.astro";
+
+/**
+ * A matrix of four named contracts, run 2026-10-18, bound to the rows of
+ * check-reference so neither page can drift from the other: the reference
+ * listing a check the runs do not cover here — or the converse — fails
+ * the build instead of showing a table whose row label and cells refer to
+ * different checks.
+ */
+interface RefEntry {
+	readonly id: string;
+	readonly member: string;
+	readonly qualifier?: string;
+	readonly anchor: string;
+}
+
+const refById = new Map<string, RefEntry>();
+let refCount = 0;
+for (const group of CHECK_REFERENCE.groups) {
+	for (const check of group.checks) {
+		refById.set(check.id, check);
+		refCount += 1;
+	}
+}
+if (refCount !== RUN_ORDER.length) {
+	throw new Error(
+		`/results: check-reference lists ${refCount} checks, the run table expects ${RUN_ORDER.length}; neither page should render a stale check set`,
+	);
+}
+const rows = RUN_ORDER.map((id) => {
+	const ref = refById.get(id);
+	if (ref === undefined) {
+		throw new Error(`/results: run table row ${id} is not in check-reference`);
+	}
+	return ref;
+});
+
+/** Cells carry a word as well as a glyph: a bare ✓ tells a screen reader nothing. */
+const SR_LABEL: Record<CheckStatus, string> = {
+	PASS: "passed",
+	FAIL: "failed",
+	UNVERIFIABLE: "unverifiable",
+	SKIPPED: "skipped",
+	NOT_IMPLEMENTED: "not implemented",
+};
+
+const total = (runs: readonly ConformanceRun[]) =>
+	runs.reduce(
+		(acc, run) => ({
+			pass: acc.pass + run.pass,
+			fail: acc.fail + run.fail,
+			unverifiable: acc.unverifiable + run.unverifiable,
+		}),
+		{ pass: 0, fail: 0, unverifiable: 0 },
+	);
+const TOTAL = total(CONFORMANCE_RUNS);
+
+const title = "Real-token results — soroban-guard";
+const description = `SEP-41 conformance of four testnet contracts — Stellar's asset contracts for native XLM and for a custom asset, and the tokens of stellar/soroban-examples and OpenZeppelin — run by soroban-guard ${CONFORMANCE_VERSION} on ${CONFORMANCE_DATE}.`;
+---
+
+<Base
+	title={title}
+	description={description}
+>
+	<Masthead page="results" />
+
+	<main>
+		<header class="intro">
+			<h1>Real-token results</h1>
+			<p>
+				Every verdict on this page is the output of an actual run:
+				<code>soroban-guard {CONFORMANCE_VERSION}</code> against four live
+				Stellar testnet contracts on {CONFORMANCE_DATE}, via{" "}
+				<code>--format json</code>, transcribed row for row and nothing
+				invented. The four have{" "}
+				<strong>{TOTAL.pass} pass · {TOTAL.fail} fail · {TOTAL.unverifiable} unverifiable</strong>
+				and every failure below belongs to one contract: the native asset.
+			</p>
+			<p class="where">{CONFORMANCE_NETWORK}</p>
+		</header>
+
+		<section class="matrix-wrap" aria-label="Conformance matrix">
+			<table class="matrix">
+				<thead>
+					<tr>
+						<th scope="col" class="check-col">
+							<span class="th-label">Check</span>
+						</th>
+						{
+							CONFORMANCE_RUNS.map((run) => (
+								<th scope="col">
+									<span class="th-label">{run.label}</span>
+									<span class="th-tally" data-v={run.fail > 0 ? "FAIL" : undefined}>
+										{run.pass} pass{run.fail > 0 && <> · {run.fail} fail</>}
+									</span>
+								</th>
+							))
+						}
+					</tr>
+				</thead>
+				<tbody>
+					{
+						rows.map((row) => (
+							<tr>
+								<th scope="row" class="check-col">
+									<a href={`/checks#${checkAnchor(row.id)}`}>
+										<span class="member">{displayId(row.id).member}</span>
+										{displayId(row.id).qualifier !== undefined && (
+											<span class="qual">{displayId(row.id).qualifier}</span>
+										)}
+									</a>
+								</th>
+								{CONFORMANCE_RUNS.map((run) => {
+									const status = run.statuses[row.id];
+									return (
+										<td data-v={status}>
+											<span class="g" aria-hidden="true">
+												{STATUS_GLYPH[status]}
+											</span>
+											<span class="sr-only">{SR_LABEL[status]}</span>
+										</td>
+									);
+								})}
+							</tr>
+						))
+					}
+				</tbody>
+			</table>
+		</section>
+
+		<section class="notes">
+			<h2>Why the native asset fails</h2>
+			<p>
+				Stellar favours one asset for fees: XLM itself. Measuring a
+				balance in the asset that also pays the transaction fee splits checks
+				that read a balance into two readings, one before one after the fee
+				is deducted — the tool's own words on four of its checks:
+			</p>
+			<blockquote>
+				<p>
+					— <code>transfer-zero-amount</code>, <code>transfer-self</code>: “the
+					holder's balance moved”; the move is the fee (6,942 stroops) a
+					zero transfer also pays. The clause says a zero transfer must move
+					nothing; measuring it in XLM cannot separate the transfer from
+					its cost.
+				</p>
+				<p>
+					— <code>transfer</code>, <code>transfer_from</code>: the same fee
+					swamps the ±1 stroop the check looks for, so no verdict is
+					possible in a fee-paying asset.
+				</p>
+			</blockquote>
+			<p>
+				There is a second, deliberate divergence: XLM supply is governed by
+				the protocol, and the asset contract provides no way to
+				<code>burn</code> or <code>burn_from</code> against it. Both refuse,
+				and the tool says so itself in the report: a clause unmet, a known
+				property of XLM rather than a contract defect.
+			</p>
+			<p class="aside">
+				The same protocol contract for a <em>custom</em> asset (the TEST
+				column) has no such fee coupling to itself, and it burns: 15 pass.
+				Conformance is a property of the <em>asset</em>, not just the code.
+			</p>
+		</section>
+
+			<section class="notes" id="unverifiable">
+			<h2>One check shows UNVERIFIABLE everywhere</h2>
+			<p>
+				<code>transfer_from-expired</code> needs an allowance whose
+				<code>live_until_ledger</code> has already passed, and to build one
+				it must first be able to grant a short-lived allowance at all. All
+				four fixtures refuse that, so the check reports what it knows
+				instead of inventing a verdict — which is the honest result, and
+				the one the site's verdict legend promises.
+			</p>
+			</section>
+
+		<section class="notes" id="repro">
+			<h2>Run these same four yourself</h2>
+			<p>
+				All four contracts are alive on testnet. Two examples were compiled
+				from their repositories at the commits named below and deployed by
+				us specifically for this page; the protocol asset contracts run on
+				the network, no one deploys them by hand.
+			</p>
+			<pre><code>{`# set: name+symbol the tool found, held by the identity paying fees
+npx soroban-guard CDABMBRIDJKHHNYHEQLE3GEINB5EKHGW62SDEXEOKNPKUF2MEJQVYLV5
+npx soroban-guard CC2LCJBERJPDTD27FGLYDTWAGSKEAJN42VT6SNQPVTEGQV63ZHKBSA5H
+# protocol contracts for the native and a custom asset
+npx soroban-guard CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC
+npx soroban-guard CARQGEM3RDSWA2SRZDL6LDBOEQWQHS74BOL5V62QXIGMOBIMIX5YTYYN
+
+# write-path checks need two funded Stellar identities the CLI can find as
+# OWNER_SECRET and SPENDER_SECRET in the environment
+stellar keys show alice > OWNER_SECRET
+stellar keys show bob   > SPENDER_SECRET`}</code></pre>
+			<p class="fine">
+				<code>--format json</code> prints the same status values this page
+				transcribes; <code>--format md</code> prints a Markdown report that
+				pastes straight into a PR.
+			</p>
+		</section>
+
+	</main>
+
+	<SiteFooter />
+</Base>
+
+<style>
+	.intro {
+		max-width: 76ch;
+	}
+
+	.intro h1 {
+		font-size: 40px;
+		line-height: 1.1;
+		letter-spacing: -0.02em;
+		margin: 0 0 var(--space-4);
+	}
+
+	.intro p {
+		color: var(--dim);
+		font-size: 17px;
+		line-height: 1.6;
+		margin: 0 0 var(--space-3);
+	}
+
+	.intro strong {
+		color: var(--ink);
+		font-weight: 500;
+	}
+
+	.intro .where {
+		font-size: 13px;
+		margin: 0;
+	}
+
+	.matrix-wrap {
+		overflow-x: auto;
+		margin-block: var(--space-6);
+	}
+
+	.matrix {
+		border-collapse: collapse;
+		min-width: 640px;
+		width: 100%;
+	}
+
+	.matrix th,
+	.matrix td {
+		border-bottom: 1px solid var(--line, #1e1e1e);
+		padding: 10px 14px;
+		text-align: center;
+		white-space: nowrap;
+	}
+
+	.matrix thead th {
+		color: var(--ink);
+		font-weight: 500;
+		vertical-align: bottom;
+	}
+
+	.th-label {
+		display: block;
+		font-size: 14px;
+	}
+
+	.th-tally {
+		color: var(--dim);
+		display: block;
+		font-size: 12px;
+		font-weight: 400;
+		margin-top: 2px;
+	}
+
+	.matrix .check-col {
+		text-align: left;
+	}
+
+	.matrix tbody th.check-col {
+		font-weight: 400;
+	}
+
+	.matrix tbody .member {
+		color: var(--ink);
+		font-size: 14px;
+	}
+
+	.matrix tbody .qual {
+		color: var(--dim);
+		display: block;
+		font-size: 12px;
+	}
+
+	.matrix a {
+		text-decoration: none;
+	}
+
+	.matrix a:hover .member {
+		text-decoration: underline;
+	}
+
+	.matrix td .g {
+		font-size: 15px;
+	}
+
+	.matrix td[data-v="PASS"] .g {
+		color: var(--pass);
+	}
+	.matrix td[data-v="FAIL"] .g {
+		color: var(--fail);
+	}
+	.matrix td[data-v="UNVERIFIABLE"] .g {
+		color: var(--unverifiable);
+	}
+
+	.sr-only {
+		position: absolute;
+		width: 1px;
+		height: 1px;
+		overflow: hidden;
+		clip-path: inset(50%);
+	}
+
+	.notes {
+		max-width: 76ch;
+		margin-block: var(--space-7);
+	}
+
+	.notes h2 {
+		font-size: 24px;
+		letter-spacing: -0.01em;
+		margin: 0 0 var(--space-3);
+	}
+
+	.notes p {
+		color: var(--dim);
+		line-height: 1.65;
+		margin: 0 0 var(--space-3);
+	}
+
+	.notes .aside {
+		border-left: 2px solid var(--pass);
+		padding-left: var(--space-4);
+	}
+
+	blockquote {
+		border-left: 2px solid var(--line, #1e1e1e);
+		color: var(--dim);
+		margin: var(--space-4) 0;
+		padding-left: var(--space-4);
+	}
+
+	.fine {
+		font-size: 13px;
+	}
+
+	pre {
+		background: var(--raised);
+		border-radius: 10px;
+		font-size: 13.5px;
+		line-height: 1.6;
+		overflow-x: auto;
+		padding: var(--space-4);
+	}
+
+	code {
+		font-size: 0.95em;
+	}
+</style>

@@ -11,5 +11,6 @@ export const PAGES: readonly {
 	{ href: "/", label: "Home" },
 	{ href: "/run", label: "Run in your browser" },
 	{ href: "/checks", label: "Checks" },
+	{ href: "/results", label: "Results" },
 	{ href: "/changelog", label: "Changelog" },
 ];
