@@ -1,0 +1,303 @@
+{
+  "schema": "soroban-guard/report@1",
+  "standard": "SEP-41",
+  "contractId": "CC2LCJBERJPDTD27FGLYDTWAGSKEAJN42VT6SNQPVTEGQV63ZHKBSA5H",
+  "rpcUrl": "https://soroban-testnet.stellar.org",
+  "ranAt": "2026-10-19T11:19:45.005Z",
+  "exitCode": 0,
+  "summary": {
+    "total": 16,
+    "pass": 16,
+    "fail": 0,
+    "unverifiable": 0,
+    "skipped": 0,
+    "notImplemented": 0
+  },
+  "results": [
+    {
+      "id": "sep41-decimals",
+      "clause": "SEP-41 §decimals",
+      "layer": "interface",
+      "requirement": "required",
+      "status": "PASS",
+      "expected": "u32 decimal precision",
+      "actual": "returned 18",
+      "evidence": {
+        "ledger": 5277040
+      },
+      "durationMs": 326
+    },
+    {
+      "id": "sep41-balance",
+      "clause": "SEP-41 §balance",
+      "layer": "behavior",
+      "requirement": "required",
+      "status": "PASS",
+      "expected": "non-negative balance for the holder",
+      "actual": "balance is 999999999992",
+      "evidence": {
+        "ledger": 5277040
+      },
+      "durationMs": 306
+    },
+    {
+      "id": "sep41-allowance",
+      "clause": "SEP-41 §allowance",
+      "layer": "behavior",
+      "requirement": "required",
+      "status": "PASS",
+      "expected": "non-negative allowance from owner to spender",
+      "actual": "allowance is 0",
+      "evidence": {
+        "ledger": 5277040
+      },
+      "durationMs": 354
+    },
+    {
+      "id": "sep41-name",
+      "clause": "SEP-41 §name",
+      "layer": "interface",
+      "requirement": "required",
+      "status": "PASS",
+      "expected": "string token name",
+      "actual": "name is \"OpenZeppelin Pausable Token\"",
+      "evidence": {
+        "ledger": 5277040
+      },
+      "durationMs": 314
+    },
+    {
+      "id": "sep41-symbol",
+      "clause": "SEP-41 §symbol",
+      "layer": "interface",
+      "requirement": "required",
+      "status": "PASS",
+      "expected": "string token symbol",
+      "actual": "symbol is \"OZPT\"",
+      "evidence": {
+        "ledger": 5277040
+      },
+      "durationMs": 321
+    },
+    {
+      "id": "sep41-transfer_from-unauthorized",
+      "clause": "SEP-41 §transfer_from",
+      "layer": "behavior",
+      "requirement": "required",
+      "status": "PASS",
+      "expected": "transfer_from refuses a spender with no allowance from the holder",
+      "actual": "an unauthorized spend was refused",
+      "evidence": {
+        "error": "Transaction simulation failed: \"HostError: Error(Contract, #101)\n\nEvent log (newest first):\n   0: [Diagnostic Event] contract:CC2LCJBERJPDTD27FGLYDTWAGSKEAJN42VT6SNQPVTEGQV63ZHKBSA5H, topics:[error, Error(Contract, #101)], data:\"escalating error to VM trap from failed host function call: fail_with_error\"\n   1: [Diagnostic Event] contract:CC2LCJBERJPDTD27FGLYDTWAGSKEAJN42VT6SNQPVTEGQV63ZHKBSA5H, topics:[error, Error(Contract, #101)], data:[\"failing with contract error\", 101]\n   2: [Diagnostic Event] topics:[fn_call, CC2LCJBERJPDTD27FGLYDTWAGSKEAJN42VT6SNQPVTEGQV63ZHKBSA5H, transfer_from], data:[GDS6R6VS3OTSWVVYS6G5XXO3QBW5BBIAKQGCMA44PWNLCWY2SVGWCC25, GDMEI62DG7T56E2CRGHQBK66ZT73ITHV5VMNCUZUQLO53RHUAPVDGCDU, GDS6R6VS3OTSWVVYS6G5XXO3QBW5BBIAKQGCMA44PWNLCWY2SVGWCC25, 1]\n\""
+      },
+      "durationMs": 1617
+    },
+    {
+      "id": "sep41-transfer-zero-amount",
+      "clause": "SEP-41 §transfer",
+      "layer": "behavior",
+      "requirement": "required",
+      "status": "PASS",
+      "expected": "a transfer of zero leaves both balances unchanged",
+      "actual": "the call was accepted and both balances held, at 999999999992 and 4",
+      "evidence": {
+        "before": {
+          "holder": "999999999992",
+          "recipient": "4"
+        },
+        "after": {
+          "holder": "999999999992",
+          "recipient": "4"
+        },
+        "txHash": "a79c4b62fa2fd33a521682c71d58ba08fb0fe04a8fb1d06f9ea5c1b881a91c45",
+        "ledger": 5277042
+      },
+      "durationMs": 8117
+    },
+    {
+      "id": "sep41-transfer-self",
+      "clause": "SEP-41 §transfer",
+      "layer": "behavior",
+      "requirement": "required",
+      "status": "PASS",
+      "expected": "a transfer to oneself leaves the balance unchanged",
+      "actual": "the call was accepted and the balance held at 999999999992",
+      "evidence": {
+        "before": {
+          "holder": "999999999992"
+        },
+        "after": {
+          "holder": "999999999992"
+        },
+        "txHash": "0139efff4c02bae0f3c8683ee61cc2fe7ff1fe734b82327efde46ef2ad4b3537",
+        "ledger": 5277043
+      },
+      "durationMs": 3170
+    },
+    {
+      "id": "sep41-transfer-negative-amount",
+      "clause": "SEP-41 §transfer",
+      "layer": "behavior",
+      "requirement": "required",
+      "status": "PASS",
+      "expected": "transfer refuses a negative amount",
+      "actual": "a transfer of -1 was refused",
+      "evidence": {
+        "before": {
+          "holder": "999999999992",
+          "recipient": "4"
+        },
+        "error": "Transaction simulation failed: \"HostError: Error(Contract, #103)\n\nEvent log (newest first):\n   0: [Diagnostic Event] contract:CC2LCJBERJPDTD27FGLYDTWAGSKEAJN42VT6SNQPVTEGQV63ZHKBSA5H, topics:[error, Error(Contract, #103)], data:\"escalating error to VM trap from failed host function call: fail_with_error\"\n   1: [Diagnostic Event] contract:CC2LCJBERJPDTD27FGLYDTWAGSKEAJN42VT6SNQPVTEGQV63ZHKBSA5H, topics:[error, Error(Contract, #103)], data:[\"failing with contract error\", 103]\n   2: [Diagnostic Event] topics:[fn_call, CC2LCJBERJPDTD27FGLYDTWAGSKEAJN42VT6SNQPVTEGQV63ZHKBSA5H, transfer], data:[GDMEI62DG7T56E2CRGHQBK66ZT73ITHV5VMNCUZUQLO53RHUAPVDGCDU, GDS6R6VS3OTSWVVYS6G5XXO3QBW5BBIAKQGCMA44PWNLCWY2SVGWCC25, -1]\n\""
+      },
+      "durationMs": 1301
+    },
+    {
+      "id": "sep41-transfer-over-balance",
+      "clause": "SEP-41 §transfer",
+      "layer": "behavior",
+      "requirement": "required",
+      "status": "PASS",
+      "expected": "transfer refuses to move more than the holder's balance",
+      "actual": "a transfer of 999999999993 against a balance of 999999999992 was refused",
+      "evidence": {
+        "before": {
+          "holder": "999999999992",
+          "recipient": "4"
+        },
+        "error": "Transaction simulation failed: \"HostError: Error(Contract, #100)\n\nEvent log (newest first):\n   0: [Diagnostic Event] contract:CC2LCJBERJPDTD27FGLYDTWAGSKEAJN42VT6SNQPVTEGQV63ZHKBSA5H, topics:[error, Error(Contract, #100)], data:\"escalating error to VM trap from failed host function call: fail_with_error\"\n   1: [Diagnostic Event] contract:CC2LCJBERJPDTD27FGLYDTWAGSKEAJN42VT6SNQPVTEGQV63ZHKBSA5H, topics:[error, Error(Contract, #100)], data:[\"failing with contract error\", 100]\n   2: [Diagnostic Event] topics:[fn_call, CC2LCJBERJPDTD27FGLYDTWAGSKEAJN42VT6SNQPVTEGQV63ZHKBSA5H, transfer], data:[GDMEI62DG7T56E2CRGHQBK66ZT73ITHV5VMNCUZUQLO53RHUAPVDGCDU, GDS6R6VS3OTSWVVYS6G5XXO3QBW5BBIAKQGCMA44PWNLCWY2SVGWCC25, 999999999993]\n\""
+      },
+      "durationMs": 16303
+    },
+    {
+      "id": "sep41-transfer",
+      "clause": "SEP-41 §transfer",
+      "layer": "behavior",
+      "requirement": "required",
+      "status": "PASS",
+      "expected": "transfer moves the amount from holder to recipient",
+      "actual": "holder -1, recipient +1",
+      "evidence": {
+        "before": {
+          "holder": "999999999992",
+          "recipient": "4"
+        },
+        "after": {
+          "holder": "999999999991",
+          "recipient": "5"
+        },
+        "txHash": "63679cc0e98d04152739d3f18a765f97b8899b09148ea711ef84c3b48f1fbe78",
+        "ledger": 5277048
+      },
+      "durationMs": 8427
+    },
+    {
+      "id": "sep41-approve",
+      "clause": "SEP-41 §approve",
+      "layer": "behavior",
+      "requirement": "required",
+      "status": "PASS",
+      "expected": "approve sets the spender's allowance to the given amount",
+      "actual": "allowance is 2 after approving 2 over 1",
+      "evidence": {
+        "before": {
+          "allowance": "0"
+        },
+        "after": {
+          "allowance": "2"
+        },
+        "txHash": "2bbd5399f3f86094687d4a65ac60368d43945211eaf4d74b2a610669792bfea2",
+        "ledger": 5277049,
+        "confirmTxHash": "ecd70f05fcb974a51d42f60d0e3fa52cd2044c094eb946c99ed42841087aeb25"
+      },
+      "durationMs": 19312
+    },
+    {
+      "id": "sep41-transfer_from",
+      "clause": "SEP-41 §transfer_from",
+      "layer": "behavior",
+      "requirement": "required",
+      "status": "PASS",
+      "expected": "transfer_from moves the amount and consumes the spender's allowance",
+      "actual": "holder -1, recipient +1, allowance -1",
+      "evidence": {
+        "before": {
+          "holder": "999999999991",
+          "recipient": "5",
+          "allowance": "2"
+        },
+        "after": {
+          "holder": "999999999990",
+          "recipient": "6",
+          "allowance": "1"
+        },
+        "txHash": "33603090cf8d8f92dae96d3e04b31f3a66e4398d89e9c9460b4b4d011ff69047",
+        "ledger": 5277053
+      },
+      "durationMs": 4995
+    },
+    {
+      "id": "sep41-burn",
+      "clause": "SEP-41 §burn",
+      "layer": "behavior",
+      "requirement": "required",
+      "status": "PASS",
+      "expected": "burn removes the amount from the holder's balance",
+      "actual": "holder -1",
+      "evidence": {
+        "before": {
+          "holder": "999999999990"
+        },
+        "after": {
+          "holder": "999999999989"
+        },
+        "txHash": "f95570d3a28fe29b7c8cf2f9d0b5ee2158673e5852a8bcca65c4786fb5ce7d2d",
+        "ledger": 5277054
+      },
+      "durationMs": 5070
+    },
+    {
+      "id": "sep41-burn_from",
+      "clause": "SEP-41 §burn_from",
+      "layer": "behavior",
+      "requirement": "required",
+      "status": "PASS",
+      "expected": "burn_from removes the amount from the holder and consumes the allowance",
+      "actual": "holder -1, spender 0, allowance -1",
+      "evidence": {
+        "before": {
+          "holder": "999999999989",
+          "spender": "6",
+          "allowance": "1"
+        },
+        "after": {
+          "holder": "999999999988",
+          "spender": "6",
+          "allowance": "0"
+        },
+        "txHash": "525a1bc1074f1f91ae704b7835c35ba56bba04423ddd9149ace736233a715484",
+        "ledger": 5277058
+      },
+      "durationMs": 20136
+    },
+    {
+      "id": "sep41-transfer_from-expired",
+      "clause": "SEP-41 §transfer_from",
+      "layer": "behavior",
+      "requirement": "required",
+      "status": "PASS",
+      "expected": "transfer_from refuses a spend against an allowance whose live_until_ledger has passed",
+      "actual": "a spend against an allowance that expired at ledger 5277060 was refused at ledger 5277063",
+      "evidence": {
+        "before": {
+          "granted": "1",
+          "allowance": "0",
+          "holder": "999999999988",
+          "recipient": "6"
+        },
+        "ledger": 5277063,
+        "error": "Transaction simulation failed: \"HostError: Error(Contract, #101)\n\nEvent log (newest first):\n   0: [Diagnostic Event] contract:CC2LCJBERJPDTD27FGLYDTWAGSKEAJN42VT6SNQPVTEGQV63ZHKBSA5H, topics:[error, Error(Contract, #101)], data:\"escalating error to VM trap from failed host function call: fail_with_error\"\n   1: [Diagnostic Event] contract:CC2LCJBERJPDTD27FGLYDTWAGSKEAJN42VT6SNQPVTEGQV63ZHKBSA5H, topics:[error, Error(Contract, #101)], data:[\"failing with contract error\", 101]\n   2: [Diagnostic Event] topics:[fn_call, CC2LCJBERJPDTD27FGLYDTWAGSKEAJN42VT6SNQPVTEGQV63ZHKBSA5H, transfer_from], data:[GDS6R6VS3OTSWVVYS6G5XXO3QBW5BBIAKQGCMA44PWNLCWY2SVGWCC25, GDMEI62DG7T56E2CRGHQBK66ZT73ITHV5VMNCUZUQLO53RHUAPVDGCDU, GDS6R6VS3OTSWVVYS6G5XXO3QBW5BBIAKQGCMA44PWNLCWY2SVGWCC25, 1]\n\""
+      },
+      "durationMs": 27795
+    }
+  ]
+}

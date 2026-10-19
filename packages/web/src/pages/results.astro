@@ -9,14 +9,17 @@ import {
 	CONFORMANCE_RUNS,
 	CONFORMANCE_VERSION,
 	RUN_ORDER,
+	type Cell,
 	type ConformanceRun,
 } from "../data/conformance-table.ts";
+
+const EXPLORER_TX = "https://stellar.expert/explorer/testnet/tx/";
 import { STATUS_GLYPH } from "soroban-guard/src/core/types.ts";
 import type { CheckStatus } from "soroban-guard/src/core/types.ts";
 import Base from "../layouts/Base.astro";
 
 /**
- * A matrix of four named contracts, run 2026-10-18, bound to the rows of
+ * A matrix of named contracts, read from committed CLI reports and bound to the rows of
  * check-reference so neither page can drift from the other: the reference
  * listing a check the runs do not cover here — or the converse — fails
  * the build instead of showing a table whose row label and cells refer to
@@ -37,7 +40,9 @@ for (const group of CHECK_REFERENCE.groups) {
 		refCount += 1;
 	}
 }
-if (refCount !== RUN_ORDER.length) {
+// Same length is not the same set: a duplicated id in the run order would
+// match the count while leaving a reference check without a row.
+if (refCount !== RUN_ORDER.length || new Set(RUN_ORDER).size !== refCount) {
 	throw new Error(
 		`/results: check-reference lists ${refCount} checks, the run table expects ${RUN_ORDER.length}; neither page should render a stale check set`,
 	);
@@ -71,7 +76,7 @@ const total = (runs: readonly ConformanceRun[]) =>
 const TOTAL = total(CONFORMANCE_RUNS);
 
 const title = "Real-token results — soroban-guard";
-const description = `SEP-41 conformance of four testnet contracts — Stellar's asset contracts for native XLM and for a custom asset, and the tokens of stellar/soroban-examples and OpenZeppelin — run by soroban-guard ${CONFORMANCE_VERSION} on ${CONFORMANCE_DATE}.`;
+const description = `SEP-41 conformance of ${CONFORMANCE_RUNS.length} testnet contracts — the tokens of stellar/soroban-examples and OpenZeppelin, and Stellar's asset contract for a custom asset — run by soroban-guard ${CONFORMANCE_VERSION} on ${CONFORMANCE_DATE}, every write linked to its transaction.`;
 ---
 
 <Base
@@ -84,13 +89,17 @@ const description = `SEP-41 conformance of four testnet contracts — Stellar's 
 		<header class="intro">
 			<h1>Real-token results</h1>
 			<p>
-				Every verdict on this page is the output of an actual run:
-				<code>soroban-guard {CONFORMANCE_VERSION}</code> against four live
-				Stellar testnet contracts on {CONFORMANCE_DATE}, via{" "}
-				<code>--format json</code>, transcribed row for row and nothing
-				invented. The four have{" "}
-				<strong>{TOTAL.pass} pass · {TOTAL.fail} fail · {TOTAL.unverifiable} unverifiable</strong>
-				and every failure below belongs to one contract: the native asset.
+				Every verdict on this page is read from the report of an actual run:
+				<code>soroban-guard {CONFORMANCE_VERSION}</code> against
+				{" "}{CONFORMANCE_RUNS.length} live Stellar testnet contracts on
+				{" "}{CONFORMANCE_DATE}, with <code>--format json</code>. The
+				reports are committed with this page and the table is built from
+				them, so nothing here was copied by hand. Together:{" "}
+				<strong>{TOTAL.pass} pass · {TOTAL.fail} fail · {TOTAL.unverifiable} unverifiable</strong>.
+			</p>
+			<p>
+				Every check that writes links to the transaction it settled — click
+				a ✓ to see it on the ledger.
 			</p>
 			<p class="where">{CONFORMANCE_NETWORK}</p>
 		</header>
@@ -127,13 +136,29 @@ const description = `SEP-41 conformance of four testnet contracts — Stellar's 
 									</a>
 								</th>
 								{CONFORMANCE_RUNS.map((run) => {
-									const status = run.statuses[row.id];
-									return (
-										<td data-v={status}>
+									const cell = run.cells[row.id] as Cell;
+									const mark = (
+										<>
 											<span class="g" aria-hidden="true">
-												{STATUS_GLYPH[status]}
+												{STATUS_GLYPH[cell.status]}
 											</span>
-											<span class="sr-only">{SR_LABEL[status]}</span>
+											<span class="sr-only">{SR_LABEL[cell.status]}</span>
+										</>
+									);
+									// A write links to the transaction it settled, so a
+									// verdict can be checked on the ledger, not taken on trust.
+									return (
+										<td data-v={cell.status} title={cell.actual}>
+											{cell.txHash === undefined ? (
+												mark
+											) : (
+												<a
+													href={`${EXPLORER_TX}${cell.txHash}`}
+													aria-label={`${SR_LABEL[cell.status]}: view the transaction`}
+												>
+													{mark}
+												</a>
+											)}
 										</td>
 									);
 								})}
@@ -144,77 +169,71 @@ const description = `SEP-41 conformance of four testnet contracts — Stellar's 
 			</table>
 		</section>
 
-		<section class="notes">
-			<h2>Why the native asset fails</h2>
+		<section class="notes" id="contracts">
+			<h2>The contracts</h2>
+			<ul class="contracts">
+				{
+					CONFORMANCE_RUNS.map((run) => (
+						<li>
+							<strong>{run.label}</strong>
+							<code>{run.contractId}</code>
+							<span>
+								{run.originUrl === undefined ? (
+									run.origin
+								) : (
+									<a href={run.originUrl}>{run.origin}</a>
+								)}
+							</span>
+						</li>
+					))
+				}
+			</ul>
+		</section>
+
+		<section class="notes" id="native">
+			<h2>Native XLM is next</h2>
 			<p>
-				Stellar favours one asset for fees: XLM itself. Measuring a
-				balance in the asset that also pays the transaction fee splits checks
-				that read a balance into two readings, one before one after the fee
-				is deducted — the tool's own words on four of its checks:
+				Native XLM was run too, and it found a flaw in soroban-guard
+				rather than in XLM. Transaction fees are paid in XLM, so on the
+				XLM contract the account that signs also pays the fee out of the
+				balance being measured. <code>transfer</code> already accounts for
+				that and withholds a verdict, but the zero-amount and self-transfer
+				checks did not: they counted the fee as the contract moving value,
+				and reported FAIL.
 			</p>
-			<blockquote>
-				<p>
-					— <code>transfer-zero-amount</code>, <code>transfer-self</code>: “the
-					holder's balance moved”; the move is the fee (6,942 stroops) a
-					zero transfer also pays. The clause says a zero transfer must move
-					nothing; measuring it in XLM cannot separate the transfer from
-					its cost.
-				</p>
-				<p>
-					— <code>transfer</code>, <code>transfer_from</code>: the same fee
-					swamps the ±1 stroop the check looks for, so no verdict is
-					possible in a fee-paying asset.
-				</p>
-			</blockquote>
 			<p>
-				There is a second, deliberate divergence: XLM supply is governed by
-				the protocol, and the asset contract provides no way to
-				<code>burn</code> or <code>burn_from</code> against it. Both refuse,
-				and the tool says so itself in the report: a clause unmet, a known
-				property of XLM rather than a contract defect.
-			</p>
-			<p class="aside">
-				The same protocol contract for a <em>custom</em> asset (the TEST
-				column) has no such fee coupling to itself, and it burns: 15 pass.
-				Conformance is a property of the <em>asset</em>, not just the code.
+				Those two checks are being fixed to withhold a verdict the same
+				way. XLM joins this table with the release that fixes them —
+				publishing two failures we know to be our own would be exactly the
+				kind of claim this tool exists to prevent.
 			</p>
 		</section>
 
-			<section class="notes" id="unverifiable">
-			<h2>One check shows UNVERIFIABLE everywhere</h2>
-			<p>
-				<code>transfer_from-expired</code> needs an allowance whose
-				<code>live_until_ledger</code> has already passed, and to build one
-				it must first be able to grant a short-lived allowance at all. All
-				four fixtures refuse that, so the check reports what it knows
-				instead of inventing a verdict — which is the honest result, and
-				the one the site's verdict legend promises.
-			</p>
-			</section>
-
 		<section class="notes" id="repro">
-			<h2>Run these same four yourself</h2>
+			<h2>Run them yourself</h2>
 			<p>
-				All four contracts are alive on testnet. Two examples were compiled
-				from their repositories at the commits named below and deployed by
-				us specifically for this page; the protocol asset contracts run on
-				the network, no one deploys them by hand.
+				The three were live on testnet on {CONFORMANCE_DATE}. Testnet is
+				reset from time to time, and the two example tokens, compiled at the
+				commits listed above and deployed for this page, go with it; the
+				asset contract is the network's own.
 			</p>
-			<pre><code>{`# set: name+symbol the tool found, held by the identity paying fees
+			<p>
+				Without keys, anyone gets the five reads. The writes need a holder
+				with at least five units and a second, funded account. The two
+				example tokens mint only to their admin, so their write rows can be
+				repeated by whoever holds their units, not by any visitor.
+			</p>
+			<pre><code>{`# the reads
 npx soroban-guard CDABMBRIDJKHHNYHEQLE3GEINB5EKHGW62SDEXEOKNPKUF2MEJQVYLV5
-npx soroban-guard CC2LCJBERJPDTD27FGLYDTWAGSKEAJN42VT6SNQPVTEGQV63ZHKBSA5H
-# protocol contracts for the native and a custom asset
-npx soroban-guard CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC
-npx soroban-guard CARQGEM3RDSWA2SRZDL6LDBOEQWQHS74BOL5V62QXIGMOBIMIX5YTYYN
 
-# write-path checks need two funded Stellar identities the CLI can find as
-# OWNER_SECRET and SPENDER_SECRET in the environment
-stellar keys show alice > OWNER_SECRET
-stellar keys show bob   > SPENDER_SECRET`}</code></pre>
+# all sixteen: a holder and a second account, both funded on testnet
+OWNER_SECRET=$(stellar keys secret owner) \\
+SPENDER_SECRET=$(stellar keys secret spender) \\
+  npx soroban-guard <contract-id> --format json`}</code></pre>
 			<p class="fine">
-				<code>--format json</code> prints the same status values this page
-				transcribes; <code>--format md</code> prints a Markdown report that
-				pastes straight into a PR.
+				<code>--format json</code> writes the report this page is built
+				from; <code>--format md</code> writes a Markdown report that pastes
+				straight into a PR.
 			</p>
 		</section>
 
@@ -370,6 +389,29 @@ stellar keys show bob   > SPENDER_SECRET`}</code></pre>
 
 	.fine {
 		font-size: 13px;
+	}
+
+	.contracts {
+		list-style: none;
+		margin: 0;
+		padding: 0;
+	}
+
+	.contracts li {
+		color: var(--dim);
+		display: grid;
+		gap: 2px;
+		margin-bottom: var(--space-3);
+	}
+
+	.contracts strong {
+		color: var(--ink);
+		font-weight: 500;
+	}
+
+	.contracts code {
+		font-size: 12.5px;
+		overflow-wrap: anywhere;
 	}
 
 	pre {

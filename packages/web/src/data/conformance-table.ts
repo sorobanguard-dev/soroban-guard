@@ -1,34 +1,20 @@
 /**
- * Four real CLI runs, transcribed from their `--format json` output:
- * 2026-10-18, soroban-guard 0.4.3 on Stellar testnet
- * (https://soroban-testnet.stellar.org). Nothing invented — the page
- * tallies are counted from these arrays so they cannot drift from them.
+ * Real CLI runs, read from the `--format json` reports committed beside
+ * this file in `results/`. Nothing is transcribed: every cell, tally and
+ * transaction link on /results comes from those files, and each report is
+ * checked as it loads — a missing check, a duplicate, a contract id that
+ * does not match its column, or a summary that disagrees with its own
+ * rows fails the build instead of publishing a wrong table.
  *
- * Statuses are keyed by check id; the page pairs each id with its row in
- * check-reference rather than repeating the check list here, and asserts
- * the two orders agree, so a check added to the reference without a cell
- * below (or vice versa) fails the build instead of vanishing from the
- * page.
+ * The reports carry no tool version, so the version they were produced
+ * with is recorded here, beside them.
  */
 import type { CheckStatus } from "soroban-guard/src/core/types.ts";
+import ozpt from "./results/ozpt.json";
+import set from "./results/set.json";
+import test from "./results/test.json";
 
-export interface ConformanceRun {
-	/** Stable key, also used as the column's slug. */
-	readonly name: string;
-	/** Column header: the asset as the contract names it. */
-	readonly label: string;
-	readonly contractId: string;
-	/** Where the wasm came from, in one sentence. */
-	readonly origin: string;
-	readonly originUrl?: string;
-	/** The summary exactly as `--format json` counted it. */
-	readonly pass: number;
-	readonly fail: number;
-	readonly unverifiable: number;
-	readonly statuses: Record<string, CheckStatus>;
-}
-
-export const CONFORMANCE_DATE = "2026-10-18";
+/** The tool version that produced the reports in `results/`. */
 export const CONFORMANCE_VERSION = "0.4.3";
 export const CONFORMANCE_NETWORK =
 	"Stellar testnet · soroban-testnet.stellar.org";
@@ -53,99 +39,162 @@ export const RUN_ORDER: readonly string[] = [
 	"sep41-transfer_from-expired",
 ];
 
-const P = "PASS";
-const F = "FAIL";
-const U = "UNVERIFIABLE";
+/** The shape of a `soroban-guard/report@1` document, as far as this page reads it. */
+interface Report {
+	readonly schema: string;
+	readonly contractId: string;
+	readonly ranAt: string;
+	readonly exitCode: number;
+	readonly summary: {
+		readonly total: number;
+		readonly pass: number;
+		readonly fail: number;
+		readonly unverifiable: number;
+	};
+	readonly results: readonly {
+		readonly id: string;
+		readonly status: string;
+		readonly actual: string;
+		readonly evidence?: { readonly txHash?: string };
+	}[];
+}
 
-/** Everything passes except the final expiry check, whose obstacle is the same on every implementation: see the page. */
-const CLEAN_RUN: readonly CheckStatus[] = [
-	P,
-	P,
-	P,
-	P,
-	P,
-	P,
-	P,
-	P,
-	P,
-	P,
-	P,
-	P,
-	P,
-	P,
-	P,
-	U,
+export interface Cell {
+	readonly status: CheckStatus;
+	/** The check's own one-line finding, verbatim from the report. */
+	readonly actual: string;
+	/** The settled transaction behind a write, when the check made one. */
+	readonly txHash?: string;
+}
+
+export interface ConformanceRun {
+	/** Stable key, also the report's file name. */
+	readonly name: string;
+	/** Column header: the asset as the contract names it. */
+	readonly label: string;
+	readonly contractId: string;
+	/** Where the wasm came from, in one sentence. */
+	readonly origin: string;
+	readonly originUrl?: string;
+	readonly ranAt: string;
+	readonly exitCode: number;
+	readonly pass: number;
+	readonly fail: number;
+	readonly unverifiable: number;
+	readonly cells: Readonly<Record<string, Cell>>;
+}
+
+const STATUSES: readonly CheckStatus[] = [
+	"PASS",
+	"FAIL",
+	"UNVERIFIABLE",
+	"SKIPPED",
+	"NOT_IMPLEMENTED",
 ];
 
-/** The native asset's divergences, in run order. */
-const NATIVE_RUN: readonly CheckStatus[] = [
-	P,
-	P,
-	P,
-	P,
-	P,
-	P,
-	F,
-	F,
-	P,
-	P,
-	U,
-	P,
-	U,
-	F,
-	F,
-	U,
-];
+/** Read one report, refusing anything the table could misstate. */
+export function fromReport(
+	column: Pick<
+		ConformanceRun,
+		"name" | "label" | "contractId" | "origin" | "originUrl"
+	>,
+	report: Report,
+): ConformanceRun {
+	const fail = (why: string) => {
+		throw new Error(`conformance-table: ${column.name}.json ${why}`);
+	};
+	if (report.schema !== "soroban-guard/report@1") {
+		fail(`has schema ${report.schema}`);
+	}
+	if (report.contractId !== column.contractId) {
+		fail(`is a report for ${report.contractId}, not ${column.contractId}`);
+	}
+	const cells: Record<string, Cell> = {};
+	for (const result of report.results) {
+		if (!STATUSES.includes(result.status as CheckStatus)) {
+			fail(`gives ${result.id} the unknown status ${result.status}`);
+		}
+		if (result.id in cells) {
+			fail(`reports ${result.id} twice`);
+		}
+		const txHash = result.evidence?.txHash;
+		cells[result.id] = {
+			status: result.status as CheckStatus,
+			actual: result.actual,
+			...(txHash === undefined ? {} : { txHash }),
+		};
+	}
+	const ids = Object.keys(cells);
+	const missing = RUN_ORDER.filter((id) => !(id in cells));
+	const extra = ids.filter((id) => !RUN_ORDER.includes(id));
+	if (missing.length > 0 || extra.length > 0) {
+		fail(
+			`does not match the check set (missing ${missing.join(", ") || "none"}; extra ${extra.join(", ") || "none"})`,
+		);
+	}
+	const count = (status: CheckStatus) =>
+		Object.values(cells).filter((cell) => cell.status === status).length;
+	const tally = {
+		pass: count("PASS"),
+		fail: count("FAIL"),
+		unverifiable: count("UNVERIFIABLE"),
+	};
+	const { summary } = report;
+	if (
+		summary.total !== ids.length ||
+		summary.pass !== tally.pass ||
+		summary.fail !== tally.fail ||
+		summary.unverifiable !== tally.unverifiable
+	) {
+		fail("has a summary that disagrees with its own rows");
+	}
+	return {
+		...column,
+		ranAt: report.ranAt,
+		exitCode: report.exitCode,
+		...tally,
+		cells,
+	};
+}
 
-const from = (statuses: readonly CheckStatus[]) =>
-	Object.fromEntries(
-		RUN_ORDER.map((id, i) => [id, statuses[i]]),
-	) satisfies Record<string, CheckStatus>;
-
-const tally = (statuses: readonly CheckStatus[]) => ({
-	pass: statuses.filter((s) => s === P).length,
-	fail: statuses.filter((s) => s === F).length,
-	unverifiable: statuses.filter((s) => s === U).length,
-});
-
-/** The four fixtures, in table order. */
+/** The runs, in table order. */
 export const CONFORMANCE_RUNS: readonly ConformanceRun[] = [
-	{
-		name: "soroban-examples",
-		label: "Soroban Example Token (SET)",
-		contractId: "CDABMBRIDJKHHNYHEQLE3GEINB5EKHGW62SDEXEOKNPKUF2MEJQVYLV5",
-		origin:
-			"stellar/soroban-examples at 03d42aa6 — the repo's token example, compiled and deployed for this table",
-		originUrl: "https://github.com/stellar/soroban-examples",
-		...tally(CLEAN_RUN),
-		statuses: from(CLEAN_RUN),
-	},
-	{
-		name: "openzeppelin",
-		label: "OpenZeppelin Pausable Token (OZPT)",
-		contractId: "CC2LCJBERJPDTD27FGLYDTWAGSKEAJN42VT6SNQPVTEGQV63ZHKBSA5H",
-		origin:
-			"OpenZeppelin/stellar-contracts at 33b665bc — the fungible-pausable example, compiled and deployed for this table",
-		originUrl: "https://github.com/OpenZeppelin/stellar-contracts",
-		...tally(CLEAN_RUN),
-		statuses: from(CLEAN_RUN),
-	},
-	{
-		name: "sac-native",
-		label: "Native XLM (SAC)",
-		contractId: "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC",
-		origin:
-			"the protocol's asset contract for XLM, as the network itself deploys it",
-		...tally(NATIVE_RUN),
-		statuses: from(NATIVE_RUN),
-	},
-	{
-		name: "sac-test",
-		label: "Custom-asset SAC (TEST)",
-		contractId: "CARQGEM3RDSWA2SRZDL6LDBOEQWQHS74BOL5V62QXIGMOBIMIX5YTYYN",
-		origin:
-			"the protocol's asset contract for a custom asset, deployed on testnet",
-		...tally(CLEAN_RUN),
-		statuses: from(CLEAN_RUN),
-	},
+	fromReport(
+		{
+			name: "set",
+			label: "Soroban Example Token (SET)",
+			contractId: "CDABMBRIDJKHHNYHEQLE3GEINB5EKHGW62SDEXEOKNPKUF2MEJQVYLV5",
+			origin:
+				"stellar/soroban-examples at 03d42aa6 — the repo's token example, compiled and deployed for this table",
+			originUrl: "https://github.com/stellar/soroban-examples",
+		},
+		set,
+	),
+	fromReport(
+		{
+			name: "ozpt",
+			label: "OpenZeppelin Pausable Token (OZPT)",
+			contractId: "CC2LCJBERJPDTD27FGLYDTWAGSKEAJN42VT6SNQPVTEGQV63ZHKBSA5H",
+			origin:
+				"OpenZeppelin/stellar-contracts at 33b665bc — the fungible-pausable example, compiled and deployed for this table",
+			originUrl: "https://github.com/OpenZeppelin/stellar-contracts",
+		},
+		ozpt,
+	),
+	fromReport(
+		{
+			name: "test",
+			label: "Custom-asset SAC (TEST)",
+			contractId: "CARQGEM3RDSWA2SRZDL6LDBOEQWQHS74BOL5V62QXIGMOBIMIX5YTYYN",
+			origin:
+				"the protocol's asset contract for a custom asset, deployed on testnet",
+		},
+		test,
+	),
 ];
+
+/** The day the runs were made, from the reports themselves. */
+export const CONFORMANCE_DATE = (() => {
+	const days = new Set(CONFORMANCE_RUNS.map((run) => run.ranAt.slice(0, 10)));
+	return [...days].sort().join(" – ");
+})();
