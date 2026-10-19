@@ -95,6 +95,15 @@ apply. An unanswered comment is an open review, whoever wrote it.
 
 ## Release
 
+Before tagging:
+
+1. Batch fixes into one release; a website-only change needs none.
+2. Run the release candidate against real tokens three times with both
+   keys (`node packages/soroban-guard/src/cli.ts <id> --format json`),
+   using a spender with no allowance left over from an earlier run.
+   Tag only if the three runs agree check for check.
+3. CI is green on the release commit.
+
 Bump the version in the manifests together (`package.json`,
 `packages/soroban-guard/package.json`, and `packages/web/package.json`,
 which has matched since 0.4.1) — a release that moves one and not the
