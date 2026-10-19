@@ -483,7 +483,7 @@ function buildNoOpCheck(variant: NoOpVariant) {
 			if (recipientBefore !== null && recipientAfter !== recipientBefore) {
 				return failed(
 					feeConfounded
-						? `the recipient moved from ${recipientBefore} to ${recipientAfter}; value appeared without leaving anywhere (${feeNote})`
+						? `the recipient moved from ${recipientBefore} to ${recipientAfter}; fees debit the payer and never credit a recipient, so the fee cannot explain value arriving there (${feeNote})`
 						: `the holder held at ${before.amount} but the recipient moved from ${recipientBefore} to ${recipientAfter}; value appeared without leaving anywhere`,
 					elapsed(),
 					evidence,
