@@ -17,6 +17,12 @@ log, not here.
 
 ## [0.4.5] — 2026-10-19
 
+### Added
+
+- `--format json` reports record the version that produced them, as
+  `toolVersion`. The field is new; nothing existing changed, so the schema
+  stays `report@1`.
+
 ### Fixed
 
 - `sep41-transfer_from-expired` gives its test grant six ledgers instead

@@ -21,6 +21,12 @@ export interface JsonReportInput {
 	/** ISO-8601, passed in so the renderer stays pure and testable. */
 	readonly ranAt: string;
 	readonly rpcUrl: string;
+	/**
+	 * The soroban-guard version that ran the checks, when the caller knows
+	 * it. A report quoted later is only as good as knowing which code made
+	 * it. Additive, so the schema stays at @1.
+	 */
+	readonly toolVersion?: string;
 }
 
 /**
@@ -35,6 +41,9 @@ export function renderJsonReport(input: JsonReportInput): string {
 	return JSON.stringify(
 		{
 			schema: "soroban-guard/report@1",
+			...(input.toolVersion === undefined
+				? {}
+				: { toolVersion: input.toolVersion }),
 			standard: input.standard,
 			contractId: input.contractId,
 			rpcUrl: input.rpcUrl,
