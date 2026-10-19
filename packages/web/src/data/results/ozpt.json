@@ -1,9 +1,10 @@
 {
   "schema": "soroban-guard/report@1",
+  "toolVersion": "0.4.5",
   "standard": "SEP-41",
   "contractId": "CC2LCJBERJPDTD27FGLYDTWAGSKEAJN42VT6SNQPVTEGQV63ZHKBSA5H",
   "rpcUrl": "https://soroban-testnet.stellar.org",
-  "ranAt": "2026-10-19T11:19:45.005Z",
+  "ranAt": "2026-10-19T14:38:36.188Z",
   "exitCode": 0,
   "summary": {
     "total": 16,
@@ -23,9 +24,9 @@
       "expected": "u32 decimal precision",
       "actual": "returned 18",
       "evidence": {
-        "ledger": 5277040
+        "ledger": 5279426
       },
-      "durationMs": 326
+      "durationMs": 319
     },
     {
       "id": "sep41-balance",
@@ -34,11 +35,11 @@
       "requirement": "required",
       "status": "PASS",
       "expected": "non-negative balance for the holder",
-      "actual": "balance is 999999999992",
+      "actual": "balance is 999999999980",
       "evidence": {
-        "ledger": 5277040
+        "ledger": 5279426
       },
-      "durationMs": 306
+      "durationMs": 332
     },
     {
       "id": "sep41-allowance",
@@ -49,9 +50,9 @@
       "expected": "non-negative allowance from owner to spender",
       "actual": "allowance is 0",
       "evidence": {
-        "ledger": 5277040
+        "ledger": 5279426
       },
-      "durationMs": 354
+      "durationMs": 380
     },
     {
       "id": "sep41-name",
@@ -62,9 +63,9 @@
       "expected": "string token name",
       "actual": "name is \"OpenZeppelin Pausable Token\"",
       "evidence": {
-        "ledger": 5277040
+        "ledger": 5279426
       },
-      "durationMs": 314
+      "durationMs": 325
     },
     {
       "id": "sep41-symbol",
@@ -75,9 +76,9 @@
       "expected": "string token symbol",
       "actual": "symbol is \"OZPT\"",
       "evidence": {
-        "ledger": 5277040
+        "ledger": 5279426
       },
-      "durationMs": 321
+      "durationMs": 345
     },
     {
       "id": "sep41-transfer_from-unauthorized",
@@ -90,7 +91,7 @@
       "evidence": {
         "error": "Transaction simulation failed: \"HostError: Error(Contract, #101)\n\nEvent log (newest first):\n   0: [Diagnostic Event] contract:CC2LCJBERJPDTD27FGLYDTWAGSKEAJN42VT6SNQPVTEGQV63ZHKBSA5H, topics:[error, Error(Contract, #101)], data:\"escalating error to VM trap from failed host function call: fail_with_error\"\n   1: [Diagnostic Event] contract:CC2LCJBERJPDTD27FGLYDTWAGSKEAJN42VT6SNQPVTEGQV63ZHKBSA5H, topics:[error, Error(Contract, #101)], data:[\"failing with contract error\", 101]\n   2: [Diagnostic Event] topics:[fn_call, CC2LCJBERJPDTD27FGLYDTWAGSKEAJN42VT6SNQPVTEGQV63ZHKBSA5H, transfer_from], data:[GDS6R6VS3OTSWVVYS6G5XXO3QBW5BBIAKQGCMA44PWNLCWY2SVGWCC25, GDMEI62DG7T56E2CRGHQBK66ZT73ITHV5VMNCUZUQLO53RHUAPVDGCDU, GDS6R6VS3OTSWVVYS6G5XXO3QBW5BBIAKQGCMA44PWNLCWY2SVGWCC25, 1]\n\""
       },
-      "durationMs": 1617
+      "durationMs": 1635
     },
     {
       "id": "sep41-transfer-zero-amount",
@@ -99,20 +100,20 @@
       "requirement": "required",
       "status": "PASS",
       "expected": "a transfer of zero leaves both balances unchanged",
-      "actual": "the call was accepted and both balances held, at 999999999992 and 4",
+      "actual": "the call was accepted and both balances held, at 999999999980 and 10",
       "evidence": {
         "before": {
-          "holder": "999999999992",
-          "recipient": "4"
+          "holder": "999999999980",
+          "recipient": "10"
         },
         "after": {
-          "holder": "999999999992",
-          "recipient": "4"
+          "holder": "999999999980",
+          "recipient": "10"
         },
-        "txHash": "a79c4b62fa2fd33a521682c71d58ba08fb0fe04a8fb1d06f9ea5c1b881a91c45",
-        "ledger": 5277042
+        "txHash": "7e47ca760c1d3f30d3616f34cfe3800af7da1a9c546d58b07b3d5d99c1b45324",
+        "ledger": 5279428
       },
-      "durationMs": 8117
+      "durationMs": 8216
     },
     {
       "id": "sep41-transfer-self",
@@ -121,18 +122,18 @@
       "requirement": "required",
       "status": "PASS",
       "expected": "a transfer to oneself leaves the balance unchanged",
-      "actual": "the call was accepted and the balance held at 999999999992",
+      "actual": "the call was accepted and the balance held at 999999999980",
       "evidence": {
         "before": {
-          "holder": "999999999992"
+          "holder": "999999999980"
         },
         "after": {
-          "holder": "999999999992"
+          "holder": "999999999980"
         },
-        "txHash": "0139efff4c02bae0f3c8683ee61cc2fe7ff1fe734b82327efde46ef2ad4b3537",
-        "ledger": 5277043
+        "txHash": "8ad4d942d456f20126abe99a7c490a1af371b9b896d3ea817d5dece03972b9d8",
+        "ledger": 5279432
       },
-      "durationMs": 3170
+      "durationMs": 18047
     },
     {
       "id": "sep41-transfer-negative-amount",
@@ -144,12 +145,12 @@
       "actual": "a transfer of -1 was refused",
       "evidence": {
         "before": {
-          "holder": "999999999992",
-          "recipient": "4"
+          "holder": "999999999980",
+          "recipient": "10"
         },
         "error": "Transaction simulation failed: \"HostError: Error(Contract, #103)\n\nEvent log (newest first):\n   0: [Diagnostic Event] contract:CC2LCJBERJPDTD27FGLYDTWAGSKEAJN42VT6SNQPVTEGQV63ZHKBSA5H, topics:[error, Error(Contract, #103)], data:\"escalating error to VM trap from failed host function call: fail_with_error\"\n   1: [Diagnostic Event] contract:CC2LCJBERJPDTD27FGLYDTWAGSKEAJN42VT6SNQPVTEGQV63ZHKBSA5H, topics:[error, Error(Contract, #103)], data:[\"failing with contract error\", 103]\n   2: [Diagnostic Event] topics:[fn_call, CC2LCJBERJPDTD27FGLYDTWAGSKEAJN42VT6SNQPVTEGQV63ZHKBSA5H, transfer], data:[GDMEI62DG7T56E2CRGHQBK66ZT73ITHV5VMNCUZUQLO53RHUAPVDGCDU, GDS6R6VS3OTSWVVYS6G5XXO3QBW5BBIAKQGCMA44PWNLCWY2SVGWCC25, -1]\n\""
       },
-      "durationMs": 1301
+      "durationMs": 1243
     },
     {
       "id": "sep41-transfer-over-balance",
@@ -158,15 +159,15 @@
       "requirement": "required",
       "status": "PASS",
       "expected": "transfer refuses to move more than the holder's balance",
-      "actual": "a transfer of 999999999993 against a balance of 999999999992 was refused",
+      "actual": "a transfer of 999999999981 against a balance of 999999999980 was refused",
       "evidence": {
         "before": {
-          "holder": "999999999992",
-          "recipient": "4"
+          "holder": "999999999980",
+          "recipient": "10"
         },
-        "error": "Transaction simulation failed: \"HostError: Error(Contract, #100)\n\nEvent log (newest first):\n   0: [Diagnostic Event] contract:CC2LCJBERJPDTD27FGLYDTWAGSKEAJN42VT6SNQPVTEGQV63ZHKBSA5H, topics:[error, Error(Contract, #100)], data:\"escalating error to VM trap from failed host function call: fail_with_error\"\n   1: [Diagnostic Event] contract:CC2LCJBERJPDTD27FGLYDTWAGSKEAJN42VT6SNQPVTEGQV63ZHKBSA5H, topics:[error, Error(Contract, #100)], data:[\"failing with contract error\", 100]\n   2: [Diagnostic Event] topics:[fn_call, CC2LCJBERJPDTD27FGLYDTWAGSKEAJN42VT6SNQPVTEGQV63ZHKBSA5H, transfer], data:[GDMEI62DG7T56E2CRGHQBK66ZT73ITHV5VMNCUZUQLO53RHUAPVDGCDU, GDS6R6VS3OTSWVVYS6G5XXO3QBW5BBIAKQGCMA44PWNLCWY2SVGWCC25, 999999999993]\n\""
+        "error": "Transaction simulation failed: \"HostError: Error(Contract, #100)\n\nEvent log (newest first):\n   0: [Diagnostic Event] contract:CC2LCJBERJPDTD27FGLYDTWAGSKEAJN42VT6SNQPVTEGQV63ZHKBSA5H, topics:[error, Error(Contract, #100)], data:\"escalating error to VM trap from failed host function call: fail_with_error\"\n   1: [Diagnostic Event] contract:CC2LCJBERJPDTD27FGLYDTWAGSKEAJN42VT6SNQPVTEGQV63ZHKBSA5H, topics:[error, Error(Contract, #100)], data:[\"failing with contract error\", 100]\n   2: [Diagnostic Event] topics:[fn_call, CC2LCJBERJPDTD27FGLYDTWAGSKEAJN42VT6SNQPVTEGQV63ZHKBSA5H, transfer], data:[GDMEI62DG7T56E2CRGHQBK66ZT73ITHV5VMNCUZUQLO53RHUAPVDGCDU, GDS6R6VS3OTSWVVYS6G5XXO3QBW5BBIAKQGCMA44PWNLCWY2SVGWCC25, 999999999981]\n\""
       },
-      "durationMs": 16303
+      "durationMs": 1334
     },
     {
       "id": "sep41-transfer",
@@ -178,17 +179,17 @@
       "actual": "holder -1, recipient +1",
       "evidence": {
         "before": {
-          "holder": "999999999992",
-          "recipient": "4"
+          "holder": "999999999980",
+          "recipient": "10"
         },
         "after": {
-          "holder": "999999999991",
-          "recipient": "5"
+          "holder": "999999999979",
+          "recipient": "11"
         },
-        "txHash": "63679cc0e98d04152739d3f18a765f97b8899b09148ea711ef84c3b48f1fbe78",
-        "ledger": 5277048
+        "txHash": "eb770b6bb6e904f46c705c44528319672e994a461d02e386ef4489ca9ae6b9c4",
+        "ledger": 5279436
       },
-      "durationMs": 8427
+      "durationMs": 18364
     },
     {
       "id": "sep41-approve",
@@ -205,11 +206,11 @@
         "after": {
           "allowance": "2"
         },
-        "txHash": "2bbd5399f3f86094687d4a65ac60368d43945211eaf4d74b2a610669792bfea2",
-        "ledger": 5277049,
-        "confirmTxHash": "ecd70f05fcb974a51d42f60d0e3fa52cd2044c094eb946c99ed42841087aeb25"
+        "txHash": "81bc2b890589b50780a1ac9c6c520b6cdbde4ffe5fb54fa1175a0f4126814f51",
+        "ledger": 5279437,
+        "confirmTxHash": "0ac703a999efb2aa4bc7103e19e39a04ae98696ba3c64625b1dcccc5441d28e7"
       },
-      "durationMs": 19312
+      "durationMs": 9656
     },
     {
       "id": "sep41-transfer_from",
@@ -221,19 +222,19 @@
       "actual": "holder -1, recipient +1, allowance -1",
       "evidence": {
         "before": {
-          "holder": "999999999991",
-          "recipient": "5",
+          "holder": "999999999979",
+          "recipient": "11",
           "allowance": "2"
         },
         "after": {
-          "holder": "999999999990",
-          "recipient": "6",
+          "holder": "999999999978",
+          "recipient": "12",
           "allowance": "1"
         },
-        "txHash": "33603090cf8d8f92dae96d3e04b31f3a66e4398d89e9c9460b4b4d011ff69047",
-        "ledger": 5277053
+        "txHash": "a0a0fe51ac0671d3b9dbd0334f1d531371574e8728946ccf35fc2446c91cff3e",
+        "ledger": 5279442
       },
-      "durationMs": 4995
+      "durationMs": 21713
     },
     {
       "id": "sep41-burn",
@@ -245,15 +246,15 @@
       "actual": "holder -1",
       "evidence": {
         "before": {
-          "holder": "999999999990"
+          "holder": "999999999978"
         },
         "after": {
-          "holder": "999999999989"
+          "holder": "999999999977"
         },
-        "txHash": "f95570d3a28fe29b7c8cf2f9d0b5ee2158673e5852a8bcca65c4786fb5ce7d2d",
-        "ledger": 5277054
+        "txHash": "15fbb7bfa63245c8a8561f8d1d7d8297f48aeec9bb3f439920a653e674eefa52",
+        "ledger": 5279444
       },
-      "durationMs": 5070
+      "durationMs": 7656
     },
     {
       "id": "sep41-burn_from",
@@ -265,19 +266,19 @@
       "actual": "holder -1, spender 0, allowance -1",
       "evidence": {
         "before": {
-          "holder": "999999999989",
-          "spender": "6",
+          "holder": "999999999977",
+          "spender": "12",
           "allowance": "1"
         },
         "after": {
-          "holder": "999999999988",
-          "spender": "6",
+          "holder": "999999999976",
+          "spender": "12",
           "allowance": "0"
         },
-        "txHash": "525a1bc1074f1f91ae704b7835c35ba56bba04423ddd9149ace736233a715484",
-        "ledger": 5277058
+        "txHash": "13a0f3468fbfcec27782bb7d4cf09db52f6717b0703bb8069e457a87c1f7c0bb",
+        "ledger": 5279448
       },
-      "durationMs": 20136
+      "durationMs": 22929
     },
     {
       "id": "sep41-transfer_from-expired",
@@ -286,18 +287,18 @@
       "requirement": "required",
       "status": "PASS",
       "expected": "transfer_from refuses a spend against an allowance whose live_until_ledger has passed",
-      "actual": "a spend against an allowance that expired at ledger 5277060 was refused at ledger 5277063",
+      "actual": "a spend against an allowance that expired at ledger 5279454 was refused at ledger 5279455",
       "evidence": {
         "before": {
           "granted": "1",
           "allowance": "0",
-          "holder": "999999999988",
-          "recipient": "6"
+          "holder": "999999999976",
+          "recipient": "12"
         },
-        "ledger": 5277063,
+        "ledger": 5279455,
         "error": "Transaction simulation failed: \"HostError: Error(Contract, #101)\n\nEvent log (newest first):\n   0: [Diagnostic Event] contract:CC2LCJBERJPDTD27FGLYDTWAGSKEAJN42VT6SNQPVTEGQV63ZHKBSA5H, topics:[error, Error(Contract, #101)], data:\"escalating error to VM trap from failed host function call: fail_with_error\"\n   1: [Diagnostic Event] contract:CC2LCJBERJPDTD27FGLYDTWAGSKEAJN42VT6SNQPVTEGQV63ZHKBSA5H, topics:[error, Error(Contract, #101)], data:[\"failing with contract error\", 101]\n   2: [Diagnostic Event] topics:[fn_call, CC2LCJBERJPDTD27FGLYDTWAGSKEAJN42VT6SNQPVTEGQV63ZHKBSA5H, transfer_from], data:[GDS6R6VS3OTSWVVYS6G5XXO3QBW5BBIAKQGCMA44PWNLCWY2SVGWCC25, GDMEI62DG7T56E2CRGHQBK66ZT73ITHV5VMNCUZUQLO53RHUAPVDGCDU, GDS6R6VS3OTSWVVYS6G5XXO3QBW5BBIAKQGCMA44PWNLCWY2SVGWCC25, 1]\n\""
       },
-      "durationMs": 27795
+      "durationMs": 49213
     }
   ]
 }

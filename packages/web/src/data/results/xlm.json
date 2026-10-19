@@ -1,0 +1,286 @@
+{
+  "schema": "soroban-guard/report@1",
+  "toolVersion": "0.4.5",
+  "standard": "SEP-41",
+  "contractId": "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC",
+  "rpcUrl": "https://soroban-testnet.stellar.org",
+  "ranAt": "2026-10-19T19:11:51.598Z",
+  "exitCode": 1,
+  "summary": {
+    "total": 16,
+    "pass": 10,
+    "fail": 2,
+    "unverifiable": 4,
+    "skipped": 0,
+    "notImplemented": 0
+  },
+  "results": [
+    {
+      "id": "sep41-decimals",
+      "clause": "SEP-41 §decimals",
+      "layer": "interface",
+      "requirement": "required",
+      "status": "PASS",
+      "expected": "u32 decimal precision",
+      "actual": "returned 7",
+      "evidence": {
+        "ledger": 5282707
+      },
+      "durationMs": 300
+    },
+    {
+      "id": "sep41-balance",
+      "clause": "SEP-41 §balance",
+      "layer": "behavior",
+      "requirement": "required",
+      "status": "PASS",
+      "expected": "non-negative balance for the holder",
+      "actual": "balance is 98709304961",
+      "evidence": {
+        "ledger": 5282707
+      },
+      "durationMs": 299
+    },
+    {
+      "id": "sep41-allowance",
+      "clause": "SEP-41 §allowance",
+      "layer": "behavior",
+      "requirement": "required",
+      "status": "PASS",
+      "expected": "non-negative allowance from owner to spender",
+      "actual": "allowance is 0",
+      "evidence": {
+        "ledger": 5282707
+      },
+      "durationMs": 298
+    },
+    {
+      "id": "sep41-name",
+      "clause": "SEP-41 §name",
+      "layer": "interface",
+      "requirement": "required",
+      "status": "PASS",
+      "expected": "string token name",
+      "actual": "name is \"native\"",
+      "evidence": {
+        "ledger": 5282707
+      },
+      "durationMs": 296
+    },
+    {
+      "id": "sep41-symbol",
+      "clause": "SEP-41 §symbol",
+      "layer": "interface",
+      "requirement": "required",
+      "status": "PASS",
+      "expected": "string token symbol",
+      "actual": "symbol is \"native\"",
+      "evidence": {
+        "ledger": 5282707
+      },
+      "durationMs": 301
+    },
+    {
+      "id": "sep41-transfer_from-unauthorized",
+      "clause": "SEP-41 §transfer_from",
+      "layer": "behavior",
+      "requirement": "required",
+      "status": "PASS",
+      "expected": "transfer_from refuses a spender with no allowance from the holder",
+      "actual": "an unauthorized spend was refused",
+      "evidence": {
+        "error": "Transaction simulation failed: \"HostError: Error(Contract, #9)\n\nEvent log (newest first):\n   0: [Diagnostic Event] contract:CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC, topics:[error, Error(Contract, #9)], data:[\"not enough allowance to spend\", 0, 1]\n   1: [Diagnostic Event] topics:[fn_call, CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC, transfer_from], data:[GDS6R6VS3OTSWVVYS6G5XXO3QBW5BBIAKQGCMA44PWNLCWY2SVGWCC25, GDMEI62DG7T56E2CRGHQBK66ZT73ITHV5VMNCUZUQLO53RHUAPVDGCDU, GDS6R6VS3OTSWVVYS6G5XXO3QBW5BBIAKQGCMA44PWNLCWY2SVGWCC25, 1]\n\""
+      },
+      "durationMs": 1539
+    },
+    {
+      "id": "sep41-transfer-zero-amount",
+      "clause": "SEP-41 §transfer",
+      "layer": "behavior",
+      "requirement": "required",
+      "status": "UNVERIFIABLE",
+      "expected": "a transfer of zero leaves both balances unchanged",
+      "actual": "the call was accepted, but the holder also paid this transaction's fee in the same asset, out of the balance being measured, so its change from 98709304961 to 98709298019 cannot be separated from that fee",
+      "evidence": {
+        "before": {
+          "holder": "98709304961",
+          "recipient": "99999509886"
+        },
+        "after": {
+          "holder": "98709298019",
+          "recipient": "99999509886"
+        },
+        "txHash": "04c9469f9ab100357e3d8107adea65c7175b99088becdacd165d2b50e6bb09d4",
+        "ledger": 5282709
+      },
+      "durationMs": 5527
+    },
+    {
+      "id": "sep41-transfer-self",
+      "clause": "SEP-41 §transfer",
+      "layer": "behavior",
+      "requirement": "required",
+      "status": "UNVERIFIABLE",
+      "expected": "a transfer to oneself leaves the balance unchanged",
+      "actual": "the call was accepted, but the holder also paid this transaction's fee in the same asset, out of the balance being measured, so its change from 98709298019 to 98709293295 cannot be separated from that fee",
+      "evidence": {
+        "before": {
+          "holder": "98709298019"
+        },
+        "after": {
+          "holder": "98709293295"
+        },
+        "txHash": "8a7fb1c0ab9da2de3bb101bfff0ac470543fbec12880cbfba7ff58b0e9c3aef7",
+        "ledger": 5282710
+      },
+      "durationMs": 17204
+    },
+    {
+      "id": "sep41-transfer-negative-amount",
+      "clause": "SEP-41 §transfer",
+      "layer": "behavior",
+      "requirement": "required",
+      "status": "PASS",
+      "expected": "transfer refuses a negative amount",
+      "actual": "a transfer of -1 was refused",
+      "evidence": {
+        "before": {
+          "holder": "98709293295",
+          "recipient": "99999509886"
+        },
+        "error": "Transaction simulation failed: \"HostError: Error(Contract, #8)\n\nEvent log (newest first):\n   0: [Diagnostic Event] contract:CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC, topics:[error, Error(Contract, #8)], data:[\"negative amount is not allowed\", -1]\n   1: [Diagnostic Event] topics:[fn_call, CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC, transfer], data:[GDMEI62DG7T56E2CRGHQBK66ZT73ITHV5VMNCUZUQLO53RHUAPVDGCDU, GDS6R6VS3OTSWVVYS6G5XXO3QBW5BBIAKQGCMA44PWNLCWY2SVGWCC25, -1]\n\""
+      },
+      "durationMs": 1410
+    },
+    {
+      "id": "sep41-transfer-over-balance",
+      "clause": "SEP-41 §transfer",
+      "layer": "behavior",
+      "requirement": "required",
+      "status": "PASS",
+      "expected": "transfer refuses to move more than the holder's balance",
+      "actual": "a transfer of 98709293296 against a balance of 98709293295 was refused",
+      "evidence": {
+        "before": {
+          "holder": "98709293295",
+          "recipient": "99999509886"
+        },
+        "error": "Transaction simulation failed: \"HostError: Error(Contract, #10)\n\nEvent log (newest first):\n   0: [Diagnostic Event] contract:CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC, topics:[error, Error(Contract, #10)], data:[\"resulting balance is not within the allowed range\", 15000000, -1, 9223372036854775807]\n   1: [Diagnostic Event] topics:[fn_call, CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC, transfer], data:[GDMEI62DG7T56E2CRGHQBK66ZT73ITHV5VMNCUZUQLO53RHUAPVDGCDU, GDS6R6VS3OTSWVVYS6G5XXO3QBW5BBIAKQGCMA44PWNLCWY2SVGWCC25, 98709293296]\n\""
+      },
+      "durationMs": 1234
+    },
+    {
+      "id": "sep41-transfer",
+      "clause": "SEP-41 §transfer",
+      "layer": "behavior",
+      "requirement": "required",
+      "status": "UNVERIFIABLE",
+      "expected": "transfer moves the amount from holder to recipient",
+      "actual": "holder -6943, expected -1 before the transaction fee this account also paid in the same asset; measuring a balance in the asset that also pays the fee cannot separate the two",
+      "evidence": {
+        "before": {
+          "holder": "98709293295",
+          "recipient": "99999509886"
+        },
+        "after": {
+          "holder": "98709286352",
+          "recipient": "99999509887"
+        },
+        "txHash": "a885048504e925c626f8c612a1757e23d0f8e34339c5852c6d4ba53972f93e43",
+        "ledger": 5282714
+      },
+      "durationMs": 5517
+    },
+    {
+      "id": "sep41-approve",
+      "clause": "SEP-41 §approve",
+      "layer": "behavior",
+      "requirement": "required",
+      "status": "PASS",
+      "expected": "approve sets the spender's allowance to the given amount",
+      "actual": "allowance is 2 after approving 2 over 1",
+      "evidence": {
+        "before": {
+          "allowance": "0"
+        },
+        "after": {
+          "allowance": "2"
+        },
+        "txHash": "c458dc983aa8ae05c27f716af094f5ba07c2900997ec5e70e8e02caeefdb88c8",
+        "ledger": 5282715,
+        "confirmTxHash": "ca08a8c342e9d40e3f456e84b2c16f8e25cb01fba432a00ffd5e22846371febe"
+      },
+      "durationMs": 9582
+    },
+    {
+      "id": "sep41-transfer_from",
+      "clause": "SEP-41 §transfer_from",
+      "layer": "behavior",
+      "requirement": "required",
+      "status": "UNVERIFIABLE",
+      "expected": "transfer_from moves the amount and consumes the spender's allowance",
+      "actual": "recipient -9031, expected +1 before the transaction fee this account also paid in the same asset; measuring a balance in the asset that also pays the fee cannot separate the two",
+      "evidence": {
+        "before": {
+          "holder": "98709271642",
+          "recipient": "99999509887",
+          "allowance": "2"
+        },
+        "after": {
+          "holder": "98709271641",
+          "recipient": "99999500856",
+          "allowance": "1"
+        },
+        "txHash": "c9432bc22ff7663fa67bff10934eeb77a3aaa9ef7ffb4d1fc531f50d609b36e8",
+        "ledger": 5282720
+      },
+      "durationMs": 21591
+    },
+    {
+      "id": "sep41-burn",
+      "clause": "SEP-41 §burn",
+      "layer": "behavior",
+      "requirement": "required",
+      "status": "FAIL",
+      "expected": "burn removes the amount from the holder's balance",
+      "actual": "the Stellar Asset Contract refuses burn on the native asset, which it gates deliberately — the clause is unmet, but this is a known property of XLM rather than a defect in this contract",
+      "evidence": {
+        "error": "Transaction simulation failed: \"HostError: Error(Contract, #2)\n\nEvent log (newest first):\n   0: [Diagnostic Event] contract:CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC, topics:[error, Error(Contract, #2)], data:\"operation invalid on native asset\"\n   1: [Diagnostic Event] topics:[fn_call, CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC, burn], data:[GDMEI62DG7T56E2CRGHQBK66ZT73ITHV5VMNCUZUQLO53RHUAPVDGCDU, 1]\n\""
+      },
+      "durationMs": 1117
+    },
+    {
+      "id": "sep41-burn_from",
+      "clause": "SEP-41 §burn_from",
+      "layer": "behavior",
+      "requirement": "required",
+      "status": "FAIL",
+      "expected": "burn_from removes the amount from the holder and consumes the allowance",
+      "actual": "the Stellar Asset Contract refuses burn_from on the native asset, which it gates deliberately — the clause is unmet, but this is a known property of XLM rather than a defect in this contract",
+      "evidence": {
+        "error": "Transaction simulation failed: \"HostError: Error(Contract, #2)\n\nEvent log (newest first):\n   0: [Diagnostic Event] contract:CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC, topics:[error, Error(Contract, #2)], data:\"operation invalid on native asset\"\n   1: [Diagnostic Event] topics:[fn_call, CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC, burn_from], data:[GDS6R6VS3OTSWVVYS6G5XXO3QBW5BBIAKQGCMA44PWNLCWY2SVGWCC25, GDMEI62DG7T56E2CRGHQBK66ZT73ITHV5VMNCUZUQLO53RHUAPVDGCDU, 1]\n\""
+      },
+      "durationMs": 2147
+    },
+    {
+      "id": "sep41-transfer_from-expired",
+      "clause": "SEP-41 §transfer_from",
+      "layer": "behavior",
+      "requirement": "required",
+      "status": "PASS",
+      "expected": "transfer_from refuses a spend against an allowance whose live_until_ledger has passed",
+      "actual": "a spend against an allowance that expired at ledger 5282727 was refused at ledger 5282728",
+      "evidence": {
+        "before": {
+          "granted": "1",
+          "allowance": "0",
+          "holder": "98709267200",
+          "recipient": "99999500856"
+        },
+        "ledger": 5282728,
+        "error": "Transaction simulation failed: \"HostError: Error(Contract, #9)\n\nEvent log (newest first):\n   0: [Diagnostic Event] contract:CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC, topics:[error, Error(Contract, #9)], data:[\"not enough allowance to spend\", 0, 1]\n   1: [Diagnostic Event] topics:[fn_call, CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC, transfer_from], data:[GDS6R6VS3OTSWVVYS6G5XXO3QBW5BBIAKQGCMA44PWNLCWY2SVGWCC25, GDMEI62DG7T56E2CRGHQBK66ZT73ITHV5VMNCUZUQLO53RHUAPVDGCDU, GDS6R6VS3OTSWVVYS6G5XXO3QBW5BBIAKQGCMA44PWNLCWY2SVGWCC25, 1]\n\""
+      },
+      "durationMs": 46902
+    }
+  ]
+}
