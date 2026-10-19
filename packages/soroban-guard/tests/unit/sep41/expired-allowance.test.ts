@@ -1,3 +1,4 @@
+import { scValToNative, type xdr } from "@stellar/stellar-sdk";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import * as invoke from "../../../src/core/invoke.ts";
 import { expiredAllowanceCheck } from "../../../src/sep41/checks/expired-allowance.ts";
@@ -83,12 +84,25 @@ describe("expiredAllowanceCheck", () => {
 			ctxWithLedger(sequencedServer(PREMISE)),
 		);
 		expect(result.status).toBe("PASS");
-		expect(result.actual).toContain("expired at ledger 102");
+		expect(result.actual).toContain("expired at ledger 106");
 		expect(result.actual).toContain("refused");
 		// The evidence names the grant that was confirmed before the wait:
 		// without it, the post-wait allowance alone cannot tell an expired
 		// grant from one that never landed.
 		expect(result.evidence.before?.granted).toBe("1");
+	});
+
+	// Two ledgers was too tight on testnet: the approval could expire
+	// before it landed, or before it was read back. Six leaves room.
+	it("grants six ledgers past the ledger it read", async () => {
+		const submit = vi
+			.spyOn(invoke, "submitWrite")
+			.mockResolvedValueOnce(APPLIED)
+			.mockResolvedValueOnce(rejected("HostError: Error(Contract, #4)"));
+		await expiredAllowanceCheck.run(ctxWithLedger(sequencedServer(PREMISE)));
+		const approval = submit.mock.calls[0]?.[1];
+		expect(approval?.method).toBe("approve");
+		expect(scValToNative(approval?.args[3] as xdr.ScVal)).toBe(106);
 	});
 
 	// The false PASS this check is most exposed to. A contract that accepts

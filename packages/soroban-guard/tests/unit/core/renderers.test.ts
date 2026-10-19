@@ -111,6 +111,16 @@ describe("renderJsonReport", () => {
 		expect(parsed.results[0].clause).toBe("SEP-41 §transfer");
 	});
 
+	// A report quoted later has to say which code produced it.
+	it("records the tool version when given, and omits it when not", () => {
+		const withVersion = JSON.parse(
+			renderJsonReport({ ...common([result("PASS")]), toolVersion: "9.9.9" }),
+		);
+		expect(withVersion.toolVersion).toBe("9.9.9");
+		const without = JSON.parse(renderJsonReport(common([result("PASS")])));
+		expect("toolVersion" in without).toBe(false);
+	});
+
 	it("counts each status separately", () => {
 		const parsed = JSON.parse(
 			renderJsonReport(

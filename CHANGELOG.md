@@ -15,6 +15,22 @@ log, not here.
 
 ## [Unreleased]
 
+## [0.4.5] — 2026-10-19
+
+### Added
+
+- `--format json` reports record the version that produced them, as
+  `toolVersion`. The field is new; nothing existing changed, so the schema
+  stays `report@1`.
+
+### Fixed
+
+- `sep41-transfer_from-expired` gives its test grant six ledgers instead
+  of two. Two was too tight for testnet: the grant could expire before it
+  landed or before it was read back, so the check sometimes reported
+  UNVERIFIABLE on a conformant token. Keyed runs take about 20 seconds
+  longer.
+
 ## [0.4.4] — 2026-10-19
 
 ### Fixed

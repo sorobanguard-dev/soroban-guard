@@ -239,7 +239,7 @@ them* — which it may, since SEP-41 permits either answer and the assertion
 is that the balances held — and a settled call costs its fee. A contract
 that refuses them instead is equally conformant and pays nothing. `transfer_from-expired` additionally submits a real
 setup approval, overwriting any standing allowance between the pair with a
-grant that lapses within two ledgers. A token that does not refuse the
+grant that lapses within six ledgers. A token that does not refuse the
 first four spends more than this, which is the finding those checks exist
 to produce.
 
@@ -248,8 +248,8 @@ check — four that the writes spend, and a fifth that `transfer_from-expired`
 needs present when it runs last, though it spends nothing. With less, the
 later checks honestly report UNVERIFIABLE. One
 caveat on time rather than tokens: `transfer_from-expired` has to wait for
-a ledger to pass before it can spend, which adds about ten seconds to a
-keyed run.
+its grant to lapse before it can spend, which adds about half a minute
+to a keyed run.
 
 > **Testnet only, by default.** This signs and submits real transactions, so
 > a run that holds a secret exits before touching the network unless two

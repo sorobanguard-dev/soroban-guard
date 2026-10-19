@@ -81,6 +81,7 @@ describe("blocks", () => {
 describe("CHANGELOG.md", () => {
 	it("yields every tagged release, newest first", () => {
 		expect(RELEASES.map((r) => r.version)).toEqual([
+			"0.4.5",
 			"0.4.4",
 			"0.4.3",
 			"0.4.2",

@@ -248,14 +248,14 @@ later and spend again. No read distinguishes the two, because
 `allowance()` returns the amount alone and never the ledger it dies at.
 
 The only check that creates the condition it tests, and the only one that
-waits on wall-clock time — roughly ten seconds, bounded at 45. A network
+waits on wall-clock time — roughly half a minute, bounded at 60 seconds. A network
 that does not advance reports UNVERIFIABLE rather than hanging. Its grant
 is deliberately **not** recorded in the run's allowance registry: that
 registry means "fresh, so a refusal is the contract's answer", which is
 the opposite of a grant built to lapse. Needs both keys, a funded holder,
 and non-issuer parties. Runs last, so its wait delays nothing else.
 Side effect to know: the setup approval overwrites any standing allowance
-between the pair with a grant that lapses within two ledgers — after the
+between the pair with a grant that lapses within six ledgers — after the
 run the operator's grant is effectively zero, even where `approveCheck`
 left it alone. Unlike the `_from` checks, which consume rather than
 replace, this one cannot test expiry without granting first.

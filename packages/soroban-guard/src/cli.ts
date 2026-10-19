@@ -249,7 +249,12 @@ function render(results: readonly CheckResult[]): string {
 		results,
 	};
 	if (format === "json") {
-		return renderJsonReport({ ...common, ranAt, rpcUrl: reportedRpcUrl });
+		return renderJsonReport({
+			...common,
+			ranAt,
+			rpcUrl: reportedRpcUrl,
+			toolVersion: packageVersion(),
+		});
 	}
 	if (format === "md") {
 		return renderMarkdownReport({ ...common, ranAt, rpcUrl: reportedRpcUrl });
