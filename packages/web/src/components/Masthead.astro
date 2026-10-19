@@ -8,7 +8,7 @@ interface Props {
 	 * the page the reader is already on, so there it offers the other way
 	 * to use the tool — the CLI — instead.
 	 */
-	page?: "home" | "run" | "checks" | "changelog" | "other";
+	page?: "home" | "run" | "checks" | "results" | "changelog" | "other";
 }
 
 const { page = "other" } = Astro.props;
@@ -21,6 +21,7 @@ const { page = "other" } = Astro.props;
 const LINKS = [
 	{ href: "/#how", label: "How it works", page: undefined },
 	{ href: "/checks", label: "Checks", page: "checks" },
+	{ href: "/results", label: "Results", page: "results" },
 	{ href: "/changelog", label: "Changelog", page: "changelog" },
 ] as const;
 // `short` is what fits a phone: at 390px the full label pushed the button

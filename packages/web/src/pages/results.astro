@@ -1,0 +1,429 @@
+---
+import Masthead from "../components/Masthead.astro";
+import SiteFooter from "../components/SiteFooter.astro";
+import { checkAnchor, displayId } from "../data/check-id.ts";
+import { CHECK_REFERENCE } from "../data/check-reference.ts";
+import {
+	CONFORMANCE_DATE,
+	CONFORMANCE_NETWORK,
+	CONFORMANCE_RUNS,
+	CONFORMANCE_VERSION,
+	RUN_ORDER,
+	type Cell,
+	type ConformanceRun,
+} from "../data/conformance-table.ts";
+
+const EXPLORER_TX = "https://stellar.expert/explorer/testnet/tx/";
+import { STATUS_GLYPH } from "soroban-guard/src/core/types.ts";
+import type { CheckStatus } from "soroban-guard/src/core/types.ts";
+import Base from "../layouts/Base.astro";
+
+/**
+ * A matrix of named contracts, read from committed CLI reports and bound to the rows of
+ * check-reference so neither page can drift from the other: the reference
+ * listing a check the runs do not cover here — or the converse — fails
+ * the build instead of showing a table whose row label and cells refer to
+ * different checks.
+ */
+interface RefEntry {
+	readonly id: string;
+	readonly member: string;
+	readonly qualifier?: string;
+	readonly anchor: string;
+}
+
+const refById = new Map<string, RefEntry>();
+let refCount = 0;
+for (const group of CHECK_REFERENCE.groups) {
+	for (const check of group.checks) {
+		refById.set(check.id, check);
+		refCount += 1;
+	}
+}
+// Same length is not the same set: a duplicated id in the run order would
+// match the count while leaving a reference check without a row.
+if (refCount !== RUN_ORDER.length || new Set(RUN_ORDER).size !== refCount) {
+	throw new Error(
+		`/results: check-reference lists ${refCount} checks, the run table expects ${RUN_ORDER.length}; neither page should render a stale check set`,
+	);
+}
+const rows = RUN_ORDER.map((id) => {
+	const ref = refById.get(id);
+	if (ref === undefined) {
+		throw new Error(`/results: run table row ${id} is not in check-reference`);
+	}
+	return ref;
+});
+
+/** Cells carry a word as well as a glyph: a bare ✓ tells a screen reader nothing. */
+const SR_LABEL: Record<CheckStatus, string> = {
+	PASS: "passed",
+	FAIL: "failed",
+	UNVERIFIABLE: "unverifiable",
+	SKIPPED: "skipped",
+	NOT_IMPLEMENTED: "not implemented",
+};
+
+const total = (runs: readonly ConformanceRun[]) =>
+	runs.reduce(
+		(acc, run) => ({
+			pass: acc.pass + run.pass,
+			fail: acc.fail + run.fail,
+			unverifiable: acc.unverifiable + run.unverifiable,
+		}),
+		{ pass: 0, fail: 0, unverifiable: 0 },
+	);
+const TOTAL = total(CONFORMANCE_RUNS);
+
+const title = "Real-token results — soroban-guard";
+const description = `SEP-41 conformance of ${CONFORMANCE_RUNS.length} testnet contracts — the tokens of stellar/soroban-examples and OpenZeppelin, and Stellar's asset contract for a custom asset — run by soroban-guard ${CONFORMANCE_VERSION} on ${CONFORMANCE_DATE}, every write linked to its transaction.`;
+---
+
+<Base
+	title={title}
+	description={description}
+>
+	<Masthead page="results" />
+
+	<main>
+		<header class="intro">
+			<h1>Real-token results</h1>
+			<p>
+				Every verdict on this page is read from the report of an actual run:
+				<code>soroban-guard {CONFORMANCE_VERSION}</code> against
+				{" "}{CONFORMANCE_RUNS.length} live Stellar testnet contracts on
+				{" "}{CONFORMANCE_DATE}, with <code>--format json</code>. The
+				reports are committed with this page and the table is built from
+				them, so nothing here was copied by hand. Together:{" "}
+				<strong>{TOTAL.pass} pass · {TOTAL.fail} fail · {TOTAL.unverifiable} unverifiable</strong>.
+			</p>
+			<p>
+				Every check that writes links to the transaction it settled — click
+				a ✓ to see it on the ledger.
+			</p>
+			<p class="where">{CONFORMANCE_NETWORK}</p>
+		</header>
+
+		<section class="matrix-wrap" aria-label="Conformance matrix">
+			<table class="matrix">
+				<thead>
+					<tr>
+						<th scope="col" class="check-col">
+							<span class="th-label">Check</span>
+						</th>
+						{
+							CONFORMANCE_RUNS.map((run) => (
+								<th scope="col">
+									<span class="th-label">{run.label}</span>
+									<span class="th-tally" data-v={run.fail > 0 ? "FAIL" : undefined}>
+										{run.pass} pass{run.fail > 0 && <> · {run.fail} fail</>}
+									</span>
+								</th>
+							))
+						}
+					</tr>
+				</thead>
+				<tbody>
+					{
+						rows.map((row) => (
+							<tr>
+								<th scope="row" class="check-col">
+									<a href={`/checks#${checkAnchor(row.id)}`}>
+										<span class="member">{displayId(row.id).member}</span>
+										{displayId(row.id).qualifier !== undefined && (
+											<span class="qual">{displayId(row.id).qualifier}</span>
+										)}
+									</a>
+								</th>
+								{CONFORMANCE_RUNS.map((run) => {
+									const cell = run.cells[row.id] as Cell;
+									const mark = (
+										<>
+											<span class="g" aria-hidden="true">
+												{STATUS_GLYPH[cell.status]}
+											</span>
+											<span class="sr-only">{SR_LABEL[cell.status]}</span>
+										</>
+									);
+									// A write links to the transaction it settled, so a
+									// verdict can be checked on the ledger, not taken on trust.
+									return (
+										<td data-v={cell.status} title={cell.actual}>
+											{cell.txHash === undefined ? (
+												mark
+											) : (
+												<a
+													href={`${EXPLORER_TX}${cell.txHash}`}
+													aria-label={`${SR_LABEL[cell.status]}: view the transaction`}
+												>
+													{mark}
+												</a>
+											)}
+										</td>
+									);
+								})}
+							</tr>
+						))
+					}
+				</tbody>
+			</table>
+		</section>
+
+		<section class="notes" id="contracts">
+			<h2>The contracts</h2>
+			<ul class="contracts">
+				{
+					CONFORMANCE_RUNS.map((run) => (
+						<li>
+							<strong>{run.label}</strong>
+							<code>{run.contractId}</code>
+							<span>
+								{run.originUrl === undefined ? (
+									run.origin
+								) : (
+									<a href={run.originUrl}>{run.origin}</a>
+								)}
+							</span>
+						</li>
+					))
+				}
+			</ul>
+		</section>
+
+		<section class="notes" id="native">
+			<h2>Native XLM is next</h2>
+			<p>
+				Native XLM was run too, and it found a flaw in soroban-guard
+				rather than in XLM. Transaction fees are paid in XLM, so on the
+				XLM contract the account that signs also pays the fee out of the
+				balance being measured. <code>transfer</code> already accounts for
+				that and withholds a verdict, but the zero-amount and self-transfer
+				checks did not: they counted the fee as the contract moving value,
+				and reported FAIL.
+			</p>
+			<p>
+				Those two checks are being fixed to withhold a verdict the same
+				way. XLM joins this table with the release that fixes them —
+				publishing two failures we know to be our own would be exactly the
+				kind of claim this tool exists to prevent.
+			</p>
+		</section>
+
+		<section class="notes" id="repro">
+			<h2>Run them yourself</h2>
+			<p>
+				The three were live on testnet on {CONFORMANCE_DATE}. Testnet is
+				reset from time to time, and the two example tokens, compiled at the
+				commits listed above and deployed for this page, go with it; the
+				asset contract is the network's own.
+			</p>
+			<p>
+				Without keys, anyone gets the five reads. The writes need a holder
+				with at least five units and a second, funded account. The two
+				example tokens mint only to their admin, so their write rows can be
+				repeated by whoever holds their units, not by any visitor.
+			</p>
+			<pre><code>{`# the reads
+npx soroban-guard CDABMBRIDJKHHNYHEQLE3GEINB5EKHGW62SDEXEOKNPKUF2MEJQVYLV5
+
+# all sixteen: a holder and a second account, both funded on testnet
+OWNER_SECRET=$(stellar keys secret owner) \\
+SPENDER_SECRET=$(stellar keys secret spender) \\
+  npx soroban-guard <contract-id> --format json`}</code></pre>
+			<p class="fine">
+				<code>--format json</code> writes the report this page is built
+				from; <code>--format md</code> writes a Markdown report that pastes
+				straight into a PR.
+			</p>
+		</section>
+
+	</main>
+
+	<SiteFooter />
+</Base>
+
+<style>
+	.intro {
+		max-width: 76ch;
+	}
+
+	.intro h1 {
+		font-size: 40px;
+		line-height: 1.1;
+		letter-spacing: -0.02em;
+		margin: 0 0 var(--space-4);
+	}
+
+	.intro p {
+		color: var(--dim);
+		font-size: 17px;
+		line-height: 1.6;
+		margin: 0 0 var(--space-3);
+	}
+
+	.intro strong {
+		color: var(--ink);
+		font-weight: 500;
+	}
+
+	.intro .where {
+		font-size: 13px;
+		margin: 0;
+	}
+
+	.matrix-wrap {
+		overflow-x: auto;
+		margin-block: var(--space-6);
+	}
+
+	.matrix {
+		border-collapse: collapse;
+		min-width: 640px;
+		width: 100%;
+	}
+
+	.matrix th,
+	.matrix td {
+		border-bottom: 1px solid var(--line, #1e1e1e);
+		padding: 10px 14px;
+		text-align: center;
+		white-space: nowrap;
+	}
+
+	.matrix thead th {
+		color: var(--ink);
+		font-weight: 500;
+		vertical-align: bottom;
+	}
+
+	.th-label {
+		display: block;
+		font-size: 14px;
+	}
+
+	.th-tally {
+		color: var(--dim);
+		display: block;
+		font-size: 12px;
+		font-weight: 400;
+		margin-top: 2px;
+	}
+
+	.matrix .check-col {
+		text-align: left;
+	}
+
+	.matrix tbody th.check-col {
+		font-weight: 400;
+	}
+
+	.matrix tbody .member {
+		color: var(--ink);
+		font-size: 14px;
+	}
+
+	.matrix tbody .qual {
+		color: var(--dim);
+		display: block;
+		font-size: 12px;
+	}
+
+	.matrix a {
+		text-decoration: none;
+	}
+
+	.matrix a:hover .member {
+		text-decoration: underline;
+	}
+
+	.matrix td .g {
+		font-size: 15px;
+	}
+
+	.matrix td[data-v="PASS"] .g {
+		color: var(--pass);
+	}
+	.matrix td[data-v="FAIL"] .g {
+		color: var(--fail);
+	}
+	.matrix td[data-v="UNVERIFIABLE"] .g {
+		color: var(--unverifiable);
+	}
+
+	.sr-only {
+		position: absolute;
+		width: 1px;
+		height: 1px;
+		overflow: hidden;
+		clip-path: inset(50%);
+	}
+
+	.notes {
+		max-width: 76ch;
+		margin-block: var(--space-7);
+	}
+
+	.notes h2 {
+		font-size: 24px;
+		letter-spacing: -0.01em;
+		margin: 0 0 var(--space-3);
+	}
+
+	.notes p {
+		color: var(--dim);
+		line-height: 1.65;
+		margin: 0 0 var(--space-3);
+	}
+
+	.notes .aside {
+		border-left: 2px solid var(--pass);
+		padding-left: var(--space-4);
+	}
+
+	blockquote {
+		border-left: 2px solid var(--line, #1e1e1e);
+		color: var(--dim);
+		margin: var(--space-4) 0;
+		padding-left: var(--space-4);
+	}
+
+	.fine {
+		font-size: 13px;
+	}
+
+	.contracts {
+		list-style: none;
+		margin: 0;
+		padding: 0;
+	}
+
+	.contracts li {
+		color: var(--dim);
+		display: grid;
+		gap: 2px;
+		margin-bottom: var(--space-3);
+	}
+
+	.contracts strong {
+		color: var(--ink);
+		font-weight: 500;
+	}
+
+	.contracts code {
+		font-size: 12.5px;
+		overflow-wrap: anywhere;
+	}
+
+	pre {
+		background: var(--raised);
+		border-radius: 10px;
+		font-size: 13.5px;
+		line-height: 1.6;
+		overflow-x: auto;
+		padding: var(--space-4);
+	}
+
+	code {
+		font-size: 0.95em;
+	}
+</style>
