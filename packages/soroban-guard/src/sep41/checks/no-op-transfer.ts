@@ -32,6 +32,12 @@
  * *unreadable* balance — no answer, an archived entry — stays UNVERIFIABLE,
  * because that is a fact about the run rather than about the contract.
  *
+ * One exemption, and only one: on the asset fees are paid in (native XLM)
+ * the holder, which signs and so pays the fee, drops by that fee whatever
+ * the contract does. A drop there is UNVERIFIABLE rather than FAIL — the
+ * rule `transfer` already follows. A fee never raises a balance and never
+ * touches the recipient, so either of those still FAILs on XLM too.
+ *
  * Both share this module because they share their whole shape — same
  * assertion, same premises, same reading of the outcome. Only the amount
  * and the recipient differ.
@@ -49,6 +55,7 @@ import {
 	type CheckMeta,
 	ISSUER_SENTINEL_BALANCE,
 	isDeclared,
+	isFeeAssetContract,
 	notImplemented,
 	verdictHelpers,
 } from "./shared.ts";
@@ -308,6 +315,19 @@ function buildNoOpCheck(variant: NoOpVariant) {
 					},
 				);
 			}
+			// The holder signs, so it is also the transaction's source and
+			// pays the network fee. On the asset fees are paid in — the native
+			// XLM SAC — that fee leaves the very balance being measured, so a
+			// holder that went *down* cannot be told apart from the network's
+			// charge. The same rule `transfer` follows (`paysFees` in
+			// delta.ts): a fee only ever lowers the payer, so a holder that
+			// went up, or a recipient that moved, is still the contract's
+			// doing. On any other asset the fee leaves this balance alone.
+			const feeConfounded =
+				isFeeAssetContract(ctx.contractId, ctx.networkPassphrase) &&
+				after.amount < before.amount;
+			const feeNote = `the holder also paid this transaction's fee in the same asset, out of the balance being measured, so its change from ${before.amount} to ${after.amount} cannot be separated from that fee`;
+
 			// The recipient's side, read only when it is a second address.
 			// An unreadable one here is not a verdict: the call landed, and
 			// half an observation cannot say whether value appeared.
@@ -383,7 +403,11 @@ function buildNoOpCheck(variant: NoOpVariant) {
 				// old message even asserted it "held" without checking.
 				// Only when the holder genuinely held does the recipient's
 				// readability decide the verdict.
-				if (read.kind !== "value" && after.amount !== before.amount) {
+				if (
+					read.kind !== "value" &&
+					after.amount !== before.amount &&
+					!feeConfounded
+				) {
 					return failed(
 						`the holder's balance moved from ${before.amount} to ${after.amount}; ${variant.rationale} (the recipient's balance could not be read, but the holder's move is the finding)`,
 						elapsed(),
@@ -406,7 +430,9 @@ function buildNoOpCheck(variant: NoOpVariant) {
 						...variant.meta,
 						status: "UNVERIFIABLE",
 						expected: variant.expected,
-						actual: `the call was accepted and the holder held at ${before.amount}, but the recipient's balance could not be read, so it is unknown whether value appeared there`,
+						actual: feeConfounded
+							? `the call was accepted, but ${feeNote}, and the recipient's balance could not be read`
+							: `the call was accepted and the holder held at ${before.amount}, but the recipient's balance could not be read, so it is unknown whether value appeared there`,
 						evidence: {
 							before: {
 								holder: `${before.amount}`,
@@ -443,7 +469,7 @@ function buildNoOpCheck(variant: NoOpVariant) {
 				txHash: reading.txHash,
 				ledger: reading.ledger,
 			};
-			if (after.amount !== before.amount) {
+			if (after.amount !== before.amount && !feeConfounded) {
 				return failed(
 					`the holder's balance moved from ${before.amount} to ${after.amount}; ${variant.rationale}`,
 					elapsed(),
@@ -453,9 +479,19 @@ function buildNoOpCheck(variant: NoOpVariant) {
 			// A contract can hold the sender steady and credit the far side
 			// out of nothing. Watching only the sender would call that
 			// conformant, which is the whole reason the recipient is read.
+			// The recipient pays no fee, so this holds on the fee asset too.
 			if (recipientBefore !== null && recipientAfter !== recipientBefore) {
 				return failed(
-					`the holder held at ${before.amount} but the recipient moved from ${recipientBefore} to ${recipientAfter}; value appeared without leaving anywhere`,
+					feeConfounded
+						? `the recipient moved from ${recipientBefore} to ${recipientAfter}; value appeared without leaving anywhere (${feeNote})`
+						: `the holder held at ${before.amount} but the recipient moved from ${recipientBefore} to ${recipientAfter}; value appeared without leaving anywhere`,
+					elapsed(),
+					evidence,
+				);
+			}
+			if (feeConfounded) {
+				return unverifiable(
+					`the call was accepted, but ${feeNote}`,
 					elapsed(),
 					evidence,
 				);

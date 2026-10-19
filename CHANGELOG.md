@@ -15,6 +15,21 @@ log, not here.
 
 ## [Unreleased]
 
+## [0.4.4] — 2026-10-19
+
+### Fixed
+
+- `sep41-transfer-zero-amount` and `sep41-transfer-self` no longer report
+  the transaction fee as a contract defect. On native XLM the holder also
+  pays the fee out of the balance being measured, and both checks read
+  that drop as the contract moving value: through 0.4.3 they FAILed native
+  XLM for it. They now report UNVERIFIABLE there, as `transfer` and
+  `transfer_from` already did since 0.4.1. The exemption stays narrow: a
+  fee only lowers the account that paid it, so a holder whose balance
+  rose, a recipient that moved, or the same drop on any other token still
+  FAILs. Found by running the suite against Stellar's own asset contracts
+  for the results page.
+
 ## [0.4.3] — 2026-10-12
 
 ### Changed

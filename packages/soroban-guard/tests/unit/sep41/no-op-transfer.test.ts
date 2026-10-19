@@ -1,9 +1,10 @@
-import { scValToNative } from "@stellar/stellar-sdk";
+import { Asset, Networks, scValToNative } from "@stellar/stellar-sdk";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
 	selfTransferCheck,
 	zeroAmountTransferCheck,
 } from "../../../src/sep41/checks/no-op-transfer.ts";
+import type { Sep41Context } from "../../../src/sep41/context.ts";
 import {
 	APPLIED,
 	errorResponse,
@@ -454,5 +455,136 @@ describe("selfTransferCheck", () => {
 		expect(result.status).toBe("UNVERIFIABLE");
 		expect(result.actual).toContain("OWNER_SECRET");
 		expect(submit).not.toHaveBeenCalled();
+	});
+});
+
+/**
+ * The native XLM SAC, in miniature. The holder signs, so it also pays the
+ * network fee — in the very asset being measured — and an accepted no-op
+ * leaves it a little lower. That is the network's charge, not the
+ * contract moving value: 0.4.3 reported it as FAIL, which is how a run
+ * against XLM came to "fail" two checks it had not failed.
+ *
+ * The excuse is narrow on purpose, the same rule `transfer` follows: a fee
+ * only ever lowers the payer, and only on the fee asset. A holder that
+ * gained, a recipient that moved, or the same drop on any other token
+ * stays a FAIL.
+ */
+describe("no-op checks on the fee asset", () => {
+	const onNative = (ctx: Sep41Context): Sep41Context => ({
+		...ctx,
+		contractId: Asset.native().contractId(Networks.TESTNET),
+	});
+
+	it("withholds the zero-amount verdict when only the fee-paying holder dropped", async () => {
+		stubSubmit(APPLIED);
+		const result = await zeroAmountTransferCheck.run(
+			onNative(
+				writeCtx(
+					sequencedServer([
+						okResponse(100n),
+						okResponse(7n),
+						okResponse(99n),
+						okResponse(7n),
+					]),
+				),
+			),
+		);
+		expect(result.status).toBe("UNVERIFIABLE");
+		expect(result.actual).toContain("fee");
+		expect(result.actual).toContain("from 100 to 99");
+		expect(result.evidence.txHash).toBe("abc123");
+	});
+
+	// The recipient pays no fee, so value appearing there is still a finding.
+	it("still FAILs a zero transfer that credited the recipient", async () => {
+		stubSubmit(APPLIED);
+		const result = await zeroAmountTransferCheck.run(
+			onNative(
+				writeCtx(
+					sequencedServer([
+						okResponse(100n),
+						okResponse(7n),
+						okResponse(99n),
+						okResponse(8n),
+					]),
+				),
+			),
+		);
+		expect(result.status).toBe("FAIL");
+		expect(result.actual).toContain("recipient moved from 7 to 8");
+	});
+
+	// A fee cannot raise a balance.
+	it("still FAILs a zero transfer that raised the holder", async () => {
+		stubSubmit(APPLIED);
+		const result = await zeroAmountTransferCheck.run(
+			onNative(
+				writeCtx(
+					sequencedServer([
+						okResponse(100n),
+						okResponse(7n),
+						okResponse(101n),
+						okResponse(7n),
+					]),
+				),
+			),
+		);
+		expect(result.status).toBe("FAIL");
+		expect(result.actual).toContain("moved from 100 to 101");
+	});
+
+	it("withholds the verdict, not FAILs, when the recipient is also unreadable", async () => {
+		stubSubmit(APPLIED);
+		const result = await zeroAmountTransferCheck.run(
+			onNative(
+				writeCtx(
+					sequencedServer([
+						okResponse(100n),
+						okResponse(7n),
+						okResponse(99n),
+						errorResponse("trustline entry is missing for account G..."),
+					]),
+				),
+			),
+		);
+		expect(result.status).toBe("UNVERIFIABLE");
+		expect(result.actual).toContain("fee");
+	});
+
+	it("withholds the self-transfer verdict when only the fee-paying holder dropped", async () => {
+		stubSubmit(APPLIED);
+		const result = await selfTransferCheck.run(
+			onNative(writeCtx(sequencedServer([okResponse(100n), okResponse(99n)]))),
+		);
+		expect(result.status).toBe("UNVERIFIABLE");
+		expect(result.actual).toContain("fee");
+	});
+
+	it("still FAILs a self-transfer that raised the holder", async () => {
+		stubSubmit(APPLIED);
+		const result = await selfTransferCheck.run(
+			onNative(writeCtx(sequencedServer([okResponse(100n), okResponse(101n)]))),
+		);
+		expect(result.status).toBe("FAIL");
+		expect(result.actual).toContain("moved from 100 to 101");
+	});
+
+	// The gate is the asset, not the drop: on any other token the fee
+	// leaves this balance alone, so the same drop is the contract's doing.
+	it("still FAILs the same drop on a token that is not the fee asset", async () => {
+		stubSubmit(APPLIED);
+		const result = await zeroAmountTransferCheck.run(
+			writeCtx(
+				sequencedServer([
+					okResponse(100n),
+					okResponse(7n),
+					okResponse(99n),
+					okResponse(7n),
+				]),
+			),
+		);
+		expect(result.status).toBe("FAIL");
+		expect(result.actual).toContain("moved from 100 to 99");
 	});
 });

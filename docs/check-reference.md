@@ -146,6 +146,9 @@ a zero transfer. Needs the holder's key and a distinct recipient; no
 minimum balance, since zero moves nothing even from an empty account.
 First of the four because it is the only one that cannot disturb what
 follows in any position: the amount is the thing that would move.
+On native XLM the holder also pays the transaction fee out of the balance
+being measured, so a holder that dropped is UNVERIFIABLE there rather than
+FAIL; a holder that rose, or a recipient that moved, still FAILs.
 
 ### `sep41-transfer-self` — behavior
 
@@ -160,7 +163,9 @@ debit and *gains* a unit instead. The second is what
 (`1000 → 1001`). Needs the holder's key and at least one unit, or a
 refusal would mean "empty account" rather than anything about
 self-transfers. The recipient is the holder by construction, so
-`SPENDER_ADDRESS` is irrelevant.
+`SPENDER_ADDRESS` is irrelevant. On native XLM a drop is UNVERIFIABLE for
+the same fee reason as the zero case; a gain still FAILs, since a fee
+cannot raise a balance.
 
 ### `sep41-transfer-negative-amount` — behavior
 

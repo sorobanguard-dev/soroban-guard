@@ -404,15 +404,18 @@ is a violation of the clause as written, not a variation the tool tolerates.
   verdict stands; the report names the case rather than implying a defect
   you can fix. See [issue #1](https://github.com/sorobanguard-dev/soroban-guard/issues/1).
 
-  `transfer` and `transfer_from` report **UNVERIFIABLE**. Soroban fees are
-  paid in XLM by the transaction's source account, which on this contract
-  is also a party whose balance the check measures — so its delta carries
-  the fee as well as the transfer, and the two cannot be separated from one
-  balance reading. Withholding the verdict is the honest answer; the other
-  parties' deltas are still asserted exactly, so a contract losing value
-  elsewhere still fails.
+  `transfer`, `transfer_from`, `transfer-zero-amount` and `transfer-self`
+  report **UNVERIFIABLE**. Soroban fees are paid in XLM by the
+  transaction's source account, which on this contract is also a party
+  whose balance the check measures — so its delta carries the fee as well
+  as the call, and the two cannot be separated from one balance reading.
+  Withholding the verdict is the honest answer. It is withheld narrowly: a
+  fee only ever lowers the account that paid it, so a payer whose balance
+  rose, or any other party that moved, still fails. Before 0.4.4 the
+  zero-amount and self-transfer checks missed this and reported the fee as
+  a FAIL.
 
-  Every other member answers normally. A run against XLM is a fine way to
+  Every other check answers normally. A run against XLM is a fine way to
   see the tool work; it is not a conformance claim about XLM.
 * SAC specifics the checks actually observe: `balance` and `allowance`
   against an address with no trustline trap with "trustline entry is
