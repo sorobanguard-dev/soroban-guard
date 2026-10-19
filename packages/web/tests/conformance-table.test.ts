@@ -90,4 +90,9 @@ describe("fromReport refuses a report it could misstate", () => {
 			/summary that disagrees with its own rows/,
 		);
 	});
+
+	it("an exit code its rows do not give", () => {
+		const edited = { ...set, exitCode: set.exitCode === 0 ? 1 : 0 };
+		expect(() => fromReport(COLUMN, edited)).toThrow(/but its rows give/);
+	});
 });

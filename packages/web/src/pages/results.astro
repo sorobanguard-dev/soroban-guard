@@ -76,7 +76,7 @@ const total = (runs: readonly ConformanceRun[]) =>
 const TOTAL = total(CONFORMANCE_RUNS);
 
 const title = "Real-token results — soroban-guard";
-const description = `SEP-41 conformance of ${CONFORMANCE_RUNS.length} testnet contracts — the tokens of stellar/soroban-examples and OpenZeppelin, and Stellar's asset contract for a custom asset — run by soroban-guard ${CONFORMANCE_VERSION} on ${CONFORMANCE_DATE}, every write linked to its transaction.`;
+const description = `SEP-41 conformance of ${CONFORMANCE_RUNS.length} testnet contracts — the tokens of stellar/soroban-examples and OpenZeppelin, and Stellar's asset contracts for the native and a custom asset — run by soroban-guard ${CONFORMANCE_VERSION} on ${CONFORMANCE_DATE}, every write linked to its transaction.`;
 ---
 
 <Base
@@ -184,6 +184,11 @@ const description = `SEP-41 conformance of ${CONFORMANCE_RUNS.length} testnet co
 									<a href={run.originUrl}>{run.origin}</a>
 								)}
 							</span>
+							{run.wasmHash !== undefined && (
+								<span>
+									wasm sha256 <code>{run.wasmHash}</code>
+								</span>
+							)}
 						</li>
 					))
 				}
@@ -191,31 +196,32 @@ const description = `SEP-41 conformance of ${CONFORMANCE_RUNS.length} testnet co
 		</section>
 
 		<section class="notes" id="native">
-			<h2>Native XLM is next</h2>
+			<h2>Native XLM, the asset that pays the fee</h2>
 			<p>
-				Native XLM was run too, and it found a flaw in soroban-guard
-				rather than in XLM. Transaction fees are paid in XLM, so on the
-				XLM contract the account that signs also pays the fee out of the
-				balance being measured. <code>transfer</code> already accounts for
-				that and withholds a verdict, but the zero-amount and self-transfer
-				checks did not: they counted the fee as the contract moving value,
-				and reported FAIL.
+				Transaction fees are paid in XLM, so on the XLM contract the
+				account that signs also pays the fee out of the balance being
+				measured. Where that fee cannot be separated from the movement a
+				check measures — <code>transfer</code>, <code>transfer_from</code>,
+				and their zero-amount and self variants — the tool withholds the
+				verdict instead of guessing. The calls did settle: each of those
+				cells links to its transaction.
 			</p>
 			<p>
-				Those two checks are being fixed to withhold a verdict the same
-				way. XLM joins this table with the release that fixes them —
-				publishing two failures we know to be our own would be exactly the
-				kind of claim this tool exists to prevent.
+				The two failures are deliberate on the contract's side: the
+				Stellar Asset Contract refuses <code>burn</code> and
+				<code>burn_from</code> on the native asset ("operation invalid on
+				native asset"), so those SEP-41 clauses go unmet by a known
+				property of XLM rather than by a defect this run discovered.
 			</p>
 		</section>
 
 		<section class="notes" id="repro">
 			<h2>Run them yourself</h2>
 			<p>
-				The three were live on testnet on {CONFORMANCE_DATE}. Testnet is
+				The four were live on testnet on {CONFORMANCE_DATE}. Testnet is
 				reset from time to time, and the two example tokens, compiled at the
 				commits listed above and deployed for this page, go with it; the
-				asset contract is the network's own.
+				asset contracts are the network's own.
 			</p>
 			<p>
 				Without keys, anyone gets the five reads. The writes need a holder
@@ -278,7 +284,7 @@ SPENDER_SECRET=$(stellar keys secret spender) \\
 
 	.matrix {
 		border-collapse: collapse;
-		min-width: 640px;
+		min-width: 760px;
 		width: 100%;
 	}
 

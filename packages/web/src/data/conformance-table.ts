@@ -6,16 +6,31 @@
  * does not match its column, or a summary that disagrees with its own
  * rows fails the build instead of publishing a wrong table.
  *
- * The reports carry no tool version, so the version they were produced
- * with is recorded here, beside them.
+ * The reports carry `toolVersion`, so the version in the banner is read
+ * from the reports themselves — a re-bake with a new release updates it
+ * automatically, and mixed versions fail the build.
  */
-import type { CheckStatus } from "soroban-guard/src/core/types.ts";
+import { exitCodeFor } from "soroban-guard/src/core/report.ts";
+import type { CheckResult, CheckStatus } from "soroban-guard/src/core/types.ts";
 import ozpt from "./results/ozpt.json";
 import set from "./results/set.json";
 import test from "./results/test.json";
+import xlm from "./results/xlm.json";
 
 /** The tool version that produced the reports in `results/`. */
-export const CONFORMANCE_VERSION = "0.4.3";
+export const CONFORMANCE_VERSION = (() => {
+	// Typed wide on purpose: the files all carry the field today, and the
+	// check below exists for a report that one day does not.
+	const versions = new Set<string | undefined>(
+		[ozpt, set, test, xlm].map((report) => report.toolVersion),
+	);
+	if (versions.size !== 1 || versions.has(undefined)) {
+		throw new Error(
+			`conformance-table: the reports disagree on toolVersion (${[...versions].join(", ")})`,
+		);
+	}
+	return versions.values().next().value as string;
+})();
 export const CONFORMANCE_NETWORK =
 	"Stellar testnet · soroban-testnet.stellar.org";
 
@@ -45,6 +60,7 @@ interface Report {
 	readonly contractId: string;
 	readonly ranAt: string;
 	readonly exitCode: number;
+	readonly toolVersion?: string;
 	readonly summary: {
 		readonly total: number;
 		readonly pass: number;
@@ -54,6 +70,7 @@ interface Report {
 	readonly results: readonly {
 		readonly id: string;
 		readonly status: string;
+		readonly requirement: string;
 		readonly actual: string;
 		readonly evidence?: { readonly txHash?: string };
 	}[];
@@ -75,7 +92,13 @@ export interface ConformanceRun {
 	readonly contractId: string;
 	/** Where the wasm came from, in one sentence. */
 	readonly origin: string;
+	/** The exact upstream commit, for the two contracts built from source. */
 	readonly originUrl?: string;
+	/**
+	 * SHA-256 of the WASM the network serves for this contract, so anyone
+	 * can rebuild from `originUrl` and compare. A live test checks it.
+	 */
+	readonly wasmHash?: string;
 	readonly ranAt: string;
 	readonly exitCode: number;
 	readonly pass: number;
@@ -96,7 +119,7 @@ const STATUSES: readonly CheckStatus[] = [
 export function fromReport(
 	column: Pick<
 		ConformanceRun,
-		"name" | "label" | "contractId" | "origin" | "originUrl"
+		"name" | "label" | "contractId" | "origin" | "originUrl" | "wasmHash"
 	>,
 	report: Report,
 ): ConformanceRun {
@@ -148,6 +171,14 @@ export function fromReport(
 	) {
 		fail("has a summary that disagrees with its own rows");
 	}
+	// Recomputed with the CLI's own rule, so an edited exit code cannot
+	// make a column look conformant.
+	const expectedExit = exitCodeFor(
+		report.results as unknown as readonly CheckResult[],
+	);
+	if (report.exitCode !== expectedExit) {
+		fail(`has exit code ${report.exitCode}, but its rows give ${expectedExit}`);
+	}
 	return {
 		...column,
 		ranAt: report.ranAt,
@@ -166,7 +197,10 @@ export const CONFORMANCE_RUNS: readonly ConformanceRun[] = [
 			contractId: "CDABMBRIDJKHHNYHEQLE3GEINB5EKHGW62SDEXEOKNPKUF2MEJQVYLV5",
 			origin:
 				"stellar/soroban-examples at 03d42aa6 — the repo's token example, compiled and deployed for this table",
-			originUrl: "https://github.com/stellar/soroban-examples",
+			originUrl:
+				"https://github.com/stellar/soroban-examples/tree/03d42aa6b973dcf3a453a99d0c6a6e8d25a196e2/token",
+			wasmHash:
+				"31570dc1711a7a4616c474443a501012298f86ab68f012a672b0608f733f1820",
 		},
 		set,
 	),
@@ -177,9 +211,22 @@ export const CONFORMANCE_RUNS: readonly ConformanceRun[] = [
 			contractId: "CC2LCJBERJPDTD27FGLYDTWAGSKEAJN42VT6SNQPVTEGQV63ZHKBSA5H",
 			origin:
 				"OpenZeppelin/stellar-contracts at 33b665bc — the fungible-pausable example, compiled and deployed for this table",
-			originUrl: "https://github.com/OpenZeppelin/stellar-contracts",
+			originUrl:
+				"https://github.com/OpenZeppelin/stellar-contracts/tree/33b665bccb4f38c54f1bb3c5700d950b76e32e0b/examples/fungible-pausable",
+			wasmHash:
+				"fc862406f3eed29f958b0b14493cd23f96dffcdafab731226711ed1f82e3c08c",
 		},
 		ozpt,
+	),
+	fromReport(
+		{
+			name: "xlm",
+			label: "Native XLM (SAC)",
+			contractId: "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC",
+			origin:
+				"the protocol's asset contract for the native asset, deployed on testnet",
+		},
+		xlm,
 	),
 	fromReport(
 		{
