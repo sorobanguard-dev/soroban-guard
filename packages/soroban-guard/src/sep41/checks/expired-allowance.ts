@@ -44,23 +44,22 @@ import {
 const SPEND_AMOUNT = 1n;
 
 /**
- * Ledgers the deliberately short-lived grant is given.
+ * Ledgers the deliberately short-lived grant is given, counted from the
+ * ledger read before the approval is simulated and submitted.
  *
- * One would be tighter, but a submission that takes two ledgers to include
- * would then expire before it applied — the approval itself would fail and
- * the check would learn nothing. Two leaves room for inclusion while still
- * lapsing within seconds.
+ * Simulating, submitting and confirming the approval, then reading it
+ * back, can take three ledgers on testnet. Two was too tight: the grant
+ * was sometimes refused for expiring before it landed, or had already
+ * lapsed when read back, and the check reported UNVERIFIABLE on a
+ * conformant token.
  */
-const SHORT_LIFETIME_LEDGERS = 2;
+const SHORT_LIFETIME_LEDGERS = 6;
 
 /**
- * How long to wait for the grant to lapse before giving up.
- *
- * Testnet closes roughly every four to six seconds, so two ledgers is
- * normally ten seconds or less. The ceiling is generous enough to absorb a
- * slow round without turning a stalled network into a hung run.
+ * How long to wait for the grant to lapse before giving up: six ledgers
+ * at up to six seconds each, with room for a slow round.
  */
-const MAX_WAIT_MS = 45_000;
+const MAX_WAIT_MS = 60_000;
 const POLL_INTERVAL_MS = 2_000;
 
 const expiredMeta = {
