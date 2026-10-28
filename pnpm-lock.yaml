@@ -119,8 +119,8 @@ importers:
   packages/soroban-guard:
     dependencies:
       '@stellar/stellar-sdk':
-        specifier: 17.2.1
-        version: 17.2.1(debug@4.4.3)
+        specifier: 17.4.0
+        version: 17.4.0(debug@4.4.3)
     devDependencies:
       '@types/node':
         specifier: 26.6.5
@@ -135,8 +135,8 @@ importers:
         specifier: 6.0.1
         version: 6.0.1
       '@stellar/stellar-sdk':
-        specifier: 17.2.1
-        version: 17.2.1(debug@4.4.3)
+        specifier: 17.4.0
+        version: 17.4.0(debug@4.4.3)
       soroban-guard:
         specifier: workspace:*
         version: link:../soroban-guard
@@ -885,8 +885,8 @@ packages:
     resolution: {integrity: sha512-HBDNKnxr+ecdaEmbZ0mcKkirOF8tXXEbWSw34P3wT40Tn3g+u+cCH17xAWZymzscq8cojHB8340pR8QNVaD32w==}
     engines: {node: '>=22.0.0', pnpm: '>=10.0.0'}
 
-  '@stellar/stellar-sdk@17.2.1':
-    resolution: {integrity: sha512-kIyfnZ2zCOqV8SUJcsk9buBOvhH1wsLU7KAzqAJyY7AgmD+KdvLTMpI1gcYdhGSakuDG5s6xSO4EN9HZTxpm8g==}
+  '@stellar/stellar-sdk@17.4.0':
+    resolution: {integrity: sha512-IX6gi62yWQ+6Oz56LsVEEeSViSOWJL3BkttftwVmVsu+62nLTWNVsCmTWEzwgNLT/q5HGP25OnlU+hhy2E4wwA==}
     engines: {node: '>=22.12.0'}
     hasBin: true
 
@@ -2529,7 +2529,7 @@ snapshots:
 
   '@stellar/js-xdr@5.0.0': {}
 
-  '@stellar/stellar-sdk@17.2.1(debug@4.4.3)':
+  '@stellar/stellar-sdk@17.4.0(debug@4.4.3)':
     dependencies:
       '@exodus/bytes': 1.15.1(@noble/hashes@2.4.0)
       '@noble/ed25519': 3.2.0
