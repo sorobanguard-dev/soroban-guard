@@ -51,6 +51,7 @@ export const allowanceCheck: Check<Sep41Context> = {
 		return mapReadOutcome(
 			allowanceMeta,
 			EXPECTED,
+			"scvI128",
 			ledger,
 			outcome,
 			(value) => {

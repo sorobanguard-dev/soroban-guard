@@ -40,6 +40,18 @@ async function readQuantity(
 			detail: `the ${noun} came from an archived entry, not current state`,
 		};
 	}
+	if (outcome.kind === "undecodable") {
+		return outcome.type === "scvI128"
+			? {
+					kind: "no-answer",
+					detail: `${method}() returned an i128 that could not be decoded: ${outcome.diagnostics}`,
+				}
+			: {
+					kind: "defect",
+					detail: `${method}() returned ${outcome.type}, expected an i128`,
+					error: outcome.diagnostics,
+				};
+	}
 	if (outcome.kind === "ok") {
 		if (typeof outcome.value !== "bigint") {
 			return {

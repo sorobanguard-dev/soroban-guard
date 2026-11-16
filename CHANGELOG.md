@@ -15,6 +15,13 @@ log, not here.
 
 ## [Unreleased]
 
+### Fixed
+
+- Read checks and write balance/allowance premises report FAIL when a
+  wrong return type cannot be decoded by Stellar SDK 17.4, rather than
+  treating it as a harness failure. Decoder failures on the expected
+  type remain unknown, and RPC failures still report SKIPPED.
+
 ## [0.4.5] — 2026-10-19
 
 ### Added

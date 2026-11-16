@@ -1,6 +1,54 @@
-import { describe, expect, it } from "vitest";
-import { readBalance } from "../../../src/sep41/checks/quantity.ts";
-import { okResponse, sequencedServer, writeCtx } from "../fixtures.ts";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import {
+	readAllowance,
+	readBalance,
+} from "../../../src/sep41/checks/quantity.ts";
+import * as shared from "../../../src/sep41/checks/shared.ts";
+import {
+	collidingKeyMap,
+	okResponse,
+	sequencedServer,
+	writeCtx,
+} from "../fixtures.ts";
+
+describe("undecodable quantities", () => {
+	afterEach(() => vi.restoreAllMocks());
+
+	it("does not accuse the contract when decoding fails on an i128", async () => {
+		vi.spyOn(shared, "callRead").mockResolvedValueOnce({
+			outcome: {
+				kind: "undecodable",
+				type: "scvI128",
+				diagnostics: "SDK decoder failed",
+			},
+			ledger: 1,
+			fromArchive: false,
+		});
+		const ctx = writeCtx(sequencedServer([]));
+		const read = await readBalance(ctx, ctx.parties.owner.address);
+		expect(read).toMatchObject({
+			kind: "no-answer",
+			detail: expect.stringContaining("SDK decoder failed"),
+		});
+	});
+
+	it.each(["balance", "allowance"] as const)(
+		"treats an undecodable %s map as a defect in a write's premise",
+		async (method) => {
+			const ctx = writeCtx(sequencedServer([okResponse(collidingKeyMap())]));
+			const owner = ctx.parties.owner.address;
+			const read =
+				method === "balance"
+					? await readBalance(ctx, owner)
+					: await readAllowance(ctx, owner, ctx.parties.spender.address);
+			expect(read).toMatchObject({
+				kind: "defect",
+				detail: expect.stringContaining("scvMap"),
+				error: expect.stringContaining("more than one key"),
+			});
+		},
+	);
+});
 
 /**
  * The negative-quantity rule, and the run-level memory behind it.

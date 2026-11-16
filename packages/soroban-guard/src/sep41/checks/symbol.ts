@@ -31,6 +31,7 @@ export const symbolCheck: Check<Sep41Context> = {
 		return mapReadOutcome(
 			symbolMeta,
 			"string token symbol",
+			"scvString",
 			ledger,
 			outcome,
 			// Spec-legal when empty — see name.ts for the reasoning. Reported

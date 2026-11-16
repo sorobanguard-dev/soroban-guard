@@ -7,14 +7,18 @@ import {
 	xdr,
 } from "@stellar/stellar-sdk";
 import { describe, expect, it } from "vitest";
+import { exitCodeFor } from "../../../src/core/report.ts";
+import { runSuite } from "../../../src/core/runner.ts";
 import { allowanceCheck } from "../../../src/sep41/checks/allowance.ts";
 import { balanceCheck } from "../../../src/sep41/checks/balance.ts";
 import { decimalsCheck } from "../../../src/sep41/checks/decimals.ts";
 import { nameCheck } from "../../../src/sep41/checks/name.ts";
+import { mapReadOutcome } from "../../../src/sep41/checks/read-outcome.ts";
 import { symbolCheck } from "../../../src/sep41/checks/symbol.ts";
 import type { Sep41Context } from "../../../src/sep41/context.ts";
 import {
 	answerlessSuccess,
+	collidingKeyMap,
 	errorResponse,
 	okResponse,
 	restoreResponse,
@@ -55,6 +59,62 @@ function ctxWith(
 		soundness: {},
 	};
 }
+
+describe("undecodable contract returns", () => {
+	it("withholds a verdict when decoding fails on the expected raw type", () => {
+		const result = mapReadOutcome(
+			decimalsCheck,
+			"u32 decimal precision",
+			"scvU32",
+			1,
+			{
+				kind: "undecodable",
+				type: "scvU32",
+				diagnostics: "SDK decoder failed",
+			},
+			() => null,
+			0,
+		);
+		expect(result.status).toBe("UNVERIFIABLE");
+		expect(result.evidence.error).toBe("SDK decoder failed");
+	});
+
+	it.each([
+		decimalsCheck,
+		balanceCheck,
+		allowanceCheck,
+		nameCheck,
+		symbolCheck,
+	])(
+		"$id FAILs an observed map instead of reporting a harness failure",
+		async (check) => {
+			const results = await runSuite(
+				{ standard: "SEP-41", checks: [check] },
+				ctxWith(stubServer(okResponse(collidingKeyMap()))),
+			);
+			expect(results[0]?.status).toBe("FAIL");
+			expect(results[0]?.actual).toContain("scvMap");
+			expect(results[0]?.evidence.error).toContain("more than one key");
+			expect(results[0]?.evidence.ledger).toBe(1);
+			expect(exitCodeFor(results)).toBe(1);
+		},
+	);
+
+	it("keeps a transport TypeError as SKIPPED, even with decoder-like wording", async () => {
+		const server = {
+			simulateTransaction: async () => {
+				throw new TypeError("scvMap has more than one key; transport failed");
+			},
+		} as unknown as rpc.Server;
+		const results = await runSuite(
+			{ standard: "SEP-41", checks: [decimalsCheck] },
+			ctxWith(server),
+		);
+		expect(results[0]?.status).toBe("SKIPPED");
+		expect(results[0]?.evidence.error).toContain("transport failed");
+		expect(exitCodeFor(results)).toBe(2);
+	});
+});
 
 describe("decimalsCheck", () => {
 	it("reports NOT_IMPLEMENTED under the interface layer when undeclared", async () => {

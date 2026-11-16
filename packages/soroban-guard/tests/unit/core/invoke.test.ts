@@ -9,12 +9,21 @@ import {
 } from "../../../src/core/invoke.ts";
 import {
 	answerlessSuccess,
+	collidingKeyMap,
 	errorResponse,
 	okResponse,
 	restoreResponse,
 } from "../fixtures.ts";
 
 describe("interpretSimulation", () => {
+	it("preserves the raw type when the SDK cannot decode a returned value", () => {
+		expect(interpretSimulation(okResponse(collidingKeyMap()))).toEqual({
+			kind: "undecodable",
+			type: "scvMap",
+			diagnostics: expect.stringContaining("more than one key"),
+		});
+	});
+
 	it("decodes a contract u32 return to a number", () => {
 		expect(interpretSimulation(okResponse(xdr.ScVal.scvU32(7)))).toEqual({
 			kind: "ok",

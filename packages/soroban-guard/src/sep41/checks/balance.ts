@@ -50,6 +50,7 @@ export const balanceCheck: Check<Sep41Context> = {
 		return mapReadOutcome(
 			balanceMeta,
 			EXPECTED,
+			"scvI128",
 			ledger,
 			outcome,
 			(value) => {

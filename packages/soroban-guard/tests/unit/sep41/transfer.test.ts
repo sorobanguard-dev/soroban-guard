@@ -14,6 +14,7 @@ import * as invoke from "../../../src/core/invoke.ts";
 import { transferCheck } from "../../../src/sep41/checks/transfer.ts";
 import type { Sep41Context } from "../../../src/sep41/context.ts";
 import {
+	collidingKeyMap,
 	errorResponse,
 	okResponse,
 	rejected,
@@ -91,6 +92,34 @@ describe("transferCheck", () => {
 	// reach it at all — such as the no-signer short-circuit.
 	afterEach(() => {
 		vi.restoreAllMocks();
+	});
+
+	it("FAILs an undecodable wrong-type balance before submitting", async () => {
+		const submit = stubSubmit(APPLIED);
+		const result = await transferCheck.run(
+			ctxWith(sequencedServer([okResponse(collidingKeyMap()), okResponse(5n)])),
+		);
+		expect(result.status).toBe("FAIL");
+		expect(result.actual).toContain("scvMap");
+		expect(submit).not.toHaveBeenCalled();
+	});
+
+	it("retains the transaction when an after-balance has an undecodable wrong type", async () => {
+		stubSubmit(APPLIED);
+		const result = await transferCheck.run(
+			ctxWith(
+				sequencedServer([
+					okResponse(100n),
+					okResponse(5n),
+					okResponse(collidingKeyMap()),
+					okResponse(6n),
+				]),
+			),
+		);
+		expect(result.status).toBe("FAIL");
+		expect(result.actual).toContain("scvMap");
+		expect(result.evidence.txHash).toBe(APPLIED.txHash);
+		expect(result.evidence.ledger).toBe(APPLIED.ledger);
 	});
 
 	it("PASSes when the deltas match the amount moved", async () => {
