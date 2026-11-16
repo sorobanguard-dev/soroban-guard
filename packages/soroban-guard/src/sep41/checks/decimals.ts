@@ -39,6 +39,7 @@ export const decimalsCheck: Check<Sep41Context> = {
 		return mapReadOutcome(
 			decimalsMeta,
 			"u32 decimal precision",
+			"scvU32",
 			ledger,
 			outcome,
 			(value) => {

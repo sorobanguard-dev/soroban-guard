@@ -6,6 +6,7 @@
  * FAIL or UNVERIFIABLE. Writes deliberately do not share it — a write
  * asserts on the delta between two reads, not on a single return value.
  */
+import type { xdr } from "@stellar/stellar-sdk";
 import type { InvokeResult } from "../../core/invoke.ts";
 import type { CheckResult } from "../../core/types.ts";
 import { type CheckMeta, classifyStanding, describeValue } from "./shared.ts";
@@ -35,11 +36,27 @@ export type AcceptResult =
 export function mapReadOutcome(
 	meta: CheckMeta,
 	expected: string,
+	expectedType: xdr.ScVal["type"],
 	ledger: number,
 	outcome: InvokeResult,
 	accept: (value: unknown) => AcceptResult,
 	durationMs: number,
 ): CheckResult {
+	if (outcome.kind === "undecodable") {
+		// A map cannot satisfy a scalar return clause even if native decoding
+		// failed. A failure decoding the expected type alone proves no defect.
+		const wrongType = outcome.type !== expectedType;
+		return {
+			...meta,
+			status: wrongType ? "FAIL" : "UNVERIFIABLE",
+			expected,
+			actual: wrongType
+				? `returned ${outcome.type}, expected ${expected}`
+				: "returned value could not be decoded; no contract defect established",
+			evidence: { ledger, error: outcome.diagnostics },
+			durationMs,
+		};
+	}
 	if (outcome.kind === "restore" || outcome.kind === "inconclusive") {
 		return {
 			...meta,

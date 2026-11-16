@@ -31,6 +31,7 @@ export const nameCheck: Check<Sep41Context> = {
 		return mapReadOutcome(
 			nameMeta,
 			"string token name",
+			"scvString",
 			ledger,
 			outcome,
 			// SEP-41 declares `name() -> String` and constrains the content no

@@ -36,6 +36,12 @@ export interface ReadCall {
 
 export type InvokeResult =
 	| { readonly kind: "ok"; readonly value: unknown }
+	/** A returned ScVal exists, but the SDK cannot represent it natively. */
+	| {
+			readonly kind: "undecodable";
+			readonly type: xdr.ScVal["type"];
+			readonly diagnostics: string;
+	  }
 	| { readonly kind: "trapped"; readonly diagnostics: string }
 	| { readonly kind: "restore"; readonly diagnostics: string }
 	| { readonly kind: "inconclusive"; readonly diagnostics: string };
@@ -182,6 +188,9 @@ export async function simulateRead(
  * because reads never submit; only a restore *without* an answer reports
  * `restore`. Answerless success is partial RPC data, never a contract trap,
  * so it reports `inconclusive` and callers must not FAIL on it.
+ * A native conversion failure preserves the returned XDR type: a suite
+ * can reject an unexpected type without mistaking an SDK limitation on
+ * the expected type for a contract defect.
  */
 export function interpretSimulation(
 	sim: rpc.Api.SimulateTransactionResponse,
@@ -190,7 +199,19 @@ export function interpretSimulation(
 		return { kind: "trapped", diagnostics: sim.error };
 	}
 	if (rpc.Api.isSimulationSuccess(sim) && sim.result?.retval !== undefined) {
-		return { kind: "ok", value: scValToNative(sim.result.retval) };
+		const returned = sim.result.retval;
+		try {
+			return { kind: "ok", value: scValToNative(returned) };
+		} catch (error) {
+			// Only conversion is guarded: RPC failures must still reach the
+			// runner as harness errors. The raw type lets a check distinguish
+			// a wrong return type from a decoder failing on the expected one.
+			return {
+				kind: "undecodable",
+				type: returned.type,
+				diagnostics: error instanceof Error ? error.message : String(error),
+			};
+		}
 	}
 	if (rpc.Api.isSimulationRestore(sim)) {
 		return {

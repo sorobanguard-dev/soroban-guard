@@ -5,7 +5,7 @@ import {
 	Networks,
 	nativeToScVal,
 	type rpc,
-	type xdr,
+	xdr,
 } from "@stellar/stellar-sdk";
 import type { Signer } from "@stellar/stellar-sdk/contract";
 import { vi } from "vitest";
@@ -40,6 +40,20 @@ export function okResponse(
 		minResourceFee: "0",
 		result: { auth: [], retval: encode(retval) },
 	} as unknown as rpc.Api.SimulateTransactionResponse;
+}
+
+/** Distinct XDR keys that cannot both be represented by a JS object key. */
+export function collidingKeyMap(): xdr.ScVal {
+	return xdr.ScVal.scvMap([
+		new xdr.ScMapEntry({
+			key: xdr.ScVal.scvU32(1),
+			val: xdr.ScVal.scvU32(10),
+		}),
+		new xdr.ScMapEntry({
+			key: xdr.ScVal.scvSymbol("1"),
+			val: xdr.ScVal.scvU32(20),
+		}),
+	]);
 }
 
 export function errorResponse(
