@@ -92,16 +92,13 @@ export async function inspectContract(
 		if (ref === undefined || ref === null) {
 			return { kind: "native" };
 		}
+		let wasm: Uint8Array;
 		try {
-			const wasm = await server.getContractWasmByHash(
+			wasm = await server.getContractWasmByHash(
 				await server.getExternalRefWasmHash(
 					ref as Parameters<typeof server.getExternalRefWasmHash>[0],
 				),
 			);
-			return {
-				kind: "wasm",
-				functions: specFunctionNames(contract.Spec.fromWasm(wasm)),
-			};
 		} catch (error) {
 			// Mirror the WASM branch, plus malformed-ref setup ({code:400}:
 			// the ref names something unresolvable): both are ledger states
@@ -112,6 +109,11 @@ export async function inspectContract(
 			}
 			throw error;
 		}
+		// Parsed outside the fetch guard, as on the WASM branch below: a spec
+		// the SDK refuses (none, or since 17.3 more than one section) is a
+		// fact about the code, not a transport failure, and must not stop
+		// the run from starting.
+		return specOrNative(wasm);
 	}
 	if (executable?.type !== "contractExecutableWasm") {
 		// SAC and anything else without fetchable WASM.
@@ -137,6 +139,15 @@ export async function inspectContract(
 		}
 		throw error;
 	}
+	return specOrNative(wasm);
+}
+
+/**
+ * The declared functions, or native when the SDK cannot read a spec from
+ * the code. Both ways of reaching contract code end here, so they cannot
+ * disagree about what an unreadable spec means.
+ */
+function specOrNative(wasm: Uint8Array): ContractCode {
 	try {
 		return {
 			kind: "wasm",
