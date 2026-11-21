@@ -25,6 +25,10 @@ log, not here.
   Stellar type, not only its value. A wrong type that decodes to the same
   value used to PASS: an `i32` from `decimals`, a `Symbol` from `name` or
   `symbol`, a `u64` from `balance` or `allowance`. Each is now a FAIL.
+- A contract whose code is referenced through CAP-85 no longer stops the
+  run when its contract spec cannot be read (no spec section, or since SDK
+  17.3 more than one). It falls back to attempting every member, as
+  contracts with directly deployed code already did.
 
 ## [0.4.5] — 2026-10-19
 
