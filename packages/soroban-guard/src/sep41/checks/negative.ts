@@ -31,9 +31,10 @@
  * thing. Use addresses dedicated to the run, and keep this check ahead of
  * approve in the suite.
  */
-import { addressArg, amountArg, submitWrite } from "../../core/invoke.ts";
+import { addressArg, amountArg } from "../../core/invoke.ts";
 import type { CheckResult } from "../../core/types.ts";
 import type { Sep41Context } from "../context.ts";
+import { submitCheckWrite } from "../write.ts";
 import { readAllowance, readBalance } from "./quantity.ts";
 import {
 	type CheckMeta,
@@ -170,21 +171,16 @@ export const unauthorizedTransferFromCheck = {
 			);
 		}
 
-		const submitted = await submitWrite(
-			ctx.server,
-			{
-				contractId: ctx.contractId,
-				method: "transfer_from",
-				args: [
-					addressArg(spender.address),
-					addressArg(owner.address),
-					addressArg(spender.address),
-					amountArg(ATTEMPT_AMOUNT),
-				],
-				signer: spender.signer,
-			},
-			ctx.networkPassphrase,
-		);
+		const submitted = await submitCheckWrite(ctx, {
+			method: "transfer_from",
+			args: [
+				addressArg(spender.address),
+				addressArg(owner.address),
+				addressArg(spender.address),
+				amountArg(ATTEMPT_AMOUNT),
+			],
+			signer: spender.signer,
+		});
 
 		if (submitted.kind === "timeout") {
 			// The hash goes in evidence, not only in prose: an attempt that

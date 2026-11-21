@@ -21,9 +21,10 @@
  * not move, and the exact-delta assertion reads it as the contract losing or
  * inventing value. Use addresses dedicated to the run.
  */
-import { addressArg, amountArg, submitWrite } from "../../core/invoke.ts";
+import { addressArg, amountArg } from "../../core/invoke.ts";
 import type { CheckResult } from "../../core/types.ts";
 import type { Sep41Context } from "../context.ts";
+import { submitCheckWrite } from "../write.ts";
 import { grantKey, submitApproval } from "./approve.ts";
 import { assertDeltas, writeEvidence } from "./delta.ts";
 import { type QuantityRead, readAllowance, readBalance } from "./quantity.ts";
@@ -223,20 +224,15 @@ export const burnFromCheck = {
 			);
 		}
 
-		const submitted = await submitWrite(
-			ctx.server,
-			{
-				contractId: ctx.contractId,
-				method: "burn_from",
-				args: [
-					addressArg(spender.address),
-					addressArg(owner.address),
-					amountArg(BURN_AMOUNT),
-				],
-				signer: spender.signer,
-			},
-			ctx.networkPassphrase,
-		);
+		const submitted = await submitCheckWrite(ctx, {
+			method: "burn_from",
+			args: [
+				addressArg(spender.address),
+				addressArg(owner.address),
+				amountArg(BURN_AMOUNT),
+			],
+			signer: spender.signer,
+		});
 
 		const before = {
 			holder: holderBaseline,

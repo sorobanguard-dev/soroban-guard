@@ -16,9 +16,10 @@
  * the exact-delta assertion reads it as the contract destroying the wrong
  * amount. Use addresses dedicated to the run.
  */
-import { addressArg, amountArg, submitWrite } from "../../core/invoke.ts";
+import { addressArg, amountArg } from "../../core/invoke.ts";
 import type { CheckResult } from "../../core/types.ts";
 import type { Sep41Context } from "../context.ts";
+import { submitCheckWrite } from "../write.ts";
 import { assertDeltas, writeEvidence } from "./delta.ts";
 import { type QuantityRead, readBalance } from "./quantity.ts";
 import {
@@ -102,16 +103,11 @@ export const burnCheck = {
 			);
 		}
 
-		const submitted = await submitWrite(
-			ctx.server,
-			{
-				contractId: ctx.contractId,
-				method: "burn",
-				args: [addressArg(owner.address), amountArg(BURN_AMOUNT)],
-				signer: owner.signer,
-			},
-			ctx.networkPassphrase,
-		);
+		const submitted = await submitCheckWrite(ctx, {
+			method: "burn",
+			args: [addressArg(owner.address), amountArg(BURN_AMOUNT)],
+			signer: owner.signer,
+		});
 
 		if (submitted.kind === "timeout") {
 			return {

@@ -133,7 +133,10 @@ function showCleanup(cleanup: Cleanup): void {
 	const button = document.createElement("button");
 	button.type = "button";
 	button.className = "retry-action";
-	button.textContent = "Try sending them back again";
+	button.textContent =
+		cleanup.pendingTxHash === undefined
+			? "Try sending them back again"
+			: "Check transaction status";
 	button.addEventListener("click", async () => {
 		// A faucet claim reads the wallet's balance when it lands; units
 		// arriving from a send-back at the same time would make that read
@@ -722,7 +725,7 @@ form.addEventListener("submit", async (event) => {
 		if (outcome.cleanup !== undefined) {
 			showCleanup(outcome.cleanup);
 		} else if (outcome.spenderSetupFailed !== undefined) {
-			progress.textContent = `The page could not set up a second account (${outcome.spenderSetupFailed}), so the four checks that need one could not run. Run the checks again from the top to retry.`;
+			progress.textContent = `The page could not set up a second account (${outcome.spenderSetupFailed}). See the report for which checks could run.`;
 		}
 	} catch (error) {
 		// A throw here is the run never starting — a bad address, an

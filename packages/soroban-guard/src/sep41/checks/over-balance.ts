@@ -22,14 +22,10 @@
  * rather than moves, so a contract could refuse for that reason and be
  * credited with a floor check it never performed.
  */
-import {
-	addressArg,
-	amountArg,
-	I128_MAX,
-	submitWrite,
-} from "../../core/invoke.ts";
+import { addressArg, amountArg, I128_MAX } from "../../core/invoke.ts";
 import type { CheckResult } from "../../core/types.ts";
 import type { Sep41Context } from "../context.ts";
+import { submitCheckWrite } from "../write.ts";
 import { type QuantityRead, readBalance } from "./quantity.ts";
 import {
 	inconclusiveResult,
@@ -179,20 +175,15 @@ export const overBalanceTransferCheck = {
 			);
 		}
 		const attempt = before.amount + 1n;
-		const submitted = await submitWrite(
-			ctx.server,
-			{
-				contractId: ctx.contractId,
-				method: "transfer",
-				args: [
-					addressArg(owner.address),
-					addressArg(spender.address),
-					amountArg(attempt),
-				],
-				signer: owner.signer,
-			},
-			ctx.networkPassphrase,
-		);
+		const submitted = await submitCheckWrite(ctx, {
+			method: "transfer",
+			args: [
+				addressArg(owner.address),
+				addressArg(spender.address),
+				amountArg(attempt),
+			],
+			signer: owner.signer,
+		});
 
 		const reading = readRefusal(submitted, WORDING);
 		if (reading.kind === "inconclusive") {

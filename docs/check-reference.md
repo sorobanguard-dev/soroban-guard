@@ -265,9 +265,12 @@ replace, this one cannot test expiry without granting first.
 - `PASS` — the clause was exercised and held.
 - `FAIL` — the clause was exercised and was violated.
 - `UNVERIFIABLE` — the clause could not be exercised; no verdict either way.
-- `SKIPPED` — the check could not run (harness or network failure). A
-  submitted transaction that timed out is not this: it reports
-  UNVERIFIABLE, since it may still apply.
+- `SKIPPED` — the check could not run (harness or network failure), or
+  was not attempted because an earlier transaction's outcome is unknown.
+  The check whose transaction that was reports UNVERIFIABLE with its hash,
+  since it may still apply; every later write check then reports SKIPPED
+  with the same hash, because it would be measuring state that
+  transaction can still change.
 - `NOT_IMPLEMENTED` — the contract does not declare this member (WASM
   spec introspection; SACs have no spec, so every member is attempted).
 
