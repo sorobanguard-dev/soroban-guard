@@ -80,6 +80,20 @@ export function mapReadOutcome(
 			durationMs,
 		};
 	}
+	// The type before the value: a wrong ScVal type can decode to exactly the
+	// value the clause expects (i32 7 and u32 7 are both the number 7), so a
+	// predicate on the decoded value alone would pass it. Void keeps its own
+	// message below.
+	if (outcome.type !== expectedType && outcome.type !== "scvVoid") {
+		return {
+			...meta,
+			status: "FAIL",
+			expected,
+			actual: `returned ${outcome.type}, expected ${expected}`,
+			evidence: { ledger },
+			durationMs,
+		};
+	}
 	const accepted = accept(outcome.value);
 	if (accepted !== null && accepted.verdict === "unverifiable") {
 		return {

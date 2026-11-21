@@ -21,6 +21,10 @@ log, not here.
   wrong return type cannot be decoded by Stellar SDK 17.4, rather than
   treating it as a harness failure. Decoder failures on the expected
   type remain unknown, and RPC failures still report SKIPPED.
+- Read checks and write balance/allowance premises check the returned
+  Stellar type, not only its value. A wrong type that decodes to the same
+  value used to PASS: an `i32` from `decimals`, a `Symbol` from `name` or
+  `symbol`, a `u64` from `balance` or `allowance`. Each is now a FAIL.
 
 ## [0.4.5] — 2026-10-19
 

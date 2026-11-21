@@ -35,7 +35,17 @@ export interface ReadCall {
 }
 
 export type InvokeResult =
-	| { readonly kind: "ok"; readonly value: unknown }
+	/**
+	 * `type` is the ScVal type the contract actually returned. The decoded
+	 * value alone cannot be trusted for conformance: `i32 7` and `u32 7`
+	 * both decode to the number 7, `Symbol` and `String` to the same
+	 * string, `u64` and `i128` to the same bigint.
+	 */
+	| {
+			readonly kind: "ok";
+			readonly value: unknown;
+			readonly type: xdr.ScVal["type"];
+	  }
 	/** A returned ScVal exists, but the SDK cannot represent it natively. */
 	| {
 			readonly kind: "undecodable";
@@ -201,7 +211,11 @@ export function interpretSimulation(
 	if (rpc.Api.isSimulationSuccess(sim) && sim.result?.retval !== undefined) {
 		const returned = sim.result.retval;
 		try {
-			return { kind: "ok", value: scValToNative(returned) };
+			return {
+				kind: "ok",
+				value: scValToNative(returned),
+				type: returned.type,
+			};
 		} catch (error) {
 			// Only conversion is guarded: RPC failures must still reach the
 			// runner as harness errors. The raw type lets a check distinguish

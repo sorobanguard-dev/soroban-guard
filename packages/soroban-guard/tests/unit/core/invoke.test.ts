@@ -28,6 +28,7 @@ describe("interpretSimulation", () => {
 		expect(interpretSimulation(okResponse(xdr.ScVal.scvU32(7)))).toEqual({
 			kind: "ok",
 			value: 7,
+			type: "scvU32",
 		});
 	});
 
@@ -52,6 +53,7 @@ describe("interpretSimulation", () => {
 		expect(interpretSimulation(restoreResponse(xdr.ScVal.scvU32(7)))).toEqual({
 			kind: "ok",
 			value: 7,
+			type: "scvU32",
 		});
 	});
 
@@ -71,6 +73,7 @@ describe("interpretSimulation", () => {
 		expect(interpretSimulation(okResponse(xdr.ScVal.scvVoid()))).toEqual({
 			kind: "ok",
 			value: null,
+			type: "scvVoid",
 		});
 	});
 });
