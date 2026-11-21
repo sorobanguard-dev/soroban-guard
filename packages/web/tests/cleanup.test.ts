@@ -44,7 +44,8 @@ const REQUEST = {
 	ownerSigner: {} as never,
 };
 
-const balance = (value: bigint) => ({ kind: "ok", value }) as const;
+const balance = (value: bigint) =>
+	({ kind: "ok", value, type: "scvI128" }) as const;
 const applied = { kind: "applied", txHash: "h", ledger: 1 } as const;
 const rejected = {
 	kind: "rejected",

@@ -1,3 +1,4 @@
+import { nativeToScVal } from "@stellar/stellar-sdk";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
 	readAllowance,
@@ -48,6 +49,39 @@ describe("undecodable quantities", () => {
 			});
 		},
 	);
+});
+
+/**
+ * A u64 decodes to a bigint just as an i128 does, so a write check reading
+ * its premise or after-state would accept it without the type check. Every
+ * write check reads through these, so this is the one place to pin it.
+ */
+describe("quantities of the wrong integer type", () => {
+	it.each(["balance", "allowance"] as const)(
+		"treats %s returned as u64 as a defect",
+		async (method) => {
+			const ctx = writeCtx(
+				sequencedServer([okResponse(nativeToScVal(7n, { type: "u64" }))]),
+			);
+			const owner = ctx.parties.owner.address;
+			const read =
+				method === "balance"
+					? await readBalance(ctx, owner)
+					: await readAllowance(ctx, owner, ctx.parties.spender.address);
+			expect(read).toMatchObject({
+				kind: "defect",
+				detail: `${method}() returned scvU64, expected an i128`,
+			});
+		},
+	);
+
+	it("still accepts an i128", async () => {
+		const ctx = writeCtx(
+			sequencedServer([okResponse(nativeToScVal(7n, { type: "i128" }))]),
+		);
+		const read = await readBalance(ctx, ctx.parties.owner.address);
+		expect(read).toMatchObject({ kind: "value", amount: 7n });
+	});
 });
 
 /**

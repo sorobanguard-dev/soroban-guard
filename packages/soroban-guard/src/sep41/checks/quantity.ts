@@ -53,6 +53,16 @@ async function readQuantity(
 				};
 	}
 	if (outcome.kind === "ok") {
+		// Same rule as the read checks: a u64 or i64 decodes to a bigint just
+		// like an i128 does, so the ScVal type is checked before the value is
+		// trusted as a premise or after-state. Void keeps its message below.
+		if (outcome.type !== "scvI128" && outcome.type !== "scvVoid") {
+			return {
+				kind: "defect",
+				detail: `${method}() returned ${outcome.type}, expected an i128`,
+				error: "",
+			};
+		}
 		if (typeof outcome.value !== "bigint") {
 			return {
 				kind: "defect",

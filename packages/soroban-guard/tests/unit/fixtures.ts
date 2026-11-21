@@ -25,9 +25,18 @@ const BASE = {
 	_parsed: true,
 } as const;
 
+/**
+ * A bigint is a SEP-41 quantity, and SEP-41 quantities are i128.
+ * `nativeToScVal` would pick the smallest fitting type (u64 for 100n, i64
+ * for -1n), which is exactly the wrong-type case the checks now FAIL, so
+ * a test that wants another integer type passes an explicit ScVal.
+ */
 function encode(retval: xdr.ScVal | unknown): xdr.ScVal {
-	return typeof retval === "object" && retval !== null && "toXDR" in retval
-		? (retval as xdr.ScVal)
+	if (typeof retval === "object" && retval !== null && "toXDR" in retval) {
+		return retval as xdr.ScVal;
+	}
+	return typeof retval === "bigint"
+		? nativeToScVal(retval, { type: "i128" })
 		: nativeToScVal(retval);
 }
 

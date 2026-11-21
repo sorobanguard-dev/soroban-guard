@@ -3,6 +3,7 @@ import {
 	Address,
 	Keypair,
 	Networks,
+	nativeToScVal,
 	type rpc,
 	xdr,
 } from "@stellar/stellar-sdk";
@@ -374,6 +375,32 @@ describe("nameCheck", () => {
 		expect(result.actual).not.toContain("\n");
 		expect(result.actual).not.toContain("\x1b");
 		expect(result.actual).toContain("\\n");
+	});
+});
+
+describe("wrong SEP-41 return types", () => {
+	it("FAILs decimals that returns an i32", async () => {
+		const r = await decimalsCheck.run(
+			ctxWith(stubServer(okResponse(nativeToScVal(7, { type: "i32" })))),
+		);
+		expect(r.status).toBe("FAIL");
+		expect(r.actual).toContain("scvI32");
+	});
+
+	it("FAILs name that returns a Symbol", async () => {
+		const r = await nameCheck.run(
+			ctxWith(
+				stubServer(okResponse(nativeToScVal("TOKEN", { type: "symbol" }))),
+			),
+		);
+		expect(r.status).toBe("FAIL");
+	});
+
+	it("FAILs balance that returns a u64", async () => {
+		const r = await balanceCheck.run(
+			ctxWith(stubServer(okResponse(nativeToScVal(7n, { type: "u64" })))),
+		);
+		expect(r.status).toBe("FAIL");
 	});
 });
 
