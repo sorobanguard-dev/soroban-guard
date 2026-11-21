@@ -18,9 +18,10 @@
  * holding, and a refusal on those grounds would be credited as a sign check
  * the contract never performed.
  */
-import { addressArg, amountArg, submitWrite } from "../../core/invoke.ts";
+import { addressArg, amountArg } from "../../core/invoke.ts";
 import type { CheckResult } from "../../core/types.ts";
 import type { Sep41Context } from "../context.ts";
+import { submitCheckWrite } from "../write.ts";
 import { type QuantityRead, readBalance } from "./quantity.ts";
 import {
 	inconclusiveResult,
@@ -165,20 +166,15 @@ export const negativeAmountTransferCheck = {
 			);
 		}
 
-		const submitted = await submitWrite(
-			ctx.server,
-			{
-				contractId: ctx.contractId,
-				method: "transfer",
-				args: [
-					addressArg(owner.address),
-					addressArg(spender.address),
-					amountArg(ATTEMPT_AMOUNT),
-				],
-				signer: owner.signer,
-			},
-			ctx.networkPassphrase,
-		);
+		const submitted = await submitCheckWrite(ctx, {
+			method: "transfer",
+			args: [
+				addressArg(owner.address),
+				addressArg(spender.address),
+				amountArg(ATTEMPT_AMOUNT),
+			],
+			signer: owner.signer,
+		});
 
 		const reading = readRefusal(submitted, WORDING);
 		if (reading.kind === "inconclusive") {

@@ -106,6 +106,8 @@ export interface Sep41Context {
 		 * negative`). Undefined means nothing unsound has been observed.
 		 */
 		firstNegative?: string;
+		/** The first submitted transaction whose outcome this run could not establish. */
+		unresolvedWrite?: { readonly txHash: string };
 	};
 	/**
 	 * The two roles, and the single home for their addresses. Reads take

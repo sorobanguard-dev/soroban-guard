@@ -22,9 +22,10 @@
  * the opposite of what is built here, and registering it would teach the
  * `_from` checks to treat an expired grant as fresh.
  */
-import { addressArg, amountArg, submitWrite } from "../../core/invoke.ts";
+import { addressArg, amountArg } from "../../core/invoke.ts";
 import type { CheckResult } from "../../core/types.ts";
 import type { Sep41Context } from "../context.ts";
+import { submitCheckWrite } from "../write.ts";
 import { submitApproval } from "./approve.ts";
 import { readAllowance, readBalance } from "./quantity.ts";
 import {
@@ -334,21 +335,16 @@ export const expiredAllowanceCheck = {
 		const reported =
 			standing.kind === "value" ? `${standing.amount}` : "unreadable";
 
-		const submitted = await submitWrite(
-			ctx.server,
-			{
-				contractId: ctx.contractId,
-				method: "transfer_from",
-				args: [
-					addressArg(spender.address),
-					addressArg(owner.address),
-					addressArg(spender.address),
-					amountArg(SPEND_AMOUNT),
-				],
-				signer: spender.signer,
-			},
-			ctx.networkPassphrase,
-		);
+		const submitted = await submitCheckWrite(ctx, {
+			method: "transfer_from",
+			args: [
+				addressArg(spender.address),
+				addressArg(owner.address),
+				addressArg(spender.address),
+				amountArg(SPEND_AMOUNT),
+			],
+			signer: spender.signer,
+		});
 
 		const reading = readRefusal(submitted, WORDING);
 		if (reading.kind === "inconclusive") {

@@ -25,6 +25,7 @@ import {
 	addressArg,
 	amountArg,
 	interpretSimulation,
+	RPC_TIMEOUT_MS,
 	simulateRead,
 	submitWrite,
 } from "soroban-guard/src/core/invoke.ts";
@@ -111,6 +112,7 @@ async function addTrustline(
 	keypair: Keypair,
 	asset: Asset,
 	networkPassphrase: string,
+	soundness: Sep41Context["soundness"],
 ): Promise<void> {
 	const account = await server.getAccount(keypair.publicKey());
 	const tx = new TransactionBuilder(account, {
@@ -121,18 +123,28 @@ async function addTrustline(
 		.setTimeout(60)
 		.build();
 	tx.sign(keypair);
-	const sent = await server.sendTransaction(tx);
-	if (sent.status !== "PENDING") {
+	const txHash = Array.from(tx.hash(), (byte) =>
+		byte.toString(16).padStart(2, "0"),
+	).join("");
+	const sent = await server.sendTransaction(tx).catch(() => undefined);
+	if (sent?.status === "ERROR" || sent?.status === "TRY_AGAIN_LATER") {
 		throw new Error(
 			`the temporary account's trustline to ${asset.getCode()} was refused (${sent.status})`,
 		);
 	}
-	const settled = await server.pollTransaction(sent.hash, { attempts: 20 });
-	if (settled.status !== "SUCCESS") {
+	const settled = await server
+		.pollTransaction(txHash, { attempts: 20 })
+		.catch(() => undefined);
+	if (settled?.status === "SUCCESS") return;
+	if (settled?.status === "FAILED") {
 		throw new Error(
 			`the temporary account's trustline to ${asset.getCode()} did not land (${settled.status})`,
 		);
 	}
+	soundness.unresolvedWrite = { txHash };
+	throw new Error(
+		`the temporary account's trustline transaction ${txHash} may still apply`,
+	);
 }
 
 /** The second party the run supplies, with what the page needs to clean up. */
@@ -165,6 +177,7 @@ export async function spenderParty(
 	source: Awaited<ReturnType<rpc.Server["getAccount"]>>,
 	isAssetContract: boolean,
 	onStage?: (text: string) => void,
+	soundness: Sep41Context["soundness"] = {},
 ): Promise<{
 	party: Party;
 	temporary?: TemporarySpender;
@@ -188,7 +201,13 @@ export async function spenderParty(
 			onStage?.(
 				`Giving the temporary account a trustline to ${asset.getCode()}…`,
 			);
-			await addTrustline(server, keypair, asset, request.networkPassphrase);
+			await addTrustline(
+				server,
+				keypair,
+				asset,
+				request.networkPassphrase,
+				soundness,
+			);
 		}
 		const party: Party = {
 			address: keypair.publicKey(),
@@ -221,7 +240,11 @@ async function returnUnits(
 	server: rpc.Server,
 	request: RunRequest,
 	temporary: TemporarySpender,
-): Promise<{ returned: bigint } | { failed: string; retryable: boolean }> {
+): Promise<
+	| { returned: bigint }
+	| { failed: string; retryable: boolean }
+	| { pending: { txHash: string; amount: bigint } }
+> {
 	if (temporary.asset === "native") {
 		return { returned: 0n };
 	}
@@ -281,6 +304,9 @@ async function returnUnits(
 			},
 			request.networkPassphrase,
 		);
+		if (sent.kind === "timeout") {
+			return { pending: { txHash: sent.txHash, amount: held } };
+		}
 		return sent.kind === "applied"
 			? { returned: held }
 			: {
@@ -332,7 +358,9 @@ export async function spendableXlm(
 	);
 	let found: Awaited<ReturnType<rpc.Server["getLedgerEntry"]>>;
 	try {
-		found = await new rpc.Server(rpcUrl).getLedgerEntry(key);
+		found = await new rpc.Server(rpcUrl, {
+			timeout: RPC_TIMEOUT_MS,
+		}).getLedgerEntry(key);
 	} catch (error) {
 		if (
 			error instanceof Error &&
@@ -397,7 +425,7 @@ export async function tokenBalance(
 	request: Pick<RunRequest, "rpcUrl" | "networkPassphrase" | "contractId">,
 	address: string,
 ): Promise<bigint | undefined> {
-	const server = new rpc.Server(request.rpcUrl);
+	const server = new rpc.Server(request.rpcUrl, { timeout: RPC_TIMEOUT_MS });
 	const source = await server.getAccount(address);
 	const simulation = await simulateRead(
 		server,
@@ -430,7 +458,7 @@ export async function claimDemoTokens(
 	if (!isDemoContract(request.contractId)) {
 		throw new Error("Test tokens are only available for the demo token.");
 	}
-	const server = new rpc.Server(request.rpcUrl);
+	const server = new rpc.Server(request.rpcUrl, { timeout: RPC_TIMEOUT_MS });
 	const outcome = await submitWrite(
 		server,
 		{
@@ -460,7 +488,32 @@ export async function claimDemoTokens(
  */
 export type Cleanup =
 	| { readonly returned: bigint }
-	| { readonly failed: string; readonly retry?: () => Promise<Cleanup> };
+	| {
+			readonly failed: string;
+			readonly pendingTxHash?: string;
+			readonly retry?: () => Promise<Cleanup>;
+	  };
+
+/** Keep the temporary signer reachable while retrying only the receipt lookup. */
+function waitForCleanupReceipt(
+	server: rpc.Server,
+	txHash: string,
+	failed: string,
+	onSettled: (succeeded: boolean) => Promise<Cleanup>,
+): Cleanup {
+	if (txHash === "") return { failed };
+	return {
+		failed: `${failed}. Transaction ${txHash} may still apply.`,
+		pendingTxHash: txHash,
+		async retry() {
+			const seen = await server.getTransaction(txHash).catch(() => undefined);
+			if (seen?.status === "SUCCESS" || seen?.status === "FAILED") {
+				return onSettled(seen.status === "SUCCESS");
+			}
+			return waitForCleanupReceipt(server, txHash, failed, onSettled);
+		},
+	};
+}
 
 export interface RunOutcome {
 	readonly results: readonly CheckResult[];
@@ -513,7 +566,7 @@ export async function runChecks(
 	onProgress?: (completed: number, total: number) => void,
 	onStage?: (text: string) => void,
 ): Promise<RunOutcome> {
-	const server = new rpc.Server(request.rpcUrl);
+	const server = new rpc.Server(request.rpcUrl, { timeout: RPC_TIMEOUT_MS });
 	const contractId = request.contractId.trim();
 
 	// The spec, when the contract has one. A WASM token's spec says which
@@ -530,12 +583,14 @@ export async function runChecks(
 		request.ownerSigner ??
 		freighterSigner(request.ownerAddress, request.networkPassphrase);
 
+	const soundness: Sep41Context["soundness"] = {};
 	const spender = await spenderParty(
 		request,
 		server,
 		source,
 		inspected.kind === "native",
 		onStage,
+		soundness,
 	);
 
 	const ctx: Sep41Context = {
@@ -554,7 +609,7 @@ export async function runChecks(
 		},
 		// Fresh per run, exactly as the CLI builds them.
 		establishedAllowances: new Set(),
-		soundness: {},
+		soundness,
 	};
 
 	const total = sep41Suite.checks.length;
@@ -583,20 +638,38 @@ export async function runChecks(
 				: { spenderSetupFailed: spender.setupFailed }),
 		};
 	}
-	onStage?.("Sending the temporary account's units back to your wallet…");
 	const temporary = spender.temporary;
 	// A failed return keeps the temporary account's key alive in `retry`, so
 	// the page can try again instead of stranding the units: the key exists
 	// nowhere else, and dropping it here made them unrecoverable.
 	const attempt = async (): Promise<Cleanup> => {
+		onStage?.("Sending the temporary account's units back to your wallet…");
 		const outcome = await returnUnits(server, request, temporary);
 		if ("returned" in outcome) {
 			return outcome;
+		}
+		if ("pending" in outcome) {
+			const { txHash, amount } = outcome.pending;
+			return waitForCleanupReceipt(
+				server,
+				txHash,
+				"the transfer back could not be confirmed",
+				async (succeeded) => (succeeded ? { returned: amount } : attempt()),
+			);
 		}
 		return outcome.retryable
 			? { failed: outcome.failed, retry: attempt }
 			: { failed: outcome.failed };
 	};
-	const cleanup = await attempt();
+	const pending = soundness.unresolvedWrite;
+	const cleanup =
+		pending === undefined
+			? await attempt()
+			: waitForCleanupReceipt(
+					server,
+					pending.txHash,
+					"cleanup is paused while an earlier transaction is unresolved",
+					attempt,
+				);
 	return { results, exitCode: exitCodeFor(results), cleanup };
 }

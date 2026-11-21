@@ -1,5 +1,6 @@
 import { Account, rpc } from "@stellar/stellar-sdk";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { Sep41Context } from "soroban-guard/src/sep41/context.ts";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
  * The end of a browser run: sending the temporary account's units back,
@@ -32,6 +33,8 @@ const { fundAccount } = await import("soroban-guard/src/core/funding.ts");
 const { interpretSimulation, submitWrite } = await import(
 	"soroban-guard/src/core/invoke.ts"
 );
+const { runSuite } = await import("soroban-guard/src/core/runner.ts");
+const { inspectContract } = await import("soroban-guard/src/core/spec.ts");
 const { runChecks } = await import("../src/scripts/run.ts");
 
 const OWNER = "GAFD36WZNOJ4NBHB25QL6XRU2OYNIQC3IEUAXPIQ7FVDYLJE5H5ZVQ5G";
@@ -57,12 +60,92 @@ beforeEach(() => {
 	vi.mocked(fundAccount).mockReset().mockResolvedValue(undefined);
 	vi.mocked(interpretSimulation).mockReset();
 	vi.mocked(submitWrite).mockReset();
+	vi.mocked(runSuite).mockReset().mockResolvedValue([]);
+	vi.mocked(inspectContract)
+		.mockReset()
+		.mockResolvedValue({ kind: "wasm", functions: [] });
 	vi.spyOn(rpc.Server.prototype, "getAccount").mockImplementation(
 		async (address: string) => new Account(address, "1"),
 	);
 });
 
+afterEach(() => vi.restoreAllMocks());
+
+function receipt(status: rpc.Api.GetTransactionStatus) {
+	return { status } as rpc.Api.GetTransactionResponse;
+}
+
+function pendingCleanup(
+	cleanup: Awaited<ReturnType<typeof runChecks>>["cleanup"],
+	hash: string,
+) {
+	expect(cleanup).toMatchObject({ pendingTxHash: hash });
+	if (!cleanup || !("failed" in cleanup) || !cleanup.retry) {
+		throw new Error("expected cleanup waiting for a receipt");
+	}
+	return cleanup.retry;
+}
+
 describe("runChecks cleanup", () => {
+	it("does not attempt cleanup while an earlier write is unresolved", async () => {
+		const hash = "ab".repeat(32);
+		vi.mocked(runSuite).mockImplementationOnce(async (_suite, ctx) => {
+			(ctx as Sep41Context).soundness.unresolvedWrite = { txHash: hash };
+			return [];
+		});
+		vi.spyOn(rpc.Server.prototype, "getTransaction")
+			.mockResolvedValueOnce(receipt(rpc.Api.GetTransactionStatus.NOT_FOUND))
+			.mockResolvedValueOnce(receipt(rpc.Api.GetTransactionStatus.SUCCESS));
+		vi.mocked(interpretSimulation).mockReturnValue(balance(5n));
+		vi.mocked(submitWrite).mockResolvedValue(applied);
+
+		const { cleanup } = await runChecks(REQUEST);
+		const waiting = await pendingCleanup(cleanup, hash)();
+		expect(submitWrite).not.toHaveBeenCalled();
+		await expect(pendingCleanup(waiting, hash)()).resolves.toEqual({
+			returned: 5n,
+		});
+		expect(submitWrite).toHaveBeenCalledOnce();
+	});
+
+	it("reconciles a cleanup that applied after its response was lost", async () => {
+		const hash = "cd".repeat(32);
+		vi.mocked(interpretSimulation).mockReturnValue(balance(5n));
+		vi.mocked(submitWrite).mockResolvedValue({ kind: "timeout", txHash: hash });
+		vi.spyOn(rpc.Server.prototype, "getTransaction").mockResolvedValue(
+			receipt(rpc.Api.GetTransactionStatus.SUCCESS),
+		);
+		const { cleanup } = await runChecks(REQUEST);
+		await expect(pendingCleanup(cleanup, hash)()).resolves.toEqual({
+			returned: 5n,
+		});
+		expect(submitWrite).toHaveBeenCalledOnce();
+	});
+
+	it("carries an unresolved setup trustline into the suite gate", async () => {
+		vi.mocked(inspectContract).mockResolvedValue({ kind: "native" });
+		vi.mocked(interpretSimulation).mockReturnValue({
+			kind: "ok",
+			type: "scvString",
+			value: `TEST:${OWNER}`,
+		});
+		const send = vi
+			.spyOn(rpc.Server.prototype, "sendTransaction")
+			.mockRejectedValue(new Error("lost response"));
+		vi.spyOn(rpc.Server.prototype, "pollTransaction").mockResolvedValue(
+			receipt(rpc.Api.GetTransactionStatus.NOT_FOUND),
+		);
+
+		const outcome = await runChecks(REQUEST);
+
+		expect(send).toHaveBeenCalledOnce();
+		const ctx = vi.mocked(runSuite).mock.calls[0]?.[1] as Sep41Context;
+		const hash = ctx.soundness.unresolvedWrite?.txHash;
+		expect(hash).toMatch(/^[a-f0-9]{64}$/);
+		expect(outcome.spenderSetupFailed).toContain(hash);
+		expect(submitWrite).not.toHaveBeenCalled();
+	});
+
 	it("returns what the temporary account holds to the owner", async () => {
 		vi.mocked(interpretSimulation).mockReturnValue(balance(5n));
 		vi.mocked(submitWrite).mockResolvedValue(applied);

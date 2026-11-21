@@ -21,9 +21,10 @@
  * Exact delta by design (see `assertDeltas`): a fee-on-transfer token FAILs
  * here, correctly against SEP-41 — a dedicated check can classify those later.
  */
-import { addressArg, amountArg, submitWrite } from "../../core/invoke.ts";
+import { addressArg, amountArg } from "../../core/invoke.ts";
 import type { CheckResult } from "../../core/types.ts";
 import type { Sep41Context } from "../context.ts";
+import { submitCheckWrite } from "../write.ts";
 import { assertDeltas, writeEvidence } from "./delta.ts";
 import { type QuantityRead, readBalance } from "./quantity.ts";
 import {
@@ -152,20 +153,15 @@ export const transferCheck = {
 			);
 		}
 
-		const submitted = await submitWrite(
-			ctx.server,
-			{
-				contractId: ctx.contractId,
-				method: "transfer",
-				args: [
-					addressArg(owner.address),
-					addressArg(spender.address),
-					amountArg(TRANSFER_AMOUNT),
-				],
-				signer: owner.signer,
-			},
-			ctx.networkPassphrase,
-		);
+		const submitted = await submitCheckWrite(ctx, {
+			method: "transfer",
+			args: [
+				addressArg(owner.address),
+				addressArg(spender.address),
+				amountArg(TRANSFER_AMOUNT),
+			],
+			signer: owner.signer,
+		});
 
 		if (submitted.kind === "timeout") {
 			// The hash goes in evidence, not only in prose: it is the handle

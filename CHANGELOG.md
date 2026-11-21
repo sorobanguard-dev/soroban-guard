@@ -29,6 +29,26 @@ log, not here.
   run when its contract spec cannot be read (no spec section, or since SDK
   17.3 more than one). It falls back to attempting every member, as
   contracts with directly deployed code already did.
+- RPC requests time out after 30 seconds, in the CLI and the browser, and
+  writes now use that same bounded connection. An RPC that never answered
+  used to hold a run indefinitely.
+- A write's outcome is judged by the phase it reached. Only a refusal
+  before sending counts as the contract refusing: a lookup error after
+  sending that happened to mention `HostError` could previously be read
+  as a refusal, which a negative check credited as PASS. Once sent, a
+  transaction applied, failed on the ledger, provably expired unapplied
+  (written transactions are now valid for 180 seconds), or has an unknown
+  outcome, reported as UNVERIFIABLE with its hash. A send the network
+  answers with `DUPLICATE` is followed rather than treated as refused,
+  and a lost send request no longer reports SKIPPED without its hash.
+- After a transaction's outcome is unknown, no further transactions are
+  sent in that run, setup approvals included. The check it belonged to
+  reports UNVERIFIABLE with its hash, and each later write check reports
+  SKIPPED with the same hash instead of measuring balances that
+  transaction can still change. Previously the next check went ahead and
+  could PASS on uncertain state. In the browser, sending the temporary
+  account's units back waits too: "Check transaction status" looks the
+  transaction up and resumes once it has settled.
 
 ## [0.4.5] — 2026-10-19
 

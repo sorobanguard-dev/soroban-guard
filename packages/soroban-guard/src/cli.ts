@@ -6,6 +6,7 @@ import { KeypairSigner } from "@stellar/stellar-sdk/contract";
 import { supportsColor } from "./core/ansi.ts";
 import { TESTNET_PASSPHRASE, writeRefusalReason } from "./core/consent.ts";
 import { fundAccount, loadSourceAccount } from "./core/funding.ts";
+import { RPC_TIMEOUT_MS } from "./core/invoke.ts";
 import { renderJsonReport } from "./core/json-report.ts";
 import { renderMarkdownReport } from "./core/md-report.ts";
 import { renderPretty } from "./core/pretty.ts";
@@ -300,6 +301,7 @@ try {
 	// post-funding load failure genuinely means unreachable.
 	server = new rpc.Server(rpcUrl, {
 		allowHttp: values["allow-http"] === true,
+		timeout: RPC_TIMEOUT_MS,
 	});
 	const inspected = await inspectContract(server, contractId);
 	if (inspected.kind === "missing") {

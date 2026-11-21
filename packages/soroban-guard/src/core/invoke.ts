@@ -11,7 +11,6 @@ import {
 } from "@stellar/stellar-sdk";
 import {
 	AssembledTransaction,
-	SentTransaction,
 	type Signer,
 } from "@stellar/stellar-sdk/contract";
 
@@ -26,6 +25,40 @@ import {
 // Transaction validity window. Irrelevant for pure simulation; kept so the
 // write path builds identical transactions when it submits for real.
 const TX_TIMEOUT_S = 30;
+
+/**
+ * Upper bound on any single RPC request, in milliseconds.
+ *
+ * Without one, an RPC that accepts the connection and never answers holds
+ * a run forever (the SDK applies `timeout` only since 17.3, and has no
+ * default). Thirty seconds is far above a healthy testnet round trip, so
+ * it only ever cuts off a request that was not going to answer. Every
+ * `rpc.Server` the tool creates takes it, and writes reuse that server.
+ */
+export const RPC_TIMEOUT_MS = 30_000;
+
+/**
+ * How long a written transaction stays valid, in seconds: the window a
+ * wallet user has to approve it, and the point after which a transaction
+ * the network never included is known not to have applied.
+ */
+const WRITE_VALIDITY_S = 180;
+
+/** How often a sent transaction is looked up while waiting for its outcome. */
+const POLL_INTERVAL_MS = 2_000;
+
+/** Polling knobs, overridable so tests do not wait in real time. */
+export interface WriteTiming {
+	readonly pollIntervalMs?: number;
+	readonly giveUpAfterMs?: number;
+}
+
+/** Lowercase hex, as the network writes transaction hashes. Works in the browser too, where Node's Buffer does not exist. */
+function toHex(bytes: Uint8Array): string {
+	return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join(
+		"",
+	);
+}
 
 /** A single read-only contract invocation. Args arrive pre-encoded as ScVals. */
 export interface ReadCall {
@@ -280,23 +313,25 @@ export async function submitWrite(
 	server: rpc.Server,
 	call: WriteCall,
 	networkPassphrase: string,
+	timing: WriteTiming = {},
 ): Promise<SubmitResult> {
-	// Not every throw is a verdict: `signAndSend` re-simulates before
-	// submitting, so a refusal surfaces there just as from `build`. Classify
-	// the throw — see `isContractOutcome` — and let harness failures
-	// propagate for the runner to record as SKIPPED.
-	// The hash has to be captured as it is submitted, not read off the
-	// result: when polling ends without the transaction appearing, the SDK
-	// throws rather than returning, and the only object holding the hash
-	// goes with it.
-	let submittedHash = "";
-	let sent: Awaited<ReturnType<AssembledTransaction<xdr.ScVal>["signAndSend"]>>;
+	// Three phases, because what an error means depends on where it
+	// happened. Before sending, nothing has left this process: a contract
+	// refusal is a verdict and anything else is a harness failure. Once
+	// sent, nothing that goes wrong is the contract refusing — the only
+	// question is whether the transaction applied, and when that cannot be
+	// established the outcome is unknown.
+	let assembled: AssembledTransaction<xdr.ScVal>;
 	try {
-		const assembled = await AssembledTransaction.build({
+		assembled = await AssembledTransaction.build({
 			contractId: call.contractId,
 			method: call.method,
 			args: [...call.args],
 			rpcUrl: server.serverURL.toString(),
+			// The caller's server, not one rebuilt from the URL: it carries
+			// the request timeout (RPC_TIMEOUT_MS), which a fresh client
+			// would not.
+			server,
 			// The read server was built with the operator's --allow-http
 			// consent; deriving the same permission from the same URL keeps
 			// the write client from dropping it. Without this, local-node
@@ -307,60 +342,108 @@ export async function submitWrite(
 			publicKey: call.signer.address,
 			signTransaction: call.signer,
 			parseResultXdr: (value: xdr.ScVal) => value,
+			// A bounded validity window is what lets a lost answer become a
+			// known one: once the network's ledger time passes it, a
+			// transaction not found can never apply. Long enough for a
+			// person to approve it in a wallet.
+			timeoutInSeconds: WRITE_VALIDITY_S,
 		});
-		sent = await assembled.signAndSend({
-			watcher: {
-				onSubmitted: (response) => {
-					submittedHash = response?.hash ?? "";
-				},
-			},
-		});
+		// `build` simulates without throwing; `sign` reads that simulation
+		// and is where a contract's refusal (SimulationFailed) or archived
+		// state (ExpiredState) surfaces.
+		await assembled.sign();
 	} catch (error) {
-		// Polling gave up while the transaction was still pending. It may yet
-		// apply, so this is not a verdict — and the hash is the one thing a
-		// reader needs to find out which way it went. Detected by class: the
-		// message is a JSON dump that no classifier should be parsing.
-		if (error instanceof SentTransaction.Errors.TransactionStillPending) {
-			return { kind: "timeout", txHash: submittedHash };
-		}
 		// Detected by class, not by message: the SDK exports this error type,
 		// so no wording can drift out from under it. A read reports the same
 		// situation as `restore`, and a write must not call it a refusal.
 		if (error instanceof AssembledTransaction.Errors.ExpiredState) {
-			return {
-				kind: "restore",
-				diagnostics: error.message,
-			};
+			return { kind: "restore", diagnostics: error.message };
 		}
 		const message = error instanceof Error ? error.message : String(error);
 		if (!isContractOutcome(message)) {
 			throw error;
 		}
-		// Thrown before the ledger saw it: a simulation the contract refused.
+		// Refused before anything was sent: a simulation the contract refused.
 		return { kind: "rejected", diagnostics: message, settled: false };
 	}
-	const settled = sent.getTransactionResponse;
-	const txHash = sent.sendTransactionResponse?.hash ?? "";
-	if (settled?.status === rpc.Api.GetTransactionStatus.SUCCESS) {
-		return { kind: "applied", txHash, ledger: settled.ledger };
+	const signed = assembled.signed;
+	if (signed === undefined) {
+		throw new Error("signing produced no transaction to send");
 	}
-	if (settled?.status === rpc.Api.GetTransactionStatus.FAILED) {
-		// It reached the ledger and died there. Why is not recoverable from
-		// this response, so it is not attributable to the contract: see
-		// `settled` on SubmitResult.
-		return {
-			kind: "rejected",
-			settled: true,
-			...(txHash === "" ? {} : { txHash }),
-			...(settled.ledger === undefined ? {} : { ledger: settled.ledger }),
-			diagnostics:
-				txHash === ""
-					? "transaction failed on-chain; no transaction hash was observed"
-					: `transaction ${txHash} failed on-chain`,
-		};
+	// The hash of what was signed is the transaction's identity, known
+	// before anything leaves: the only handle on a send whose answer never
+	// arrives.
+	const txHash = toHex(signed.hash());
+	const validUntil = Number(signed.timeBounds?.maxTime ?? 0);
+	const validFrom = Number(signed.timeBounds?.minTime ?? 0);
+	const simulationLedger = assembled.simulation?.latestLedger;
+
+	let sent: Awaited<ReturnType<rpc.Server["sendTransaction"]>>;
+	try {
+		sent = await server.sendTransaction(signed);
+	} catch {
+		// The request failed, but it may have reached the network first.
+		return { kind: "timeout", txHash };
 	}
-	// Still NOT_FOUND after the SDK's polling window: we stopped watching,
-	// the network did not necessarily refuse. The hash is the handle a human
-	// needs to find out which it was.
-	return { kind: "timeout", txHash };
+	// ERROR and TRY_AGAIN_LATER are the network declining the transaction:
+	// it was not accepted and cannot apply, so this is a known outcome and
+	// a harness failure, not a verdict. DUPLICATE means it already has it,
+	// so it is followed like PENDING. Read from the typed status rather
+	// than from an SDK error message.
+	if (sent.status === "ERROR" || sent.status === "TRY_AGAIN_LATER") {
+		throw new Error(
+			`the network did not accept transaction ${txHash} (${sent.status})`,
+		);
+	}
+
+	const pollMs = timing.pollIntervalMs ?? POLL_INTERVAL_MS;
+	const giveUpAt =
+		Date.now() + (timing.giveUpAfterMs ?? (WRITE_VALIDITY_S + 60) * 1000);
+	for (;;) {
+		// Errors while polling are never the contract's answer, whatever
+		// their text: a message that happens to contain "HostError" here
+		// must not be read as a refusal a negative check could credit.
+		const seen = await server.getTransaction(txHash).catch(() => undefined);
+		if (seen?.status === rpc.Api.GetTransactionStatus.SUCCESS) {
+			return { kind: "applied", txHash, ledger: seen.ledger };
+		}
+		if (seen?.status === rpc.Api.GetTransactionStatus.FAILED) {
+			// It reached the ledger and died there. Why is not recoverable
+			// from this response, so it is not attributable to the contract:
+			// see `settled` on SubmitResult.
+			return {
+				kind: "rejected",
+				settled: true,
+				txHash,
+				...(seen.ledger === undefined ? {} : { ledger: seen.ledger }),
+				diagnostics: `transaction ${txHash} failed on-chain`,
+			};
+		}
+		// An expired envelope cannot apply in a future ledger. To establish
+		// it did not apply earlier, the RPC must still cover its entire
+		// possible inclusion window. For a fresh send, our pre-signing
+		// simulation precedes that window. A duplicate may predate it and
+		// needs an explicit lower time bound to prove absence.
+		if (
+			seen?.status === rpc.Api.GetTransactionStatus.NOT_FOUND &&
+			validUntil > 0 &&
+			Number(seen.latestLedgerCloseTime) > validUntil &&
+			(validFrom > 0
+				? Number(seen.oldestLedgerCloseTime) <= validFrom
+				: sent.status === "PENDING" &&
+					simulationLedger !== undefined &&
+					seen.oldestLedger <= simulationLedger + 1)
+		) {
+			throw new Error(
+				`transaction ${txHash} expired without being included in a ledger`,
+			);
+		}
+		if (Date.now() >= giveUpAt) {
+			// Still unanswered: we stopped watching, the network did not
+			// necessarily refuse. The hash is the handle a human needs to
+			// find out which it was.
+			return { kind: "timeout", txHash };
+		}
+		await new Promise((resolve) => setTimeout(resolve, pollMs));
+	}
 }
