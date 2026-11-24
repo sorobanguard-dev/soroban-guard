@@ -23,6 +23,13 @@ log, not here.
   RPC's account entry does not say which ledger last changed it.
   `fundAccount` is unchanged.
 
+### Changed
+
+- `ContractCode`'s `native` arm has a required `stellarAsset` field: true
+  when the contract's executable is a Stellar Asset Contract, false for
+  code whose spec cannot be read. Code that builds a `native` value must
+  set it.
+
 ### Fixed
 
 - Read checks and write balance/allowance premises report FAIL when a
@@ -83,11 +90,9 @@ log, not here.
   asked again for up to 20 seconds, and so is a request asked again that
   fails in that time; a first request that fails is not retried. A stale
   answer is then refused: a read reports UNVERIFIABLE with the reason,
-  and a write SKIPPED without sending. A
-  write also takes its signer's sequence number from that ledger, and
-  every new simulation of it starts from the envelope as first built. In
-  the browser, a cleanup whose balance read comes back stale stays
-  retryable with the same key. `sep41-transfer_from-expired` reads and
+  and a write SKIPPED without sending. A write also takes its signer's
+  sequence number from that ledger, and every new simulation of it starts
+  from the envelope as first built. `sep41-transfer_from-expired` reads and
   simulates from the ledger its wait observed, and credits a refusal only
   when one ledger shows it refused with the holder funded and the
   recipient's balance readable.
@@ -96,32 +101,26 @@ log, not here.
   UNVERIFIABLE with its hash, and each later write check reports SKIPPED
   with the same hash instead of measuring balances that transaction can
   still change. Previously the next check went ahead and could PASS on
-  uncertain state. In the browser, sending the temporary account's units
-  back waits too: "Check transaction status" resumes it once that
-  transaction has settled or provably expired unapplied. On native XLM,
-  where nothing is sent back, nothing waits. While a transaction the
-  cleanup waits on may still land, the faucet and Run wait for it as well,
-  since its units could arrive under a claim's balance read or a run's
-  checks. Once a status check, or the follow that gave up on it, finds the
-  RPC reporting a ledger closed after its deadline, it can no longer
-  land, and both go on. Every token
-  read and write the page makes is held to the latest ledger by which a
-  transaction it knows of may have moved the wallet's balance: one closed
-  after such a deadline, or one a run, a status check or a faucet claim
-  reported a transaction settling in. The page keeps the key and sends
-  nothing again until it knows whether the transaction applied; a new run
-  discards the key, and the page warns first that it will. A faucet claim
-  sent but not confirmed holds Run and the cleanup's retry the same way,
-  since a send-back moves the same wallet's balance, and the faucet button
-  becomes "Check the faucet claim" until it finds the claim landed, failed
-  or unable to land. So does a run's write whose outcome stayed unknown
-  with no send-back to wait on it, as on native XLM or with a named
-  counterparty: Run becomes "Check the last run's transaction". The
-  browser skips the send-back when it cannot identify the asset a Stellar
-  Asset Contract wraps, and reads that asset's `name()` from the run's
-  ledger floor. A contract counts as a Stellar Asset Contract by its
-  executable: a WASM token whose spec cannot be read still gets its
-  units back.
+  uncertain state.
+- In the browser, a transaction the page sent that may still land and
+  move the wallet's balance holds back every action that could collide
+  with it: a run, a new faucet claim, and the cleanup's send-back. Each
+  kind has its own lookup: "Check transaction status" for the cleanup,
+  "Check the faucet claim" for a claim, and "Check the last run's
+  transaction" for a run's write left unresolved with nothing to send
+  back. The hold ends when a lookup finds the transaction landed, failed
+  or expired, or the RPC reports a ledger closed after its deadline.
+  Every token read and write the page makes describes state from the
+  latest ledger by which a transaction it knows of may have moved the
+  wallet's balance. The cleanup keeps the temporary account's key and sends nothing again
+  until it knows whether the first transfer applied; a cleanup whose
+  balance read comes back stale stays retryable with the same key. A new
+  run discards the key, and the page warns first that it will.
+- In the browser, nothing is sent back for native XLM, or for a Stellar
+  Asset Contract whose underlying asset cannot be identified; that asset's
+  `name()` is read from the run's ledger floor. A contract counts as a
+  Stellar Asset Contract by its executable, so a WASM token whose spec
+  cannot be read remains eligible for cleanup.
 - In the browser, a temporary second account that could not be set up is
   no longer used by the checks. They get a fresh address nothing has
   touched, since a funding or trustline transaction that may still land
