@@ -28,17 +28,17 @@ import {
 } from "./freighter.ts";
 import { mayStillLand, owedSendBack } from "./owed.ts";
 import {
-	type Claim,
 	type Cleanup,
 	claimDemoTokens,
-	claimStatus,
 	looksLikeAccountId,
 	looksLikeContractId,
 	type RunRequest,
 	runChecks,
+	type Settlement,
 	STROOPS_PER_XLM,
 	spendableXlm,
 	tokenBalance,
+	transactionStatus,
 	type Unresolved,
 } from "./run.ts";
 
@@ -139,18 +139,70 @@ function heldTo<T extends object>(request: T): T & { minLedger?: number } {
 type Target = Pick<RunRequest, "contractId" | "rpcUrl" | "networkPassphrase">;
 
 /**
- * A faucet claim that was sent and not confirmed, while it may still land
- * and move the wallet's balance under a run's checks or another claim's
- * read. Run waits, and the faucet button looks it up again (see
- * `showClaim`), until it lands, fails, or can no longer land.
+ * A transaction the page sent and could not confirm, while it may still
+ * land and move the wallet's balance under a run's checks or a claim's
+ * read: a faucet claim, or a run's write that no cleanup waits on. Run and
+ * the faucet wait, and the control it blocks looks it up again (see
+ * `showSettlement`) until it lands, fails, or can no longer land: the
+ * faucet button for a claim, Run for a run's write.
  */
-let claimOpen:
+let waitingOn:
 	| {
-			readonly claim: Unresolved;
+			readonly kind: Waiting;
+			readonly tx: Unresolved;
 			readonly target: Target;
 			readonly holder: string;
 	  }
 	| undefined;
+
+type Waiting = "claim" | "write";
+
+/** How the page names a transaction of each kind, and the button that checks it. */
+const WAITING = {
+	claim: { name: "The faucet transaction", check: "Check the faucet claim" },
+	write: {
+		name: "The run's transaction",
+		check: "Check the last run's transaction",
+	},
+} as const;
+
+/** What is in flight, as the reason another action must wait, or `undefined`. */
+function busy(): string | undefined {
+	if (running) {
+		return "A run is in progress — wait for it to finish.";
+	}
+	if (claiming) {
+		return "A faucet claim is in progress — wait for it to land.";
+	}
+	if (returning) {
+		return "Units are still being sent back from the last run — wait for that to finish.";
+	}
+	return undefined;
+}
+
+/**
+ * Why an action that may send a transaction cannot start now, or
+ * `undefined` when it can: something in flight, or a transaction the page
+ * sent that may still land and move what the new one reads. Run, a new
+ * faucet claim and a cleanup's retry all ask this. `own` is the pending
+ * transaction the action itself settles, which never blocks it; a lookup
+ * that sends nothing asks only `busy`.
+ */
+function blockedBy(own?: "cleanup"): string | undefined {
+	const inFlight = busy();
+	if (inFlight !== undefined) {
+		return inFlight;
+	}
+	if (waitingOn !== undefined) {
+		const { name, check } = WAITING[waitingOn.kind];
+		return `${name} may still land — press “${check}” first.`;
+	}
+	const owing = owed.pending();
+	if (own !== "cleanup" && owing !== undefined && mayStillLand(owing)) {
+		return `A transaction the last run's cleanup waits on may still land — press “${retryLabel(owing)}” first.`;
+	}
+	return undefined;
+}
 
 /** The button that tries a cleanup again, named for what it will do. */
 function retryLabel(cleanup: Cleanup): string {
@@ -193,19 +245,14 @@ function showCleanup(cleanup: Cleanup): void {
 	button.className = "retry-action";
 	button.textContent = retryLabel(cleanup);
 	button.addEventListener("click", async () => {
-		// A faucet claim reads the wallet's balance when it lands; units
-		// arriving from a send-back at the same time would make that read
-		// stale. So the two exclude each other, as each excludes a run.
-		if (running || claiming || returning) {
+		// The retry may send the units again, so it waits by the same rule
+		// as Run and the faucet: on anything in flight, and on any other
+		// transaction that may still land.
+		const blocked = blockedBy("cleanup");
+		if (blocked !== undefined) {
 			// Silent-button class, same as copy/no-wallet: a control that
 			// visibly does nothing reads as broken, so it says why.
-			setWalletState(
-				running
-					? "A run is in progress — try sending the units back once it finishes."
-					: claiming
-						? "A faucet claim is in progress — try sending the units back once it lands."
-						: "The units are already being sent back — wait for that to finish.",
-			);
+			setWalletState(blocked);
 			return;
 		}
 		returning = true;
@@ -260,18 +307,21 @@ function refreshRunButton(): void {
 	const hasContract = looksLikeContractId(contractInput.value);
 	const hasWallet = connected !== null;
 	const settling = mayStillLand(owed.pending());
-	const claimPending = claimOpen !== undefined;
+	// A run's write that may still land is looked up from Run itself.
+	const write = waitingOn?.kind === "write";
+	const claimPending = waitingOn?.kind === "claim";
 	runButton.disabled =
 		claiming ||
 		returning ||
-		settling ||
 		claimPending ||
-		!(hasContract && hasWallet);
+		(!write && (settling || !(hasContract && hasWallet)));
 
 	if (claiming) {
 		runButton.textContent = "Waiting for the faucet…";
 	} else if (returning) {
 		runButton.textContent = "Sending units back…";
+	} else if (write) {
+		runButton.textContent = WAITING.write.check;
 	} else if (claimPending) {
 		runButton.textContent = "Check the faucet claim first";
 	} else if (settling) {
@@ -332,66 +382,86 @@ async function xlmShortfall(address: string): Promise<string | undefined> {
  * measuring (see the guard in its click handler). Hidden during a send-back
  * retry too, whose units would land under the claim's balance read.
  *
- * While a claim may still land (`claimOpen`), the button looks it up
+ * While a claim may still land (`waitingOn`), the button looks it up
  * instead, and shows whatever the contract field now says: Run waits on
- * that claim, so the way to settle it must stay in reach.
+ * that claim, so the way to settle it must stay in reach. While a run's
+ * write may still land, it is hidden, as for a cleanup's.
  */
 function refreshFaucet(): void {
-	faucetButton.hidden =
-		claimOpen === undefined
-			? running ||
-				returning ||
-				mayStillLand(owed.pending()) ||
-				!(isDemoContract(contractInput.value) && connected !== null)
-			: returning;
+	const claim = waitingOn?.kind === "claim";
+	faucetButton.hidden = claim
+		? returning
+		: running ||
+			returning ||
+			waitingOn !== undefined ||
+			mayStillLand(owed.pending()) ||
+			!(isDemoContract(contractInput.value) && connected !== null);
 	if (!claiming) {
 		faucetButton.disabled = false;
-		faucetButton.textContent =
-			claimOpen === undefined
-				? `Get ${DEMO_FAUCET_UNITS} test VULN`
-				: "Check the faucet claim";
+		faucetButton.textContent = claim
+			? WAITING.claim.check
+			: `Get ${DEMO_FAUCET_UNITS} test VULN`;
 	}
 }
 
 /**
- * Say what a faucet claim came to, and hold the page's reads to the ledger
- * it settled in. One that may still land opens `claimOpen`; one that can no
- * longer land holds the reads to the ledger that rules it out, whether or
- * not it landed before then.
+ * Say what a transaction the page sent came to, and hold the page's reads
+ * to the ledger it settled in. One that may still land opens `waitingOn`;
+ * one that can no longer land holds the reads to the ledger that rules it
+ * out, whether or not it landed before then. `txHash` names a settled one.
  */
-async function showClaim(
-	claim: Claim,
+async function showSettlement(
+	kind: Waiting,
+	settlement: Settlement,
 	target: Target,
 	holder: string,
+	txHash = "",
 ): Promise<void> {
-	claimOpen = undefined;
-	if ("unresolved" in claim) {
-		const past = claim.unresolved.closedAfterDeadline;
+	waitingOn = undefined;
+	const { name, check } = WAITING[kind];
+	if ("unresolved" in settlement) {
+		const tx = settlement.unresolved;
+		const past = tx.closedAfterDeadline;
 		if (past === undefined) {
-			claimOpen = { claim: claim.unresolved, target, holder };
+			waitingOn = { kind, tx, target, holder };
 			setWalletState(
-				`The faucet transaction ${claim.unresolved.txHash} was sent but is not confirmed yet, and it may still land. Run waits until “Check the faucet claim” finds it landed, failed or unable to land.`,
+				`${name} ${tx.txHash} was sent but is not confirmed yet, and it may still land. Run waits until “${check}” finds it landed, failed or unable to land.`,
 				"error",
 			);
 			return;
 		}
 		holdFrom(past);
-		const held = await tokenBalance(heldTo(target), holder);
+		const held =
+			kind === "claim" ? await tokenBalance(heldTo(target), holder) : undefined;
 		setWalletState(
-			`The faucet transaction can no longer land: ledger ${past} closed after its deadline. Whether it landed before then is not known${held === undefined ? "" : `; this wallet holds ${held} VULN`}.`,
+			`${name} ${tx.txHash} can no longer land: ledger ${past} closed after its deadline. Whether it landed before then is not known${held === undefined ? "" : `; this wallet holds ${held} VULN`}.`,
 			"ready",
 		);
 		return;
 	}
-	if ("failed" in claim) {
-		holdFrom(claim.ledger);
+	if ("failed" in settlement) {
+		holdFrom(settlement.ledger);
+		if (kind === "claim") {
+			setWalletState(
+				`The faucet call did not go through: ${settlement.failed}`,
+				"error",
+			);
+		} else {
+			setWalletState(
+				`${name} ${txHash} did not go through: ${settlement.failed}.`,
+				"ready",
+			);
+		}
+		return;
+	}
+	holdFrom(settlement.landed);
+	if (kind === "write") {
 		setWalletState(
-			`The faucet call did not go through: ${claim.failed}`,
-			"error",
+			`${name} ${txHash} landed in ledger ${settlement.landed}.`,
+			"ready",
 		);
 		return;
 	}
-	holdFrom(claim.landed);
 	const held = await tokenBalance(heldTo(target), holder);
 	setWalletState(
 		`Received ${DEMO_FAUCET_UNITS} units of VULN${held === undefined ? "" : ` — this wallet now holds ${held}`}. Run the checks.`,
@@ -432,15 +502,13 @@ faucetButton.addEventListener("click", async () => {
 	// (keyboard, automation), and a claim landing mid-run would move a
 	// balance a check is measuring. A send-back retry in flight would do the
 	// same to the balance this claim reads when it lands, and so would a
-	// transaction the cleanup waits on while it can still land.
-	if (running || claiming || returning) {
-		return;
-	}
-	// A claim that may still land is looked up again; a new one is made
-	// only when none is open.
-	const open = claimOpen;
+	// transaction the cleanup waits on while it can still land. A claim
+	// that may still land is looked up again, which sends nothing; a new
+	// one is made by the rule every action that sends follows.
+	const open = waitingOn?.kind === "claim" ? waitingOn : undefined;
+	const blocked = open === undefined ? blockedBy() : busy();
 	const holder = open?.holder ?? connected;
-	if (holder === null || (open === undefined && mayStillLand(owed.pending()))) {
+	if (blocked !== undefined || holder === null) {
 		return;
 	}
 	claiming = true;
@@ -450,10 +518,12 @@ faucetButton.addEventListener("click", async () => {
 		open === undefined ? "Approve in Freighter…" : "Checking the claim…";
 	try {
 		if (open !== undefined) {
-			await showClaim(
-				await claimStatus(open.target, open.claim),
+			await showSettlement(
+				"claim",
+				await transactionStatus(open.target, open.tx),
 				open.target,
 				open.holder,
+				open.tx.txHash,
 			);
 			return;
 		}
@@ -468,7 +538,8 @@ faucetButton.addEventListener("click", async () => {
 			rpcUrl: TESTNET_RPC,
 			networkPassphrase: TESTNET_PASSPHRASE,
 		};
-		await showClaim(
+		await showSettlement(
+			"claim",
 			await claimDemoTokens(heldTo(target), holder),
 			target,
 			holder,
@@ -682,15 +753,40 @@ form.addEventListener("submit", async (event) => {
 	if (running) {
 		return;
 	}
-	if (claiming || returning || claimOpen !== undefined) {
-		setWalletState(
-			claiming
-				? "The faucet claim is still in progress — run once it has landed."
-				: returning
-					? "Units are still being sent back from the last run — run once that has finished."
-					: "A faucet claim may still land — press “Check the faucet claim” first.",
-			"error",
-		);
+	// Run looks up a run's write that may still land, instead of running:
+	// a lookup that sends nothing, so only what is in flight stops it.
+	const write = waitingOn?.kind === "write" ? waitingOn : undefined;
+	if (write !== undefined && busy() === undefined) {
+		running = true;
+		runButton.disabled = true;
+		runButton.textContent = "Checking the last run's transaction…";
+		refreshFaucet();
+		try {
+			await showSettlement(
+				"write",
+				await transactionStatus(write.target, write.tx),
+				write.target,
+				write.holder,
+				write.tx.txHash,
+			);
+		} catch (error) {
+			setWalletState(
+				error instanceof Error ? error.message : String(error),
+				"error",
+			);
+		} finally {
+			running = false;
+			refreshRunButton();
+			refreshFaucet();
+		}
+		return;
+	}
+	// The suite sends transactions, so it starts by the rule every such
+	// action follows. Leaving a cleanup's units behind does not stop its
+	// transaction landing either.
+	const blocked = blockedBy();
+	if (blocked !== undefined) {
+		setWalletState(blocked, "error");
 		return;
 	}
 	if (connected === null) {
@@ -723,12 +819,6 @@ form.addEventListener("submit", async (event) => {
 	}
 	spenderInput.removeAttribute("aria-invalid");
 
-	// A transaction the cleanup waits on can still land in the wallet and
-	// move a balance the checks measure; leaving its units behind does not
-	// stop it landing.
-	if (mayStillLand(owed.pending())) {
-		return;
-	}
 	// Starting the suite discards the temporary key and its recovery action.
 	const owing = owed.pending();
 	if (owing !== undefined && owed.onRun() === "warn") {
@@ -873,6 +963,16 @@ form.addEventListener("submit", async (event) => {
 			showCleanup(outcome.cleanup);
 		} else if (outcome.spenderSetupFailed !== undefined) {
 			progress.textContent = `The page could not set up a second account (${outcome.spenderSetupFailed}). See the report for which checks could run.`;
+		}
+		// No cleanup waits on it, so the page does: the next run waits until
+		// it can no longer land.
+		if (outcome.unresolvedWrite !== undefined) {
+			await showSettlement(
+				"write",
+				{ unresolved: outcome.unresolvedWrite },
+				target,
+				signingAs,
+			);
 		}
 	} catch (error) {
 		// A throw here is the run never starting — a bad address, an

@@ -65,8 +65,10 @@ export interface RunRequest {
 	 */
 	readonly ownerSigner?: Signer;
 	/**
-	 * The oldest ledger every read and simulation must describe, because an
-	 * earlier transaction may have moved these balances by then.
+	 * The oldest ledger the run's simulations, and the balances and signers'
+	 * sequence numbers it reads, must describe, because an earlier
+	 * transaction may have moved them by then. The contract's code, read
+	 * first, is not something a transaction of the page moves.
 	 */
 	readonly minLedger?: number;
 }
@@ -85,15 +87,26 @@ async function wrappedAsset(
 	server: rpc.Server,
 	request: RunRequest,
 	source: Awaited<ReturnType<rpc.Server["getAccount"]>>,
+	minLedger: number | undefined,
 ): Promise<Asset | "native" | undefined> {
-	const outcome = interpretSimulation(
-		await simulateRead(
-			server,
-			source,
-			{ contractId: request.contractId.trim(), method: "name", args: [] },
-			request.networkPassphrase,
-		),
+	const simulation = await simulateRead(
+		server,
+		source,
+		{
+			contractId: request.contractId.trim(),
+			method: "name",
+			args: [],
+			...(minLedger === undefined ? {} : { minLedger }),
+		},
+		request.networkPassphrase,
 	);
+	// An answer from before the floor is no answer about the asset: thrown,
+	// so setup fails as it does on any read it cannot make.
+	const stale = staleAnswer(simulation.latestLedger, minLedger);
+	if (stale !== undefined) {
+		throw new Error(`the asset contract's name() could not be read (${stale})`);
+	}
+	const outcome = interpretSimulation(simulation);
 	if (outcome.kind !== "ok" || typeof outcome.value !== "string") {
 		return undefined;
 	}
@@ -203,8 +216,14 @@ export async function spenderParty(
 		// Only a Stellar Asset Contract wraps a classic asset. A custom
 		// token's name is whatever its author chose, and one that happens to
 		// read CODE:ISSUER must not buy a trustline it does not need.
+		const floor = Math.max(request.minLedger ?? 0, setup.settledThrough ?? 0);
 		const asset = isAssetContract
-			? ((await wrappedAsset(server, request, source)) ?? "unidentified")
+			? ((await wrappedAsset(
+					server,
+					request,
+					source,
+					floor === 0 ? undefined : floor,
+				)) ?? "unidentified")
 			: undefined;
 		if (asset instanceof Asset) {
 			onStage?.(
@@ -510,7 +529,7 @@ export async function claimDemoTokens(
 	>,
 	address: string,
 	signer: Signer = freighterSigner(address, request.networkPassphrase),
-): Promise<Claim> {
+): Promise<Settlement> {
 	if (!isDemoContract(request.contractId)) {
 		throw new Error("Test tokens are only available for the demo token.");
 	}
@@ -551,43 +570,41 @@ export async function claimDemoTokens(
 }
 
 /**
- * What a faucet claim came to: the ledger it landed in; why it did not go
- * through, with the ledger it failed in when it reached one; or, when it
- * was sent and not confirmed while it was followed, the transaction to
- * look up again with `claimStatus`, since it may still land.
+ * What a transaction the page sent came to: the ledger it landed in; why it
+ * did not go through, with the ledger it failed in when it reached one; or,
+ * when it was sent and not confirmed while it was followed, the
+ * transaction to look up again with `transactionStatus`, since it may
+ * still land.
  */
-export type Claim =
+export type Settlement =
 	| { readonly landed: number }
 	| { readonly failed: string; readonly ledger?: number }
 	| { readonly unresolved: Unresolved };
 
-/** Look up again a claim that was not confirmed (see `lookupOutcome`). */
-export async function claimStatus(
+/** Look up again a transaction that was not confirmed (see `lookupOutcome`). */
+export async function transactionStatus(
 	request: Pick<RunRequest, "rpcUrl">,
-	claim: Unresolved,
-): Promise<Claim> {
+	open: Unresolved,
+): Promise<Settlement> {
 	const server = new rpc.Server(request.rpcUrl, { timeout: RPC_TIMEOUT_MS });
 	const seen = await lookupOutcome(
 		server,
-		claim.txHash,
-		claim.window,
+		open.txHash,
+		open.window,
 		undefined,
-		claim.progress,
+		open.progress,
 	);
 	switch (seen.kind) {
 		case "applied":
 			return { landed: seen.ledger };
 		case "failed":
 			return seen.ledger === undefined
-				? { failed: "the faucet transaction failed on the ledger" }
-				: {
-						failed: "the faucet transaction failed on the ledger",
-						ledger: seen.ledger,
-					};
+				? { failed: "it failed on the ledger" }
+				: { failed: "it failed on the ledger", ledger: seen.ledger };
 		case "expired":
-			return { failed: "the faucet transaction expired without landing" };
+			return { failed: "it expired without landing" };
 		case "pending":
-			return { unresolved: goneOn(claim, seen) };
+			return { unresolved: goneOn(open, seen) };
 	}
 }
 
@@ -719,6 +736,13 @@ export interface RunOutcome {
 	 */
 	readonly settledThrough?: number;
 	/**
+	 * A write of the run whose outcome stayed unknown, when no cleanup waits
+	 * on it: it may still land and move the wallet's balance, so the page
+	 * holds the next run until `transactionStatus` settles it or finds it
+	 * can no longer land. A cleanup that waits on it carries it instead.
+	 */
+	readonly unresolvedWrite?: Unresolved;
+	/**
 	 * Why the run could not set up its own second account, when it could
 	 * not. The run went ahead without one: the four spender-signed checks
 	 * then report what they would need.
@@ -832,11 +856,17 @@ export async function runChecks(
 		soundness.settledThrough === undefined
 			? {}
 			: { settledThrough: soundness.settledThrough };
+	// With no send-back to wait on it, a write whose outcome stayed unknown
+	// goes to the page, which holds the next run until it can no longer land.
+	const open = soundness.unresolvedWrite;
+	const unresolved =
+		open === undefined || open.txHash === "" ? {} : { unresolvedWrite: open };
 	if (spender.temporary === undefined) {
 		return {
 			results,
 			exitCode: exitCodeFor(results),
 			...settled(),
+			...unresolved,
 			...(spender.setupFailed === undefined
 				? {}
 				: { spenderSetupFailed: spender.setupFailed }),
@@ -844,17 +874,17 @@ export async function runChecks(
 	}
 	const temporary = spender.temporary;
 	// XLM is not sent back: what the account holds there is almost entirely
-	// Friendbot's funding, not the visitor's. Nothing is due, so nothing
-	// waits on an unresolved transaction, whose hash the results carry. An
-	// asset contract whose asset could not be read may be XLM's, and an
-	// issued asset's would have given the account no trustline to hold any
-	// units: either way there is nothing to send back.
+	// Friendbot's funding, not the visitor's. An asset contract whose asset
+	// could not be read may be XLM's, and an issued asset's would have given
+	// the account no trustline to hold any units: either way there is
+	// nothing to send back.
 	if (temporary.asset === "native" || temporary.asset === "unidentified") {
 		return {
 			results,
 			exitCode: exitCodeFor(results),
 			cleanup: { returned: 0n, ...settled() },
 			...settled(),
+			...unresolved,
 		};
 	}
 	// Each cleanup, and each one a retry leads to, says where the run's
