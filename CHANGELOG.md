@@ -15,6 +15,15 @@ log, not here.
 
 ## [Unreleased]
 
+## [0.5.0] — 2026-11-25
+
+### Breaking
+
+- `ContractCode`'s `native` arm has a required `stellarAsset` field: true
+  when the contract's executable is a Stellar Asset Contract, false for
+  code whose spec cannot be read. Code that builds a `native` value must
+  set it.
+
 ### Added
 
 - `fundAccountInLedger`, which funds an account as `fundAccount` does and
@@ -22,13 +31,6 @@ log, not here.
   when the account already existed, so nothing was funded, and when the
   RPC's account entry does not say which ledger last changed it.
   `fundAccount` is unchanged.
-
-### Changed
-
-- `ContractCode`'s `native` arm has a required `stellarAsset` field: true
-  when the contract's executable is a Stellar Asset Contract, false for
-  code whose spec cannot be read. Code that builds a `native` value must
-  set it.
 
 ### Fixed
 
