@@ -20,6 +20,36 @@ Two terms, used precisely throughout this repository:
   either answer, so they assert arithmetic instead, and only a balance that
   moved is a finding.
 
+A failed call counts as the contract refusing, for any check, only when
+the simulation's diagnostic events show the contract's own code refused
+it. The call's primary error must be one of two kinds:
+
+- `Error(Contract, #n)`, where every error event carrying that code came
+  from the contract itself, and at least one did. If a contract it called
+  also raised the code, the events cannot say which one refused.
+- `Error(WasmVm, InvalidAction)`, where an event shows the invoked method
+  itself trapping, such as by panicking, and no other contract's VM
+  failed. The same error also covers a module the VM could not load.
+
+Any other failure gives no verdict, since it says nothing about the
+contract: an error no event attributes, the host running out of budget,
+an authorization the host required. A read then reports UNVERIFIABLE and a
+write SKIPPED. A Stellar Asset Contract's own policy, such as a missing
+trustline, is recognised from the refusing error event's message alone, so
+a log that uses the same words changes nothing.
+
+Attribution needs the simulation's diagnostic events, which an RPC can be
+run without (stellar-rpc's `preflight-enable-debug`). Against such an RPC
+no refusal is credited, and the evidence says the events were missing.
+
+Every observation describes state from the latest ledger a transaction of
+the run settled in, or later: the funding, a trustline, or a write,
+including one that failed on the ledger. Servers behind one RPC URL can
+answer from a backend still before that ledger, with state from before the
+transaction. Such an answer is asked again for up to 20 seconds, then
+refused: a read reports UNVERIFIABLE with the reason, and a write SKIPPED
+without sending anything.
+
 When a passage below says the four checks between `unauthorized` and the
 writes "run least-destructive first", it means zero-amount, self-transfer,
 negative-amount and over-balance in that order — two invariance checks and
@@ -240,12 +270,21 @@ both keys. Irreversible.
 
 ### `sep41-transfer_from-expired` — behavior
 
-Approves a grant with a deliberately short `live_until_ledger`, waits for
-the ledger to pass it, then spends — and **passes only when the contract
-refuses**. A contract that stores the amount and ignores the deadline
-leaves every approval permanent: a spender authorized once can return
-later and spend again. No read distinguishes the two, because
+Approves a grant with a deliberately short `live_until_ledger`, reads it
+back, waits for the ledger to pass it, then spends — and **passes only
+when the contract refuses**. A contract that stores the amount and ignores
+the deadline leaves every approval permanent: a spender authorized once
+can return later and spend again. No read distinguishes the two, because
 `allowance()` returns the amount alone and never the ledger it dies at.
+
+Every read after the wait, and the spend's simulation, comes from the
+ledger the wait observed or a later one. A refusal counts only when one
+ledger shows the spend refused by the contract, the holder holding enough
+and the recipient's balance readable, so it was for the deadline rather
+than for funds or a trustline. Those are read-only, so they are asked for
+together, and again when the answers come from different ledgers, up to
+four times; otherwise the check reports UNVERIFIABLE. A spend that
+succeeds reports FAIL.
 
 The only check that creates the condition it tests, and the only one that
 waits on wall-clock time — roughly half a minute, bounded at 60 seconds. A network
@@ -265,12 +304,18 @@ replace, this one cannot test expiry without granting first.
 - `PASS` — the clause was exercised and held.
 - `FAIL` — the clause was exercised and was violated.
 - `UNVERIFIABLE` — the clause could not be exercised; no verdict either way.
-- `SKIPPED` — the check could not run (harness or network failure). A
-  submitted transaction that timed out is not this: it reports
-  UNVERIFIABLE, since it may still apply.
+- `SKIPPED` — the check could not run (harness or network failure, a
+  write whose simulation failed without its trace showing the contract
+  refusing, or one the
+  RPC kept simulating from before the run's latest transaction), or was
+  not attempted because an earlier transaction's outcome is unknown.
+  The check whose transaction that was reports UNVERIFIABLE with its hash,
+  since it may still apply; every later write check then reports SKIPPED
+  with the same hash, because it would be measuring state that
+  transaction can still change.
 - `NOT_IMPLEMENTED` — the contract does not declare this member (WASM
   spec introspection; SACs have no spec, so every member is attempted).
 
 Exit codes follow: `0` conformant, `1` violation, `2` unknown. Anything
-unassessed appears as an explicit `UNVERIFIABLE` row rather than a silent
-omission.
+unassessed appears as a row with its explicit status (`UNVERIFIABLE`,
+`SKIPPED` or `NOT_IMPLEMENTED`) rather than a silent omission.

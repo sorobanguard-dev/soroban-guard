@@ -76,15 +76,38 @@ prints `○`.
   effort and reported, never thrown, since the verdicts are already in. A
   failure that retrying could fix keeps the account's key in `retry`, and
   the page offers "Try sending them back again"; the key exists nowhere
-  else. If setup itself fails (Friendbot down, a trustline refused), the
-  run falls back to a keyless address: the reads and the holder's writes
-  still run, and the four spender-signed checks report what they need.
+  else. When the send-back's outcome is unknown, the page offers "Check
+  transaction status" instead. That looks the original transaction up by
+  its hash, then in the ledger history, for up to a minute, and each
+  click goes on with the history where the last one stopped. A send-back
+  that applied is reported as returned. One that failed or provably
+  expired unapplied lets the same click send the units again, and that
+  new transfer is followed on its own. While the original may still apply,
+  the page keeps waiting and keeps the key, and a balance read from an
+  RPC backend still before the run's latest transaction keeps the key
+  too, rather than report nothing to return. Run and the faucet wait as
+  well, since its units could land under their reads, until a status
+  check finds the RPC reporting a ledger closed after its deadline. It
+  can no longer land then, so both go on. Whether it landed stays open:
+  the status check keeps the key, and a new run discards it only after
+  the page warns that it will. Every token read and write the page makes
+  is held to `readsFrom` in `checker.ts`, the latest ledger by which a
+  transaction it knows of may have moved the wallet's balance. Native XLM
+  is not sent back: what the account holds there is Friendbot's funding.
+  Nor is anything from an asset contract whose `name()` could not be read,
+  which may be XLM's. If setup itself fails
+  (Friendbot down, a trustline refused), the run falls back to a fresh
+  keyless address: the reads and the holder's other writes still run,
+  and the checks that need a usable second account report what they need.
 - **A named counterparty is used as given, without a signer.** The page
   cannot sign for an address it did not create, so the four spender-signed
   checks then report what they would need.
 - **The demo token** (`src/data/demo.ts`) is `fixtures/vulnerable-token`
   built with a public faucet, for visitors with no token of their own:
-  "Get 5 test VULN" gives the wallet what a full run spends.
+  "Get 5 test VULN" gives the wallet what a full run spends. A claim that
+  is sent but not confirmed may still land, so Run waits on it as on a
+  cleanup, and the button becomes "Check the faucet claim" (`showClaim` in
+  `checker.ts`) until the claim has landed, failed, or can no longer land.
 
 ## Commands
 
