@@ -110,10 +110,14 @@ log, not here.
   reported a transaction settling in. The page keeps the key and sends
   nothing again until it knows whether the transaction applied; a new run
   discards the key, and the page warns first that it will. A faucet claim
-  sent but not confirmed holds Run the same way, and the faucet button
+  sent but not confirmed holds Run and the cleanup's retry the same way,
+  since a send-back moves the same wallet's balance, and the faucet button
   becomes "Check the faucet claim" until it finds the claim landed, failed
-  or unable to land. The browser skips the send-back when it cannot
-  identify the underlying asset.
+  or unable to land. So does a run's write whose outcome stayed unknown
+  with no send-back to wait on it, as on native XLM or with a named
+  counterparty: Run becomes "Check the last run's transaction". The
+  browser skips the send-back when it cannot identify the underlying
+  asset, and reads that asset's `name()` from the run's ledger floor.
 - In the browser, a temporary second account that could not be set up is
   no longer used by the checks. They get a fresh address nothing has
   touched, since a funding or trustline transaction that may still land

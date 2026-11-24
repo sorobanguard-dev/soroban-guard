@@ -106,8 +106,11 @@ prints `○`.
   built with a public faucet, for visitors with no token of their own:
   "Get 5 test VULN" gives the wallet what a full run spends. A claim that
   is sent but not confirmed may still land, so Run waits on it as on a
-  cleanup, and the button becomes "Check the faucet claim" (`showClaim` in
-  `checker.ts`) until the claim has landed, failed, or can no longer land.
+  cleanup, and the button becomes "Check the faucet claim" (`showSettlement`
+  in `checker.ts`) until the claim has landed, failed, or can no longer
+  land. A run's write left unresolved with no send-back to wait on it is
+  held the same way, looked up from Run itself ("Check the last run's
+  transaction").
 
 ## Commands
 

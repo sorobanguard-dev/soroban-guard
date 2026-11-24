@@ -318,7 +318,9 @@ this is usually the first check.
 **No token of your own?** The page offers a demo token: a copy of
 `fixtures/vulnerable-token` with a faucet that gives any wallet the five
 units a full run spends, so anyone can see the fixture's two defects. If a
-claim is not confirmed, use **Check the faucet claim** before running.
+claim is not confirmed, use **Check the faucet claim** before running. If
+a run ends with a transaction it could not confirm and nothing to send
+back, Run offers **Check the last run's transaction** instead.
 
 ```sh
 pnpm --filter @soroban-guard/web dev   # run the site locally

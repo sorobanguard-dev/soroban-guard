@@ -25,7 +25,7 @@ vi.mock("../src/scripts/run.ts", async (importActual) => ({
 	runChecks: vi.fn(),
 	tokenBalance: vi.fn(),
 	claimDemoTokens: vi.fn(),
-	claimStatus: vi.fn(),
+	transactionStatus: vi.fn(),
 	spendableXlm: vi.fn(),
 }));
 
@@ -259,7 +259,7 @@ describe("the page after a faucet claim", () => {
 	// from the ledger that rules it out.
 	it("holds Run on a claim that may still land, until it can no longer land", async () => {
 		vi.mocked(run.claimDemoTokens).mockResolvedValue({ unresolved: OPEN });
-		vi.mocked(run.claimStatus)
+		vi.mocked(run.transactionStatus)
 			.mockResolvedValueOnce({ unresolved: OPEN })
 			.mockResolvedValueOnce({
 				unresolved: { ...OPEN, closedAfterDeadline: 210 },
@@ -275,16 +275,20 @@ describe("the page after a faucet claim", () => {
 		await submit();
 		expect(run.runChecks).not.toHaveBeenCalled();
 
+		// Looked up as it was sent, whatever the field now says.
 		element("contract").value = "not the demo token";
 		await element("contract").fire("input");
 		expect(element("faucet").hidden).toBe(false);
+		await element("faucet").fire("click");
+		expect(vi.mocked(run.transactionStatus).mock.calls[0]).toEqual([
+			expect.objectContaining({ contractId: DEMO_CONTRACT }),
+			OPEN,
+		]);
+		expect(element("run-button").disabled).toBe(true);
 		element("contract").value = DEMO_CONTRACT;
 		await element("contract").fire("input");
-
 		await element("faucet").fire("click");
-		expect(element("run-button").disabled).toBe(true);
-		await element("faucet").fire("click");
-		expect(run.claimStatus).toHaveBeenCalledTimes(2);
+		expect(run.transactionStatus).toHaveBeenCalledTimes(2);
 		expect(element("run-button").disabled).toBe(false);
 		expect(element("faucet").textContent).toBe("Get 5 test VULN");
 		expect(vi.mocked(run.tokenBalance).mock.calls.at(-1)?.[0].minLedger).toBe(
@@ -313,7 +317,7 @@ describe("the page after a faucet claim", () => {
 		"opens Run again once a status check finds the claim %s",
 		async (_case, found, floor) => {
 			vi.mocked(run.claimDemoTokens).mockResolvedValue({ unresolved: OPEN });
-			vi.mocked(run.claimStatus).mockResolvedValue(found);
+			vi.mocked(run.transactionStatus).mockResolvedValue(found);
 			vi.mocked(run.runChecks).mockResolvedValue({ results: [], exitCode: 0 });
 
 			await element("faucet").fire("click");
@@ -330,7 +334,7 @@ describe("the page after a faucet claim", () => {
 
 	it("holds the next run to the ledger a status check found the claim in", async () => {
 		vi.mocked(run.claimDemoTokens).mockResolvedValue({ unresolved: OPEN });
-		vi.mocked(run.claimStatus).mockResolvedValue({ landed: 205 });
+		vi.mocked(run.transactionStatus).mockResolvedValue({ landed: 205 });
 		vi.mocked(run.runChecks).mockResolvedValue({ results: [], exitCode: 0 });
 
 		await element("faucet").fire("click");
@@ -338,5 +342,166 @@ describe("the page after a faucet claim", () => {
 		await submit();
 
 		expect(floorOfRun(0)).toBe(205);
+	});
+
+	// The floor is the latest of what the page has seen: a ledger reported
+	// after a later one does not take it back.
+	it("keeps the floor when a lower ledger is reported after a higher one", async () => {
+		vi.mocked(run.runChecks)
+			.mockResolvedValueOnce({ results: [], exitCode: 0, settledThrough: 200 })
+			.mockResolvedValue({ results: [], exitCode: 0 });
+		vi.mocked(run.claimDemoTokens).mockResolvedValue({ landed: 150 });
+
+		await submit();
+		await element("faucet").fire("click");
+		await submit();
+
+		expect(floorOfRun(1)).toBe(200);
+	});
+});
+
+// A run's write whose outcome stayed unknown, with no cleanup to wait on
+// it, may still land under the next run: Run itself looks it up instead,
+// and the faucet waits, until it can no longer land.
+describe("the page after a run left a write unresolved", () => {
+	const WRITE = {
+		txHash: "ab".repeat(32),
+		window: { validUntil: 1_000, earliestLedger: 121 },
+	};
+
+	it("looks the write up from Run, and runs again once it can no longer land", async () => {
+		vi.mocked(run.runChecks)
+			.mockResolvedValueOnce({
+				results: [],
+				exitCode: 0,
+				unresolvedWrite: WRITE,
+			})
+			.mockResolvedValue({ results: [], exitCode: 0 });
+		vi.mocked(run.transactionStatus)
+			.mockResolvedValueOnce({ unresolved: WRITE })
+			.mockResolvedValueOnce({
+				unresolved: { ...WRITE, closedAfterDeadline: 230 },
+			});
+
+		await submit();
+		expect(element("run-button").disabled).toBe(false);
+		expect(element("run-button").textContent).toBe(
+			"Check the last run's transaction",
+		);
+		expect(element("faucet").hidden).toBe(true);
+		expect(element("wallet-state").textContent).toContain(WRITE.txHash);
+
+		await submit();
+		expect(run.runChecks).toHaveBeenCalledOnce();
+		expect(vi.mocked(run.transactionStatus).mock.calls[0]?.[1]).toBe(WRITE);
+		expect(element("run-button").textContent).toBe(
+			"Check the last run's transaction",
+		);
+
+		await submit();
+		expect(run.runChecks).toHaveBeenCalledOnce();
+		expect(element("run-button").textContent).toBe("Run 16 checks");
+		expect(element("faucet").hidden).toBe(false);
+
+		await submit();
+		expect(run.runChecks).toHaveBeenCalledTimes(2);
+		expect(floorOfRun(1)).toBe(230);
+	});
+
+	it("runs again from the ledger the write landed in", async () => {
+		vi.mocked(run.runChecks)
+			.mockResolvedValueOnce({
+				results: [],
+				exitCode: 0,
+				settledThrough: 130,
+				unresolvedWrite: WRITE,
+			})
+			.mockResolvedValue({ results: [], exitCode: 0 });
+		vi.mocked(run.transactionStatus).mockResolvedValue({ landed: 140 });
+
+		await submit();
+		await submit();
+		expect(element("wallet-state").textContent).toBe(
+			`The run's transaction ${WRITE.txHash} landed in ledger 140.`,
+		);
+		await submit();
+
+		expect(floorOfRun(1)).toBe(140);
+	});
+});
+
+// Every action, against each kind of transaction the page may still be
+// waiting on. An action that may send must not start while another
+// transaction may land; the way to settle each pending one must stay in
+// reach.
+describe("every action, while a transaction may still land", () => {
+	const TX = {
+		txHash: "ef".repeat(32),
+		window: { validUntil: 1_000, earliestLedger: 121 },
+	};
+	const tryEverything = async () => {
+		await submit();
+		await element("faucet").fire("click");
+	};
+
+	it("a cleanup's send-back: only its own status check runs", async () => {
+		const pending: Cleanup = {
+			failed: `the transfer back could not be confirmed. Transaction ${HASH} may still apply.`,
+			pendingTxHash: HASH,
+			retry: vi.fn(async () => pending),
+		};
+		vi.mocked(run.runChecks).mockResolvedValue({
+			results: [],
+			exitCode: 0,
+			cleanup: pending,
+		});
+
+		await submit();
+		await tryEverything();
+		expect(run.runChecks).toHaveBeenCalledOnce();
+		expect(run.claimDemoTokens).not.toHaveBeenCalled();
+		await pressRetry();
+		expect(pending.retry).toHaveBeenCalledOnce();
+	});
+
+	it("a faucet claim: the cleanup's retry waits too, and the claim stays checkable", async () => {
+		const retryable: Cleanup = {
+			failed: "the transfer back was not applied (rejected)",
+			retry: vi.fn(),
+		};
+		vi.mocked(run.runChecks).mockResolvedValue({
+			results: [],
+			exitCode: 0,
+			cleanup: retryable,
+		});
+		vi.mocked(run.claimDemoTokens).mockResolvedValue({ unresolved: TX });
+		vi.mocked(run.transactionStatus).mockResolvedValue({ unresolved: TX });
+
+		await submit();
+		await element("faucet").fire("click");
+		await pressRetry();
+		expect(retryable.retry).not.toHaveBeenCalled();
+		expect(element("wallet-state").textContent).toContain(
+			"Check the faucet claim",
+		);
+		await tryEverything();
+		expect(run.runChecks).toHaveBeenCalledOnce();
+		expect(run.claimDemoTokens).toHaveBeenCalledOnce();
+		expect(run.transactionStatus).toHaveBeenCalledOnce();
+	});
+
+	it("a run's write: Run looks it up, and nothing that sends starts", async () => {
+		vi.mocked(run.runChecks).mockResolvedValue({
+			results: [],
+			exitCode: 0,
+			unresolvedWrite: TX,
+		});
+		vi.mocked(run.transactionStatus).mockResolvedValue({ unresolved: TX });
+
+		await submit();
+		await tryEverything();
+		expect(run.runChecks).toHaveBeenCalledOnce();
+		expect(run.claimDemoTokens).not.toHaveBeenCalled();
+		expect(run.transactionStatus).toHaveBeenCalledOnce();
 	});
 });

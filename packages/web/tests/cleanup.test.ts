@@ -41,9 +41,8 @@ const { interpretSimulation, simulateRead, submitWrite } = await import(
 );
 const { runSuite } = await import("soroban-guard/src/core/runner.ts");
 const { inspectContract } = await import("soroban-guard/src/core/spec.ts");
-const { claimDemoTokens, claimStatus, runChecks, tokenBalance } = await import(
-	"../src/scripts/run.ts"
-);
+const { claimDemoTokens, transactionStatus, runChecks, tokenBalance } =
+	await import("../src/scripts/run.ts");
 const { mayStillLand } = await import("../src/scripts/owed.ts");
 const { DEMO_CONTRACT } = await import("../src/data/demo.ts");
 
@@ -379,9 +378,17 @@ describe("runChecks cleanup", () => {
 		const { cleanup } = await runChecks(REQUEST);
 		vi.useFakeTimers();
 		try {
-			const checking = pendingCleanup(cleanup, hash)();
-			await vi.advanceTimersByTimeAsync(60_000);
-			// Still waiting on the transfer, and the key still reachable.
+			let settled = false;
+			const checking = pendingCleanup(cleanup, hash)().then((next) => {
+				settled = true;
+				return next;
+			});
+			// The history request has started, and is what the check waits on.
+			await vi.advanceTimersByTimeAsync(59_000);
+			expect(rpc.Server.prototype.getLedgers).toHaveBeenCalled();
+			expect(settled).toBe(false);
+			await vi.advanceTimersByTimeAsync(1_000);
+			// Still waiting on the same transfer, and the key still reachable.
 			pendingCleanup(await checking, hash);
 			expect(submitWrite).toHaveBeenCalledOnce();
 		} finally {
@@ -723,10 +730,73 @@ describe("runChecks cleanup", () => {
 		});
 		const lookup = vi.spyOn(rpc.Server.prototype, "getTransaction");
 
-		const { cleanup } = await runChecks(REQUEST);
-		expect(cleanup).toEqual({ returned: 0n });
+		const outcome = await runChecks(REQUEST);
+		expect(outcome.cleanup).toEqual({ returned: 0n });
 		expect(lookup).not.toHaveBeenCalled();
 		expect(submitWrite).not.toHaveBeenCalled();
+		// Nothing is sent back, but the write may still land: the page holds it.
+		expect(outcome.unresolvedWrite).toEqual({ txHash: hash });
+	});
+
+	// A run with no temporary account to clean up still hands the page a
+	// write that may still land; one whose cleanup waits on it does not.
+	it.each([
+		[
+			"a named counterparty",
+			{ spenderAddress: OWNER },
+			{ txHash: "ab".repeat(32) },
+		],
+		["a cleanup waiting on it", {}, undefined],
+	])(
+		"hands the page an unresolved write with %s",
+		async (_case, request, handed) => {
+			vi.mocked(runSuite).mockImplementationOnce(async (_suite, ctx) => {
+				(ctx as Sep41Context).soundness.unresolvedWrite = {
+					txHash: "ab".repeat(32),
+				};
+				return [];
+			});
+			const outcome = await runChecks({ ...REQUEST, ...request });
+			expect(outcome.unresolvedWrite).toEqual(handed);
+		},
+	);
+
+	// The asset's name is read from the run's floor: a backend behind it
+	// fails the setup instead of passing for an asset it cannot identify.
+	// The trustline the identified asset needs is declined here, so the
+	// setup ends at once either way, with the reason it stopped.
+	it.each([
+		[
+			"identifies the asset from a name read at the floor",
+			300,
+			/trustline to TEST was refused/,
+		],
+		[
+			"fails setup on a name read from before the floor",
+			299,
+			/the asset contract's name\(\) could not be read/,
+		],
+	])("%s", async (_case, answeredAt, setupFailed) => {
+		vi.mocked(inspectContract).mockResolvedValue({ kind: "native" });
+		vi.mocked(simulateRead).mockResolvedValue({
+			latestLedger: answeredAt,
+		} as never);
+		vi.mocked(interpretSimulation).mockReturnValue({
+			kind: "ok",
+			type: "scvString",
+			value: `TEST:${OWNER}`,
+		});
+		vi.spyOn(rpc.Server.prototype, "sendTransaction").mockResolvedValue({
+			status: "ERROR",
+			hash: "",
+			errorResult: { result: { type: "txInsufficientFee" } },
+		} as unknown as rpc.Api.SendTransactionResponse);
+		const outcome = await runChecks({ ...REQUEST, minLedger: 300 });
+		expect(vi.mocked(simulateRead).mock.calls[0]?.[2]).toMatchObject({
+			method: "name",
+			minLedger: 300,
+		});
+		expect(outcome.spenderSetupFailed).toMatch(setupFailed);
 	});
 
 	// An asset contract whose `name()` cannot be read may wrap XLM, which is
@@ -933,7 +1003,7 @@ describe("the page's reads, held to a ledger", () => {
 			history([], 125),
 		);
 		await expect(
-			claimStatus(REQUEST, { txHash: "cd".repeat(32), window: WINDOW }),
+			transactionStatus(REQUEST, { txHash: "cd".repeat(32), window: WINDOW }),
 		).resolves.toEqual(claim);
 	});
 });
