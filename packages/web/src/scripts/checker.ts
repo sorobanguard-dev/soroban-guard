@@ -26,24 +26,27 @@ import {
 	WalletError,
 	walletNetwork,
 } from "./freighter.ts";
-import { owedSendBack } from "./owed.ts";
+import { mayStillLand, owedSendBack } from "./owed.ts";
 import {
+	type Claim,
 	type Cleanup,
 	claimDemoTokens,
+	claimStatus,
 	looksLikeAccountId,
 	looksLikeContractId,
+	type RunRequest,
 	runChecks,
 	STROOPS_PER_XLM,
 	spendableXlm,
 	tokenBalance,
+	type Unresolved,
 } from "./run.ts";
 
 const TESTNET_PASSPHRASE = "Test SDF Network ; September 2015";
 const TESTNET_RPC = "https://soroban-testnet.stellar.org";
 
-// The glyphs come from core, not a copy here: a second table drifts, and
-// this one already had — it printed an em dash for SKIPPED where the CLI
-// prints ○. One export, one set of symbols, both surfaces agree.
+// The glyphs come from core, not a copy here: one export, one set of
+// symbols, so the page and the CLI print the same one for each status.
 
 function el<T extends HTMLElement>(id: string): T {
 	const found = document.getElementById(id);
@@ -58,7 +61,7 @@ const contractInput = el<HTMLInputElement>("contract");
 const spenderInput = el<HTMLInputElement>("spender");
 const connectButton = el<HTMLButtonElement>("connect");
 // `run-button`, not `run`: the section owns `#run` as a scroll anchor, and
-// `el()` would have found the section, cast it to a button, and left the
+// `el()` would find the section, cast it to a button, and leave the
 // control permanently disabled without ever throwing.
 const runButton = el<HTMLButtonElement>("run-button");
 const walletState = el<HTMLParagraphElement>("wallet-state");
@@ -109,15 +112,70 @@ let returning = false;
 const owed = owedSendBack<Cleanup>();
 
 /**
+ * The oldest ledger the page's token reads and writes must describe: the
+ * latest by which a transaction this page knows of may have moved the
+ * wallet's balance. Raised by every ledger a run, a status check or a
+ * faucet claim reports a transaction settling in, and by a cleanup's
+ * `closedAfterDeadline` (see `Cleanup`). An RPC backend behind it would
+ * answer with state from before that transaction.
+ */
+let readsFrom: number | undefined;
+
+/** Raise `readsFrom` to `ledger`, when there is one. */
+function holdFrom(ledger: number | undefined): void {
+	if (ledger !== undefined) {
+		readsFrom = Math.max(readsFrom ?? 0, ledger);
+	}
+}
+
+/** `request`, held to `readsFrom` as it stands now. */
+function heldTo<T extends object>(request: T): T & { minLedger?: number } {
+	return readsFrom === undefined
+		? request
+		: { ...request, minLedger: readsFrom };
+}
+
+/** The demo token, on the network the page uses. */
+type Target = Pick<RunRequest, "contractId" | "rpcUrl" | "networkPassphrase">;
+
+/**
+ * A faucet claim that was sent and not confirmed, while it may still land
+ * and move the wallet's balance under a run's checks or another claim's
+ * read. Run waits, and the faucet button looks it up again (see
+ * `showClaim`), until it lands, fails, or can no longer land.
+ */
+let claimOpen:
+	| {
+			readonly claim: Unresolved;
+			readonly target: Target;
+			readonly holder: string;
+	  }
+	| undefined;
+
+/** The button that tries a cleanup again, named for what it will do. */
+function retryLabel(cleanup: Cleanup): string {
+	return "failed" in cleanup && cleanup.pendingTxHash !== undefined
+		? "Check transaction status"
+		: "Try sending them back again";
+}
+
+/**
  * Say what happened to the temporary account's units — and, while the
  * page still holds that account's key, offer to try again. The key lives
- * only in this tab; without a retry, a failed send-back left the units
- * unreachable.
+ * only in this tab; without a retry, a failed send-back would leave the
+ * units unreachable.
  */
 function showCleanup(cleanup: Cleanup): void {
 	owed.owe(
 		"failed" in cleanup && cleanup.retry !== undefined ? cleanup : undefined,
 	);
+	holdFrom(cleanup.settledThrough);
+	if ("failed" in cleanup) {
+		holdFrom(cleanup.closedAfterDeadline);
+	}
+	// While a transaction it waits on may still land, Run and the faucet wait.
+	refreshRunButton();
+	refreshFaucet();
 	if ("returned" in cleanup) {
 		progress.textContent =
 			cleanup.returned > 0n
@@ -133,7 +191,7 @@ function showCleanup(cleanup: Cleanup): void {
 	const button = document.createElement("button");
 	button.type = "button";
 	button.className = "retry-action";
-	button.textContent = "Try sending them back again";
+	button.textContent = retryLabel(cleanup);
 	button.addEventListener("click", async () => {
 		// A faucet claim reads the wallet's balance when it lands; units
 		// arriving from a send-back at the same time would make that read
@@ -194,21 +252,30 @@ function setWalletState(message: string, tone?: "error" | "ready"): void {
 /**
  * Enable Run only when both preconditions hold, and say which one does not.
  *
- * A run needs a contract to assess and a wallet to sign with, and an
- * earlier version gated the button on the wallet alone. Someone who pasted
- * an address then found a disabled button with nothing explaining why — the
- * page knew the reason and kept it to itself. The label carries the missing
- * precondition so the control explains its own state.
+ * A run needs a contract to assess and a wallet to sign with. The label
+ * carries the missing precondition, so the control explains its own
+ * state.
  */
 function refreshRunButton(): void {
 	const hasContract = looksLikeContractId(contractInput.value);
 	const hasWallet = connected !== null;
-	runButton.disabled = claiming || returning || !(hasContract && hasWallet);
+	const settling = mayStillLand(owed.pending());
+	const claimPending = claimOpen !== undefined;
+	runButton.disabled =
+		claiming ||
+		returning ||
+		settling ||
+		claimPending ||
+		!(hasContract && hasWallet);
 
 	if (claiming) {
 		runButton.textContent = "Waiting for the faucet…";
 	} else if (returning) {
 		runButton.textContent = "Sending units back…";
+	} else if (claimPending) {
+		runButton.textContent = "Check the faucet claim first";
+	} else if (settling) {
+		runButton.textContent = "Check the transaction status first";
 	} else if (!hasContract && !hasWallet) {
 		runButton.textContent = "Paste a contract, connect a wallet";
 	} else if (!hasContract) {
@@ -225,10 +292,9 @@ function refreshRunButton(): void {
  *
  * A run signs about fifteen transactions at roughly 0.01–0.02 XLM each —
  * the one observed on testnet charged 0.0134 — so the worst case is near
- * 0.3 XLM. Half an XLM covers that with margin. It was a whole XLM, about
- * three times the need, which turned away wallets that could pay; and an
- * existing wallet cannot be topped up by Friendbot, so a threshold set too
- * high is a dead end, not a nudge.
+ * 0.3 XLM. Half an XLM covers that with margin, and no more is asked: an
+ * existing wallet cannot be topped up by Friendbot, so a threshold above
+ * the need turns away wallets that can pay, a dead end, not a nudge.
  */
 const MIN_SPENDABLE = STROOPS_PER_XLM / 2n;
 
@@ -241,6 +307,9 @@ const MIN_SPENDABLE = STROOPS_PER_XLM / 2n;
  * complete. Checked before anything is signed, and said in the wallet's
  * terms. Friendbot funds only new accounts, so an existing one needs XLM
  * sent to it.
+ *
+ * Not held to `readsFrom`: no verdict rests on this estimate, and a
+ * transaction a cleanup left open moves it by little more than a fee.
  */
 async function xlmShortfall(address: string): Promise<string | undefined> {
 	const spendable = await spendableXlm(TESTNET_RPC, address);
@@ -262,12 +331,72 @@ async function xlmShortfall(address: string): Promise<string | undefined> {
  * run is active: a faucet claim mid-run would move balances the checks are
  * measuring (see the guard in its click handler). Hidden during a send-back
  * retry too, whose units would land under the claim's balance read.
+ *
+ * While a claim may still land (`claimOpen`), the button looks it up
+ * instead, and shows whatever the contract field now says: Run waits on
+ * that claim, so the way to settle it must stay in reach.
  */
 function refreshFaucet(): void {
 	faucetButton.hidden =
-		running ||
-		returning ||
-		!(isDemoContract(contractInput.value) && connected !== null);
+		claimOpen === undefined
+			? running ||
+				returning ||
+				mayStillLand(owed.pending()) ||
+				!(isDemoContract(contractInput.value) && connected !== null)
+			: returning;
+	if (!claiming) {
+		faucetButton.disabled = false;
+		faucetButton.textContent =
+			claimOpen === undefined
+				? `Get ${DEMO_FAUCET_UNITS} test VULN`
+				: "Check the faucet claim";
+	}
+}
+
+/**
+ * Say what a faucet claim came to, and hold the page's reads to the ledger
+ * it settled in. One that may still land opens `claimOpen`; one that can no
+ * longer land holds the reads to the ledger that rules it out, whether or
+ * not it landed before then.
+ */
+async function showClaim(
+	claim: Claim,
+	target: Target,
+	holder: string,
+): Promise<void> {
+	claimOpen = undefined;
+	if ("unresolved" in claim) {
+		const past = claim.unresolved.closedAfterDeadline;
+		if (past === undefined) {
+			claimOpen = { claim: claim.unresolved, target, holder };
+			setWalletState(
+				`The faucet transaction ${claim.unresolved.txHash} was sent but is not confirmed yet, and it may still land. Run waits until “Check the faucet claim” finds it landed, failed or unable to land.`,
+				"error",
+			);
+			return;
+		}
+		holdFrom(past);
+		const held = await tokenBalance(heldTo(target), holder);
+		setWalletState(
+			`The faucet transaction can no longer land: ledger ${past} closed after its deadline. Whether it landed before then is not known${held === undefined ? "" : `; this wallet holds ${held} VULN`}.`,
+			"ready",
+		);
+		return;
+	}
+	if ("failed" in claim) {
+		holdFrom(claim.ledger);
+		setWalletState(
+			`The faucet call did not go through: ${claim.failed}`,
+			"error",
+		);
+		return;
+	}
+	holdFrom(claim.landed);
+	const held = await tokenBalance(heldTo(target), holder);
+	setWalletState(
+		`Received ${DEMO_FAUCET_UNITS} units of VULN${held === undefined ? "" : ` — this wallet now holds ${held}`}. Run the checks.`,
+		"ready",
+	);
 }
 
 // Typing an address is half the precondition, so the button tracks it.
@@ -299,22 +428,35 @@ useDemoButton.addEventListener("click", () => {
 });
 
 faucetButton.addEventListener("click", async () => {
-	const holder = connected;
-	if (holder === null) {
-		return;
-	}
 	// Same guard as the run handler: hidden controls can still be reached
 	// (keyboard, automation), and a claim landing mid-run would move a
 	// balance a check is measuring. A send-back retry in flight would do the
-	// same to the balance this claim reads when it lands.
+	// same to the balance this claim reads when it lands, and so would a
+	// transaction the cleanup waits on while it can still land.
 	if (running || claiming || returning) {
+		return;
+	}
+	// A claim that may still land is looked up again; a new one is made
+	// only when none is open.
+	const open = claimOpen;
+	const holder = open?.holder ?? connected;
+	if (holder === null || (open === undefined && mayStillLand(owed.pending()))) {
 		return;
 	}
 	claiming = true;
 	refreshRunButton();
 	faucetButton.disabled = true;
-	faucetButton.textContent = "Approve in Freighter…";
+	faucetButton.textContent =
+		open === undefined ? "Approve in Freighter…" : "Checking the claim…";
 	try {
+		if (open !== undefined) {
+			await showClaim(
+				await claimStatus(open.target, open.claim),
+				open.target,
+				open.holder,
+			);
+			return;
+		}
 		await requireTestnet();
 		const feeProblem = await xlmShortfall(holder);
 		if (feeProblem !== undefined) {
@@ -326,11 +468,10 @@ faucetButton.addEventListener("click", async () => {
 			rpcUrl: TESTNET_RPC,
 			networkPassphrase: TESTNET_PASSPHRASE,
 		};
-		await claimDemoTokens(target, holder);
-		const held = await tokenBalance(target, holder);
-		setWalletState(
-			`Received ${DEMO_FAUCET_UNITS} units of VULN${held === undefined ? "" : ` — this wallet now holds ${held}`}. Run the checks.`,
-			"ready",
+		await showClaim(
+			await claimDemoTokens(heldTo(target), holder),
+			target,
+			holder,
 		);
 	} catch (error) {
 		setWalletState(
@@ -340,8 +481,7 @@ faucetButton.addEventListener("click", async () => {
 	} finally {
 		claiming = false;
 		refreshRunButton();
-		faucetButton.disabled = false;
-		faucetButton.textContent = `Get ${DEMO_FAUCET_UNITS} test VULN`;
+		refreshFaucet();
 	}
 });
 
@@ -392,10 +532,9 @@ connectButton.addEventListener("click", async () => {
  * time.
  *
  * The class names and the `data-v` attribute are deliberately identical to
- * that component's, because its stylesheet is global and governs both. An
- * earlier version emitted `.glyph`, `.row-id` and `.row-actual` against a
- * stylesheet that only knew `.g`, `.rid` and `.said` — both rendered, and
- * only the recorded run looked like the product.
+ * that component's, because its stylesheet is global and governs both:
+ * rows under other names would render unstyled, and only the recorded
+ * run would look like the product.
  *
  * `landing` is the one class the server-rendered rows do not carry: those
  * are already on screen when the page loads, and animating them in would
@@ -436,12 +575,12 @@ function renderRow(result: CheckResult): HTMLLIElement {
 	// In the browser's words: no OWNER_SECRET here, only a wallet and a
 	// counterparty field. The exports keep the suite's own wording.
 	actual.textContent = forBrowser(result.actual);
-	// A skipped row is this run failing, and "check did not complete" alone
-	// left the visitor nothing to act on — a rejected Freighter prompt and a
-	// dropped connection looked identical. The reason goes on the row itself
-	// (first line, trimmed), and in full in the drawer below.
-	// Trimmed once, here: an error that opens with a newline gave an empty
-	// reason, and one of whitespace alone opened an empty drawer.
+	// A skipped row is this run failing, and the visitor needs its reason
+	// to act on: a rejected Freighter prompt and a dropped connection are
+	// different things to fix. The reason goes on the row itself (first
+	// line, trimmed), and in full in the drawer below. Trimmed once, here,
+	// so an error that opens with a newline still gives a reason, and one
+	// of whitespace alone opens no drawer.
 	const failure = result.evidence.error?.trim() ?? "";
 	if (result.status === "SKIPPED" && failure !== "") {
 		// Trimmed, so the first line is the first thing the error says.
@@ -543,11 +682,13 @@ form.addEventListener("submit", async (event) => {
 	if (running) {
 		return;
 	}
-	if (claiming || returning) {
+	if (claiming || returning || claimOpen !== undefined) {
 		setWalletState(
 			claiming
 				? "The faucet claim is still in progress — run once it has landed."
-				: "Units are still being sent back from the last run — run once that has finished.",
+				: returning
+					? "Units are still being sent back from the last run — run once that has finished."
+					: "A faucet claim may still land — press “Check the faucet claim” first.",
 			"error",
 		);
 		return;
@@ -582,11 +723,19 @@ form.addEventListener("submit", async (event) => {
 	}
 	spenderInput.removeAttribute("aria-invalid");
 
-	// Testnet units are cheap, but the page does not discard something the
-	// visitor owns without saying so.
-	if (owed.onRun() === "warn") {
+	// A transaction the cleanup waits on can still land in the wallet and
+	// move a balance the checks measure; leaving its units behind does not
+	// stop it landing.
+	if (mayStillLand(owed.pending())) {
+		return;
+	}
+	// Starting the suite discards the temporary key and its recovery action.
+	const owing = owed.pending();
+	if (owing !== undefined && owed.onRun() === "warn") {
 		setWalletState(
-			"The temporary second account still holds units from the last run. Press “Try sending them back again” below — or press Run again to start a new run and leave them there.",
+			"failed" in owing && owing.pendingTxHash !== undefined
+				? `The last run's cleanup waits on a transaction whose outcome is not yet known. Press “${retryLabel(owing)}” below — or press Run again to start a new run, which discards the temporary account's key: the page can then neither settle that transaction nor send the units back.`
+				: `The temporary second account still holds units from the last run. Press “${retryLabel(owing)}” below — or press Run again to start a new run, which discards that account's key and leaves the units there.`,
 			"error",
 		);
 		return;
@@ -647,11 +796,11 @@ form.addEventListener("submit", async (event) => {
 			setWalletState(feeProblem, "error");
 			return;
 		}
-		const target = {
+		const target = heldTo({
 			contractId,
 			rpcUrl: TESTNET_RPC,
 			networkPassphrase: TESTNET_PASSPHRASE,
-		};
+		});
 		const held = await tokenBalance(target, signingAs);
 		// A full run spends five units, so on the demo token anything short
 		// of that runs dry partway and the last checks report an empty
@@ -712,6 +861,7 @@ form.addEventListener("submit", async (event) => {
 				progress.textContent = stage;
 			},
 		);
+		holdFrom(outcome.settledThrough);
 		lastResults = outcome.results;
 		lastRanAt = new Date().toISOString();
 		progress.textContent = "";
@@ -722,7 +872,7 @@ form.addEventListener("submit", async (event) => {
 		if (outcome.cleanup !== undefined) {
 			showCleanup(outcome.cleanup);
 		} else if (outcome.spenderSetupFailed !== undefined) {
-			progress.textContent = `The page could not set up a second account (${outcome.spenderSetupFailed}), so the four checks that need one could not run. Run the checks again from the top to retry.`;
+			progress.textContent = `The page could not set up a second account (${outcome.spenderSetupFailed}). See the report for which checks could run.`;
 		}
 	} catch (error) {
 		// A throw here is the run never starting — a bad address, an

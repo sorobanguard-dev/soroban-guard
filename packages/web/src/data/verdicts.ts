@@ -4,9 +4,8 @@
  * In a `.ts` file on purpose. The package's `typecheck` script is
  * `astro sync && tsc --noEmit`, and plain `tsc` has no parser for `.astro`
  * files — so a type-level guard written in a component's frontmatter
- * compiles, passes, and enforces nothing. This list used to live in
- * `Report.astro` with exactly that kind of guard beside it; removing an
- * entry did not fail the build. Here it does.
+ * compiles, passes, and enforces nothing: there, removing an entry would
+ * not fail the build. Here it does.
  */
 import type { CheckStatus } from "soroban-guard/src/core/types.ts";
 
@@ -29,10 +28,10 @@ export const TALLY_ORDER = [
 	},
 ] as const satisfies readonly TallyEntry[];
 
-// Compile-time proof the list is exhaustive. An earlier version omitted
-// NOT_IMPLEMENTED, and against a contract missing a member the counters
-// summed below the row count — the page quietly disagreeing with its own
-// report. Adding a CheckStatus without a place here now fails `tsc`.
+// Compile-time proof the list is exhaustive: a status missing here would
+// leave the counters summing below the row count, so the page would
+// disagree with its own report. A CheckStatus without a place here fails
+// `tsc`.
 type Untallied = Exclude<CheckStatus, (typeof TALLY_ORDER)[number]["status"]>;
 const _tallyIsExhaustive: [Untallied] extends [never] ? true : never = true;
 void _tallyIsExhaustive;

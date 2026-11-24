@@ -1,11 +1,10 @@
 /*
  * The report surface, shared by the recorded report and the live checker.
  *
- * A standalone stylesheet rather than a global <style> inside Report.astro.
- * That component used to be the only carrier of these rules, so the live
- * rows on /run were styled only because a Report happened to render on the
- * same page — remove it and every live result would have lost its layout.
- * Both components import this file, so neither depends on the other.
+ * A standalone stylesheet rather than a global <style> inside Report.astro:
+ * there, the live rows on /run would be styled only while a Report
+ * happened to render on the same page. Both components import this file,
+ * so neither depends on the other.
  */
 
 /*

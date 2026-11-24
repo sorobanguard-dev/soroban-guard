@@ -224,8 +224,8 @@ const STEPS = [
 		 * script has marked the list (`data-seen="no"`), which rewinds it to
 		 * its first frame; it plays when the list scrolls into view. Where
 		 * the script never runs — blocked, failed, a crawler — nothing is
-		 * rewound, so the rail and every step stay visible. An earlier
-		 * version started hidden and relied on the script to reveal it.
+		 * rewound, so the rail and every step stay visible rather than
+		 * waiting on a script to reveal them.
 		 */
 		.steps[data-seen]::before {
 			animation: rail-draw 1.6s cubic-bezier(0.32, 0.72, 0.3, 1) both;

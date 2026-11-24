@@ -148,10 +148,8 @@ import "../styles/report.css";
 	}
 
 	/*
-	 * One card for the whole form. Everything used to float on the page's
-	 * black ground, so the warning, the fields and the results read as one
-	 * undifferentiated column with no boundary telling you where the form
-	 * began or ended.
+	 * One card for the whole form, so the warning, the fields and the
+	 * results read as one form, with a boundary where it begins and ends.
 	 */
 	.panel {
 		display: grid;
@@ -163,8 +161,7 @@ import "../styles/report.css";
 
 	/*
 	 * Wide screens: fields and actions on the left, the warning beside
-	 * them. A single 48rem column left the right third of the page empty
-	 * next to a card that was itself mostly empty space. The warning stays
+	 * them, so the card uses the width the page gives it. The warning stays
 	 * first in the markup, so a screen reader still hears it before the
 	 * inputs; only its position on the grid moves.
 	 */
@@ -194,9 +191,8 @@ import "../styles/report.css";
 
 	/*
 	 * The warning lives inside the card as a recessed panel, not floating
-	 * above it behind a left rule. It belongs to this form: reading it
-	 * somewhere else, with its own border, made it look like a separate
-	 * section of the page.
+	 * above it behind a left rule: it belongs to this form, so it reads as
+	 * part of it.
 	 */
 	.warn {
 		background: rgba(251, 191, 36, 0.05);
@@ -411,7 +407,7 @@ import "../styles/report.css";
 	/*
 	 * `display: grid` on the class beats `[hidden]`'s `display: none` on
 	 * equal specificity, so without this guard the results card — copy
-	 * buttons and all — showed before a run had produced anything.
+	 * buttons and all — would show before a run has produced anything.
 	 */
 	.live-report[hidden] {
 		display: none;

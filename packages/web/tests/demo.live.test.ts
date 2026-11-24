@@ -47,14 +47,27 @@ describe.skipIf(!live)("the demo token, as a new visitor", () => {
 			await fundAccount(new rpc.Server(RPC), address);
 			expect(await tokenBalance(target, address)).toBe(0n);
 
-			await claimDemoTokens(target, address, signer);
-			expect(await tokenBalance(target, address)).toBe(
-				BigInt(DEMO_FAUCET_UNITS),
-			);
+			// Read back from the claim's ledger, as the page does.
+			const claim = await claimDemoTokens(target, address, signer);
+			if (!("landed" in claim)) {
+				throw new Error(
+					`the faucet claim did not land: ${JSON.stringify(claim)}`,
+				);
+			}
+			const claimed = claim.landed;
+			expect(
+				await tokenBalance({ ...target, minLedger: claimed }, address),
+			).toBe(BigInt(DEMO_FAUCET_UNITS));
 
+			// The run held to that ledger too, as a page floor would hold it.
 			const stages: string[] = [];
 			const outcome = await runChecks(
-				{ ...target, ownerAddress: address, ownerSigner: signer },
+				{
+					...target,
+					ownerAddress: address,
+					ownerSigner: signer,
+					minLedger: claimed,
+				},
 				undefined,
 				(stage) => stages.push(stage),
 			);

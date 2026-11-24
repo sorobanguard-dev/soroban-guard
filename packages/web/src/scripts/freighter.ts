@@ -7,14 +7,13 @@
  * here the answer is a wallet extension the visitor controls, and no key
  * ever reaches this page. That is the whole reason the same sixteen checks
  * can run in a browser at all: the signer is the only part of the context
- * that had to change.
+ * that differs.
  *
  * Talks to the extension through `@stellar/freighter-api`, which messages
- * Freighter's content script with `window.postMessage`. An earlier version
- * waited for a `window.freighterApi` global instead, on the belief that the
- * extension injects one. It does not: that global exists only on pages that
- * load the library's CDN build, so the page reported "Freighter did not
- * respond" to every visitor who had it installed.
+ * Freighter's content script with `window.postMessage`. The extension
+ * injects no `window.freighterApi` global: that exists only on pages that
+ * load the library's CDN build, so waiting for one would report
+ * "Freighter did not respond" to every visitor who has it installed.
  *
  * Every call is guarded, because an extension can be absent, locked, or on
  * the wrong network, and each of those is a fact about the run rather than
@@ -82,9 +81,9 @@ function throwIfError(result: { error?: unknown }): void {
  * seconds to answer, then reports "not connected". An installed Freighter
  * can miss that — its content script relays the question to a background
  * worker the browser may have put to sleep, and waking it is not instant.
- * One slow reply used to make the page tell a visitor with Freighter open
- * that it was not installed, and refuse to connect. Three attempts give a
- * sleeping worker six seconds; a browser without the extension still gets
+ * Taken at its word, one slow reply would tell a visitor with Freighter
+ * open that it is not installed, and refuse to connect. Three attempts
+ * give a sleeping worker six seconds; a browser without the extension still gets
  * a definite answer.
  */
 const PROBE_ATTEMPTS = 3;

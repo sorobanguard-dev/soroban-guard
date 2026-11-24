@@ -46,7 +46,7 @@
 	 * Deliberately not `--faint`'s hex, though the two read similarly. The
 	 * verdict colours name CheckStatus values and nothing else may use
 	 * them; sharing a hex with a neutral makes that rule unenforceable by
-	 * inspection — you could no longer tell a verdict from a muted label.
+	 * inspection — a verdict could not be told from a muted label.
 	 */
 	--not-implemented: #7c8288;
 

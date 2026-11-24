@@ -14,9 +14,8 @@ interface Props {
 const { page = "other" } = Astro.props;
 
 /**
- * Pages, not anchors. The bar used to jump to #verdicts and #scope on the
- * home page; with /checks and /changelog there are real destinations, and
- * a nav of anchors into one page reads as a site with only one page.
+ * Pages, not anchors: /checks and /changelog are real destinations, and a
+ * nav of anchors into one page reads as a site with only one page.
  */
 const LINKS = [
 	{ href: "/#how", label: "How it works", page: undefined },

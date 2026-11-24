@@ -57,10 +57,9 @@ const VERDICTS = [
 /**
  * Scope, as two lists: what the tool covers, then what it does not.
  *
- * An earlier version listed one thing covered and three not, which read as
- * a tool mostly defined by its gaps. Both halves are true and both belong
- * here — the covered list says what a pass is worth, the other says where
- * it stops. Every claim is checked against the README and the code.
+ * Both halves are true and both belong here: the covered list says what a
+ * pass is worth, the other says where it stops. Every claim is checked
+ * against the README and the code.
  */
 const COVERS = [
 	{
@@ -204,12 +203,11 @@ const FACTS = [
  * The three cards under the hero, drawn from the recorded run rather than
  * written by hand.
  *
- * An earlier version used illustrative rows, and they contradicted each
- * other and the report below them: `balance` passed and was unverifiable in
- * the same card, `transfer_from expired` showed a pass the real run never
- * produced. The sixteen checks split exactly into five reads, five writes
- * and six refusals, so each card now shows its own real rows — no row
- * appears twice, and every verdict matches the report further down.
+ * Real rows, not illustrative ones, which can contradict each other and
+ * the report below them. The sixteen checks split exactly into five
+ * reads, five writes and six refusals, so each card shows its own real
+ * rows — no row appears twice, and every verdict matches the report
+ * further down.
  */
 const byId = new Map(RECORDED_RUN.map((row) => [row.id, row]));
 const pick = (ids: readonly string[]) =>
@@ -1089,16 +1087,16 @@ const SAMPLES = [
 	/*
 	 * The only saturated colour outside a verdict: syntax.
 	 *
-	 * Prefixed `tok-` because the bare names collided. A variable name was
-	 * `<span class="v">`, and `.v` is also the verdict row — `display: grid`
-	 * with card padding — so `OWNER_SECRET` rendered as a block on a line of
-	 * its own with a gap above and below. The markup text was correct; the
-	 * damage was done entirely by a stylesheet rule meant for something else.
+	 * Prefixed `tok-` because the bare names collide. `.v` is the verdict
+	 * row — `display: grid` with card padding — so a variable name marked
+	 * `<span class="v">` would render as a block on a line of its own, with
+	 * a gap above and below, through a stylesheet rule meant for something
+	 * else.
 	 */
 	.code-card .tok-c {
 		color: var(--faint);
 	}
-	/* Not `--fail`'s red, which it used to share: verdict colours name
+	/* Not `--fail`'s red: verdict colours name
 	   verdicts and nothing else, and a red variable name beside a red ✗
 	   row reads as a second finding. */
 	.code-card .tok-v {

@@ -35,7 +35,7 @@ function loadChecker(): Promise<unknown> {
 		(error: unknown) => {
 			loading = null;
 			// The reason goes to the console: the status line is for the
-			// visitor, and it was the only trace the last failure left.
+			// visitor, and without this the failure would leave no trace.
 			console.error("soroban-guard: the checker failed to load", error);
 			const state = document.getElementById("wallet-state");
 			if (state !== null) {
