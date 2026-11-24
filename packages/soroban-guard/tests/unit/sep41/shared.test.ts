@@ -27,7 +27,7 @@ describe("describeValue", () => {
 	});
 
 	// scValToNative decodes a Soroban map to a plain object and a vec to an
-	// array. Both used to stringify uselessly.
+	// array, which String() prints as [object Object] and 1,2.
 	it("shows a map by shape rather than [object Object]", () => {
 		expect(describeValue({ a: 1, b: 2 })).toBe('{"a":1,"b":2}');
 	});
@@ -58,8 +58,8 @@ describe("classifyStanding", () => {
 		["trustline entry is missing for account G...", "no-trustline"],
 		["balance is deauthorized", "not-authorized"],
 		["trustline is deauthorized", "not-authorized"],
-	])("classifies SAC host wording: %s", (diagnostics, expected) => {
-		expect(classifyStanding(diagnostics)).toBe(expected);
+	])("classifies SAC host wording: %s", (reason, expected) => {
+		expect(classifyStanding({ reason })).toBe(expected);
 	});
 
 	// Narrow on purpose: these phrases appear in custom-token panics where
@@ -69,8 +69,8 @@ describe("classifyStanding", () => {
 		"caller is not authorized",
 		"not authorized to mint",
 		"HostError: Error(Contract, #11)",
-	])("leaves a contract's own refusal alone: %s", (diagnostics) => {
-		expect(classifyStanding(diagnostics)).toBeNull();
+	])("leaves a contract's own refusal alone: %s", (reason) => {
+		expect(classifyStanding({ reason })).toBeNull();
 	});
 
 	// Why matching on host wording is safe rather than merely convenient:
@@ -78,15 +78,23 @@ describe("classifyStanding", () => {
 	// trap reaches us as a bare error code. Captured from Comet on testnet
 	// (a real WASM SEP-41 token) — no prose for these patterns to match.
 	it("does not match a custom WASM token's bare error code", () => {
-		expect(classifyStanding("HostError: Error(Contract, #29)")).toBeNull();
+		expect(
+			classifyStanding({ reason: "HostError: Error(Contract, #29)" }),
+		).toBeNull();
 	});
 
 	// The descriptive strings come from the host's asset logic, which only
-	// runs for SAC calls. Captured from BLND on testnet.
+	// runs for SAC calls, and arrive as the refusing event's message.
 	it("matches the host's own asset wording", () => {
-		const sacTrap =
-			'HostError: Error(Contract, #13)\n\nEvent log (newest first):\n   0: [Diagnostic Event] topics:[error, Error(Contract, #13)], data:["trustline entry is missing for account", GCGX...]';
-		expect(classifyStanding(sacTrap)).toBe("no-trustline");
+		expect(
+			classifyStanding({ reason: "trustline entry is missing for account" }),
+		).toBe("no-trustline");
+	});
+
+	// Only the refusal's own reason counts: the same words anywhere else in
+	// the trace, such as a log, are not the asset refusing.
+	it("matches nothing without a reason", () => {
+		expect(classifyStanding({})).toBeNull();
 	});
 });
 

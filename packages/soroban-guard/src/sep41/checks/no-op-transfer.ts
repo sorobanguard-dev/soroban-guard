@@ -42,9 +42,10 @@
  * assertion, same premises, same reading of the outcome. Only the amount
  * and the recipient differ.
  */
-import { addressArg, amountArg, submitWrite } from "../../core/invoke.ts";
+import { addressArg, amountArg } from "../../core/invoke.ts";
 import type { CheckResult } from "../../core/types.ts";
 import type { Sep41Context } from "../context.ts";
+import { submitCheckWrite } from "../write.ts";
 import { type QuantityRead, readBalance } from "./quantity.ts";
 import {
 	inconclusiveResult,
@@ -190,20 +191,15 @@ function buildNoOpCheck(variant: NoOpVariant) {
 				recipientBefore = read.amount;
 			}
 
-			const submitted = await submitWrite(
-				ctx.server,
-				{
-					contractId: ctx.contractId,
-					method: "transfer",
-					args: [
-						addressArg(owner.address),
-						addressArg(variant.recipient(ctx.parties)),
-						amountArg(variant.amount),
-					],
-					signer: owner.signer,
-				},
-				ctx.networkPassphrase,
-			);
+			const submitted = await submitCheckWrite(ctx, {
+				method: "transfer",
+				args: [
+					addressArg(owner.address),
+					addressArg(variant.recipient(ctx.parties)),
+					amountArg(variant.amount),
+				],
+				signer: owner.signer,
+			});
 
 			const reading = readRefusal(submitted, variant.wording);
 			if (reading.kind === "inconclusive") {

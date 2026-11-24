@@ -1,6 +1,10 @@
 import type { rpc } from "@stellar/stellar-sdk";
 import { describe, expect, it, vi } from "vitest";
-import { fundAccount, loadSourceAccount } from "../../../src/core/funding.ts";
+import {
+	fundAccount,
+	fundAccountInLedger,
+	loadSourceAccount,
+} from "../../../src/core/funding.ts";
 
 const KEY = "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF";
 const ABSENT = new Error("failed to find an entry for key ABCD");
@@ -197,5 +201,60 @@ describe("loadSourceAccount", () => {
 		await expect(loadSourceAccount(wrongType, KEY)).rejects.toThrow(
 			"expected account entry",
 		);
+	});
+});
+
+// The run's reads after funding must describe state from the ledger it
+// landed in, so the account entry the poll found says which one.
+describe("fundAccountInLedger", () => {
+	function fundedIn(entry: unknown) {
+		let calls = 0;
+		return stubServer({
+			getLedgerEntry: vi.fn(async () => {
+				calls++;
+				if (calls < 2) {
+					throw ABSENT;
+				}
+				return entry;
+			}),
+		});
+	}
+
+	// `fundAccount` keeps its public signature, resolving to nothing.
+	it("leaves fundAccount resolving to nothing", async () => {
+		await expect(
+			fundAccount(fundedIn({ lastModifiedLedgerSeq: 150 }), KEY, {
+				delayMs: 0,
+			}),
+		).resolves.toBeUndefined();
+	});
+
+	it("returns the ledger its funding landed in", async () => {
+		await expect(
+			fundAccountInLedger(fundedIn({ lastModifiedLedgerSeq: 150 }), KEY, {
+				delayMs: 0,
+			}),
+		).resolves.toBe(150);
+	});
+
+	it("returns no ledger for an account it did not fund", async () => {
+		const server = stubServer({
+			getLedgerEntry: vi.fn(async () => ({ lastModifiedLedgerSeq: 99 })),
+		});
+		await expect(
+			fundAccountInLedger(server, KEY, { delayMs: 0 }),
+		).resolves.toBeUndefined();
+	});
+
+	it.each([
+		["fractional", 150.5],
+		["missing", undefined],
+		["zero", 0],
+	])("returns no ledger when the RPC's is %s", async (_case, ledger) => {
+		await expect(
+			fundAccountInLedger(fundedIn({ lastModifiedLedgerSeq: ledger }), KEY, {
+				delayMs: 0,
+			}),
+		).resolves.toBeUndefined();
 	});
 });

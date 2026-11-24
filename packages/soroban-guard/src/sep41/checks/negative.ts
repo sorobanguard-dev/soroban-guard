@@ -31,13 +31,18 @@
  * thing. Use addresses dedicated to the run, and keep this check ahead of
  * approve in the suite.
  */
-import { addressArg, amountArg, submitWrite } from "../../core/invoke.ts";
+import { addressArg, amountArg } from "../../core/invoke.ts";
 import type { CheckResult } from "../../core/types.ts";
 import type { Sep41Context } from "../context.ts";
+import { submitCheckWrite } from "../write.ts";
 import { readAllowance, readBalance } from "./quantity.ts";
 import {
+	inconclusiveResult,
+	type RefusalWording,
+	readRefusal,
+} from "./refusal.ts";
+import {
 	type CheckMeta,
-	classifyStanding,
 	ISSUER_SENTINEL_BALANCE,
 	isDeclared,
 	notImplemented,
@@ -56,6 +61,12 @@ const unauthorizedMeta = {
 
 const EXPECTED =
 	"transfer_from refuses a spender with no allowance from the holder";
+
+/** How the shared refusal reading phrases this check's inconclusive outcomes. */
+const WORDING: RefusalWording = {
+	attempt: "the unauthorized spend",
+	rule: "allowances are enforced",
+};
 
 const { unverifiable, failed } = verdictHelpers(unauthorizedMeta, EXPECTED);
 
@@ -170,77 +181,28 @@ export const unauthorizedTransferFromCheck = {
 			);
 		}
 
-		const submitted = await submitWrite(
-			ctx.server,
-			{
-				contractId: ctx.contractId,
-				method: "transfer_from",
-				args: [
-					addressArg(spender.address),
-					addressArg(owner.address),
-					addressArg(spender.address),
-					amountArg(ATTEMPT_AMOUNT),
-				],
-				signer: spender.signer,
-			},
-			ctx.networkPassphrase,
-		);
+		const submitted = await submitCheckWrite(ctx, {
+			method: "transfer_from",
+			args: [
+				addressArg(spender.address),
+				addressArg(owner.address),
+				addressArg(spender.address),
+				amountArg(ATTEMPT_AMOUNT),
+			],
+			signer: spender.signer,
+		});
 
-		if (submitted.kind === "timeout") {
-			// The hash goes in evidence, not only in prose: an attempt that
-			// may yet apply is one a reader has to be able to look up.
-			return {
-				...unauthorizedMeta,
-				status: "UNVERIFIABLE",
-				expected: EXPECTED,
-				actual:
-					submitted.txHash === ""
-						? "stopped waiting, and no transaction hash was observed; the attempt may still apply"
-						: `stopped waiting on ${submitted.txHash}; it may still apply`,
-				evidence: submitted.txHash === "" ? {} : { txHash: submitted.txHash },
-				durationMs: elapsed(),
-			};
+		const reading = readRefusal(submitted, WORDING);
+		if (reading.kind === "inconclusive") {
+			return inconclusiveResult(reading, unauthorizedMeta, EXPECTED, elapsed());
 		}
-		if (submitted.kind === "restore") {
-			return unverifiable(
-				"archived state must be restored before this call can execute",
-				elapsed(),
-				submitted.diagnostics,
-			);
-		}
-		if (submitted.kind === "rejected") {
-			// A transaction that reached the ledger and failed there is not
-			// the contract refusing. It may have run out of fee, lost a
-			// sequence race or had its footprint expire — none of which is
-			// evidence that allowances are enforced. Every other check may
-			// treat this as a FAIL (a contract that cannot complete a valid
-			// call is non-conformant either way), but here the mapping is
-			// inverted, so crediting it would issue a clean bill of health
-			// to a contract that was never asked the question.
-			if (submitted.settled) {
-				return unverifiable(
-					"the attempt failed on-chain rather than being refused by the contract; that says nothing about whether allowances are enforced",
-					elapsed(),
-					submitted.diagnostics,
-				);
-			}
-			// A standing problem is the asset's policy refusing, not the
-			// contract's authorization check. Crediting it would claim
-			// evidence of a check the contract may not perform at all.
-			const standing = classifyStanding(submitted.diagnostics);
-			if (standing !== null) {
-				return unverifiable(
-					"the attempt was refused by the asset's own trustline policy, which says nothing about whether the contract enforces allowances",
-					elapsed(),
-					submitted.diagnostics,
-				);
-			}
+		if (reading.kind === "refused") {
 			return {
 				...unauthorizedMeta,
 				status: "PASS",
 				expected: EXPECTED,
 				actual: "an unauthorized spend was refused",
-				evidence: { error: submitted.diagnostics },
+				evidence: { error: reading.diagnostics },
 				durationMs: elapsed(),
 			};
 		}
@@ -252,7 +214,7 @@ export const unauthorizedTransferFromCheck = {
 			status: "FAIL",
 			expected: EXPECTED,
 			actual: `a spender with no allowance moved ${ATTEMPT_AMOUNT} of the holder's balance; any address can take from any holder`,
-			evidence: { txHash: submitted.txHash, ledger: submitted.ledger },
+			evidence: { txHash: reading.txHash, ledger: reading.ledger },
 			durationMs: elapsed(),
 		};
 	},

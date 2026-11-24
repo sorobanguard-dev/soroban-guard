@@ -3,12 +3,13 @@
  * identity, the spec short-circuit, the chain call, and standing
  * classification.
  */
-import { Asset, rpc, type xdr } from "@stellar/stellar-sdk";
+import { type Account, Asset, rpc, type xdr } from "@stellar/stellar-sdk";
 import {
 	type InvokeResult,
 	interpretSimulation,
 	type SubmitResult,
 	simulateRead,
+	staleAnswer,
 } from "../../core/invoke.ts";
 import type { CheckResult } from "../../core/types.ts";
 import type { Sep41Context } from "../context.ts";
@@ -85,11 +86,10 @@ export function verdictHelpers(meta: CheckMeta, expected: string) {
 			 *
 			 * The string form is what most call sites want and stays the
 			 * default. But a submission that reached the ledger and failed
-			 * there carries a transaction hash, and the string-only
-			 * signature was silently dropping it at six sites — a reader
-			 * told the write "failed on-chain" with nothing to look it up
-			 * by. Widening here fixes all six rather than teaching each to
-			 * hand-roll a literal.
+			 * there carries a transaction hash, which a string alone would
+			 * drop: a reader told the write "failed on-chain" would have
+			 * nothing to look it up by. One wider signature keeps it at
+			 * every site, rather than each hand-rolling a literal.
 			 */
 			evidence?: string | CheckResult["evidence"],
 		): CheckResult {
@@ -133,11 +133,25 @@ export function verdictHelpers(meta: CheckMeta, expected: string) {
  * Simulate one read and decode the outcome. Every check reaches the chain
  * through here; `ledger` is the node's latest at observation time, which is
  * evidence for reads since they apply nothing.
+ *
+ * The answer must describe state from the latest ledger a transaction of
+ * this run settled in, or later (`soundness.settledThrough`), and from
+ * `minLedger` when the check needs a later one still, such as a ledger past
+ * a deadline it waited for. One from an RPC backend that has not reached
+ * that ledger describes earlier state, so after waiting for the RPC to
+ * catch up it is no answer (`inconclusive`): a balance read from before a
+ * transfer would otherwise report the transfer as moving nothing.
+ *
+ * `source` is the transaction's source account, the run's own by default;
+ * a call that is a write simulated read-only takes the account that would
+ * send it, since authorization is recorded relative to the source.
  */
 export async function callRead(
 	ctx: Sep41Context,
 	method: string,
 	args: readonly xdr.ScVal[],
+	minLedger?: number,
+	source: Account = ctx.source,
 ): Promise<{
 	readonly outcome: InvokeResult;
 	readonly ledger: number;
@@ -148,17 +162,31 @@ export async function callRead(
 	 * comparing two observations must not use it as a baseline.
 	 */
 	readonly fromArchive: boolean;
+	/** Why the answer could not stand for current state, when it was stale. */
+	readonly stale: string | undefined;
 }> {
+	const floor = Math.max(minLedger ?? 0, ctx.soundness.settledThrough ?? 0);
+	const needed = floor > 0 ? floor : undefined;
 	const sim = await simulateRead(
 		ctx.server,
-		ctx.source,
-		{ contractId: ctx.contractId, method, args },
+		source,
+		{
+			contractId: ctx.contractId,
+			method,
+			args,
+			...(needed === undefined ? {} : { minLedger: needed }),
+		},
 		ctx.networkPassphrase,
 	);
+	const stale = staleAnswer(sim.latestLedger, needed);
 	return {
-		outcome: interpretSimulation(sim),
+		outcome:
+			stale === undefined
+				? interpretSimulation(sim)
+				: { kind: "inconclusive", diagnostics: stale },
 		ledger: sim.latestLedger,
-		fromArchive: rpc.Api.isSimulationRestore(sim),
+		fromArchive: stale === undefined && rpc.Api.isSimulationRestore(sim),
+		stale,
 	};
 }
 
@@ -183,10 +211,10 @@ export const SETTLED_FAILURE_ACTUAL =
  *
  * A timeout that named its hash keeps it — the attempt may yet apply and a
  * reader has to look it up. A settled rejection keeps its diagnostics plus
- * whatever handle the ledger gave it. Anything without a handle yields
+ * whatever hash and ledger it has. Anything with neither yields
  * undefined, and the caller reports no evidence rather than an empty one.
- * One function for the three `_from` setups, for the usual reason: the
- * hash-dropping variant of this already shipped once.
+ * One function for the three `_from` setups, so none of them can drop a
+ * hash the others keep.
  */
 export function setupEvidence(
 	result: SubmitResult,
@@ -226,22 +254,26 @@ export type StandingProblem = "no-trustline" | "not-authorized";
  * the issuer's authorization. A call tripping either never had standing, so
  * treating it as a defect accuses a conformant token.
  *
- * Matching on diagnostic text is what this codebase otherwise avoids, and it
- * is deliberate here: nothing else knows the reason, and it fails safe —
- * an unmatched string falls through to the verdict we would have reported
- * anyway, and a match only ever downgrades an accusation to "unknown". The
- * patterns are the SAC host's own wording rather than a bare "not
- * authorized", which appears in custom-token panics where the refusal *is*
- * the verdict.
+ * Matched on the refusal's `reason`, the message its own error event
+ * carried, never on the whole trace, where a log can say anything. Text
+ * matching is what this codebase otherwise avoids, and it is deliberate
+ * here: nothing else knows the reason, and it fails safe — an unmatched
+ * reason falls through to the verdict we would have reported anyway, and a
+ * match only ever downgrades an accusation to "unknown". The patterns are
+ * the SAC host's own wording rather than a bare "not authorized", which
+ * appears in custom-token panics where the refusal *is* the verdict.
  *
  * Returns a code, not a sentence: reads and writes phrase the same finding
  * differently, and two copies of these patterns would drift.
  */
-export function classifyStanding(diagnostics: string): StandingProblem | null {
-	if (/trustline entry is missing/i.test(diagnostics)) {
+export function classifyStanding(refusal: {
+	readonly reason?: string | undefined;
+}): StandingProblem | null {
+	const reason = refusal.reason ?? "";
+	if (/trustline entry is missing/i.test(reason)) {
 		return "no-trustline";
 	}
-	if (/balance is deauthorized|trustline is deauthorized/i.test(diagnostics)) {
+	if (/balance is deauthorized|trustline is deauthorized/i.test(reason)) {
 		return "not-authorized";
 	}
 	return null;
@@ -271,8 +303,10 @@ export function classifyStanding(diagnostics: string): StandingProblem | null {
  * caveat: a custom token emitting this phrase would be described the same
  * way. It fails safe — the verdict is unchanged either way.
  */
-export function isNativeAssetRefusal(diagnostics: string): boolean {
-	return /operation invalid on native asset/i.test(diagnostics);
+export function isNativeAssetRefusal(refusal: {
+	readonly reason?: string | undefined;
+}): boolean {
+	return /operation invalid on native asset/i.test(refusal.reason ?? "");
 }
 
 /**

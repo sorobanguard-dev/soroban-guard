@@ -20,7 +20,11 @@ import { type CheckMeta, classifyStanding } from "./shared.ts";
 /** What a negative check concluded, once the outcome has been classified. */
 export type RefusalReading =
 	/** The contract refused, and had every chance to succeed: the PASS. */
-	| { readonly kind: "refused"; readonly diagnostics: string }
+	| {
+			readonly kind: "refused";
+			readonly diagnostics: string;
+			readonly simulationLedger?: number;
+	  }
 	/** It went through. For a negative check that is the finding. */
 	| {
 			readonly kind: "allowed";
@@ -62,15 +66,17 @@ export interface RefusalWording {
  * Order matters and is the same in every caller: a settled ledger failure
  * is checked before the asset's policy, and both before the refusal is
  * credited. Reversing any pair would let an unattributable outcome be read
- * as proof the contract enforces something.
+ * as proof the contract enforces something. `submitWrite` only returns an
+ * unsettled `rejected` when the contract's own code refused, so a failure
+ * of the host never reaches this ladder.
  */
 export function readRefusal(
 	submitted: SubmitResult,
 	wording: RefusalWording,
 ): RefusalReading {
 	if (submitted.kind === "timeout") {
-		// The hash is the handle: an attempt that may yet apply is one a
-		// reader has to be able to look up.
+		// An attempt that may yet apply has to be looked up, so its hash
+		// is kept.
 		return {
 			kind: "inconclusive",
 			actual:
@@ -104,11 +110,10 @@ export function readRefusal(
 			`unhandled submission kind: ${(submitted as { kind: string }).kind}`,
 		);
 	}
-	// A transaction that reached the ledger and died there is not the
-	// contract refusing — fee, sequence race, expired footprint. Positive
-	// checks may treat it as a FAIL either way; here the mapping is
-	// inverted, so crediting it would hand out a clean bill of health to a
-	// contract that was never asked the question.
+	// A transaction that reached the ledger and failed there is not the
+	// contract refusing: it may be a fee, a sequence race or an expired
+	// footprint. Every check reports it UNVERIFIABLE. Here, crediting it
+	// would also pass a contract that was never asked the question.
 	if (submitted.settled) {
 		return {
 			kind: "inconclusive",
@@ -123,14 +128,19 @@ export function readRefusal(
 	// The asset's own trustline policy refusing is not the contract's rule
 	// being enforced. Crediting it claims evidence of a check the contract
 	// may not perform at all.
-	if (classifyStanding(submitted.diagnostics) !== null) {
+	if (classifyStanding(submitted) !== null) {
 		return {
 			kind: "inconclusive",
 			actual: `the attempt was refused by the asset's own trustline policy, which says nothing about whether ${wording.rule}`,
 			diagnostics: submitted.diagnostics,
 		};
 	}
-	return { kind: "refused", diagnostics: submitted.diagnostics };
+	const { diagnostics, simulationLedger } = submitted;
+	return {
+		kind: "refused",
+		diagnostics,
+		...(simulationLedger === undefined ? {} : { simulationLedger }),
+	};
 }
 
 /**

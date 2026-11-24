@@ -27,10 +27,11 @@ import {
 	addressArg,
 	amountArg,
 	ledgerArg,
-	submitWrite,
+	type SubmitResult,
 } from "../../core/invoke.ts";
 import type { CheckResult } from "../../core/types.ts";
 import type { Sep41Context } from "../context.ts";
+import { submitCheckWrite } from "../write.ts";
 import { writeEvidence } from "./delta.ts";
 import { readAllowance } from "./quantity.ts";
 import {
@@ -120,26 +121,21 @@ export async function submitApproval(
 	 * a fact about why it was made, not about how long it lives.
 	 */
 	register = true,
-): Promise<ReturnType<typeof submitWrite>> {
+): Promise<SubmitResult> {
 	const { owner, spender } = ctx.parties;
 	if (owner.signer === undefined) {
 		throw new Error("submitApproval requires a signer for the holder");
 	}
-	const result = await submitWrite(
-		ctx.server,
-		{
-			contractId: ctx.contractId,
-			method: "approve",
-			args: [
-				addressArg(owner.address),
-				addressArg(spender.address),
-				amountArg(amount),
-				ledgerArg(currentLedger + lifetimeLedgers),
-			],
-			signer: owner.signer,
-		},
-		ctx.networkPassphrase,
-	);
+	const result = await submitCheckWrite(ctx, {
+		method: "approve",
+		args: [
+			addressArg(owner.address),
+			addressArg(spender.address),
+			amountArg(amount),
+			ledgerArg(currentLedger + lifetimeLedgers),
+		],
+		signer: owner.signer,
+	});
 	if (result.kind === "applied" && register) {
 		ctx.establishedAllowances.add(grantKey(owner.address, spender.address));
 	}
@@ -243,7 +239,7 @@ export const approveCheck = {
 						: { ledger: submitted.ledger }),
 				});
 			}
-			const standing = classifyStanding(submitted.diagnostics);
+			const standing = classifyStanding(submitted);
 			if (standing !== null) {
 				return unverifiable(
 					"the approval was refused by the asset's own trustline policy, not by a defect in the contract",
@@ -379,7 +375,7 @@ export const approveCheck = {
 						: { ledger: confirmed.ledger }),
 				});
 			}
-			const standing = classifyStanding(confirmed.diagnostics);
+			const standing = classifyStanding(confirmed);
 			if (standing !== null) {
 				return unverifiable(
 					"the confirming approval was refused by the asset's own trustline policy, not by a defect in the contract",

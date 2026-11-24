@@ -138,8 +138,10 @@ export function mapReadOutcome(
  * forgotten arm would accuse a conformant contract of a defect the asset's
  * own policy caused.
  */
-export function noStanding(diagnostics: string): string | null {
-	const standing = classifyStanding(diagnostics);
+export function noStanding(refusal: {
+	readonly reason?: string | undefined;
+}): string | null {
+	const standing = classifyStanding(refusal);
 	switch (standing) {
 		case "no-trustline":
 			return "the address holds no trustline for this asset; point OWNER_ADDRESS at an address that holds this token";

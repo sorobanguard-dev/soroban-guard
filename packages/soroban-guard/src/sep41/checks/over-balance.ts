@@ -22,14 +22,10 @@
  * rather than moves, so a contract could refuse for that reason and be
  * credited with a floor check it never performed.
  */
-import {
-	addressArg,
-	amountArg,
-	I128_MAX,
-	submitWrite,
-} from "../../core/invoke.ts";
+import { addressArg, amountArg, I128_MAX } from "../../core/invoke.ts";
 import type { CheckResult } from "../../core/types.ts";
 import type { Sep41Context } from "../context.ts";
+import { submitCheckWrite } from "../write.ts";
 import { type QuantityRead, readBalance } from "./quantity.ts";
 import {
 	inconclusiveResult,
@@ -179,20 +175,15 @@ export const overBalanceTransferCheck = {
 			);
 		}
 		const attempt = before.amount + 1n;
-		const submitted = await submitWrite(
-			ctx.server,
-			{
-				contractId: ctx.contractId,
-				method: "transfer",
-				args: [
-					addressArg(owner.address),
-					addressArg(spender.address),
-					amountArg(attempt),
-				],
-				signer: owner.signer,
-			},
-			ctx.networkPassphrase,
-		);
+		const submitted = await submitCheckWrite(ctx, {
+			method: "transfer",
+			args: [
+				addressArg(owner.address),
+				addressArg(spender.address),
+				amountArg(attempt),
+			],
+			signer: owner.signer,
+		});
 
 		const reading = readRefusal(submitted, WORDING);
 		if (reading.kind === "inconclusive") {
@@ -220,7 +211,7 @@ export const overBalanceTransferCheck = {
 		// telling a silent mint from a wrapped subtraction would need the
 		// recipient's side too, and this check only re-reads the holder.
 		// A failed after-read must not discard the hash: the move really
-		// happened, and the hash is the only handle on it.
+		// happened, and the hash is the only record of it.
 		let after: QuantityRead | null = null;
 		try {
 			after = await readBalance(ctx, owner.address);

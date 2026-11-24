@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { overBalanceTransferCheck } from "../../../src/sep41/checks/over-balance.ts";
 import {
 	APPLIED,
-	errorResponse,
+	contractRefusal,
 	OWNER,
 	okResponse,
 	rejected,
@@ -98,7 +98,7 @@ describe("overBalanceTransferCheck", () => {
 					// than a trap: a trap here would be a defect the check must
 					// not silently fold into the after-state, and using one would
 					// let this test pass for the wrong reason.
-					errorResponse("trustline entry is missing for account G..."),
+					contractRefusal(13, "trustline entry is missing for account G..."),
 				]),
 			),
 		);
@@ -258,7 +258,7 @@ describe("overBalanceTransferCheck", () => {
 			writeCtx(
 				sequencedServer([
 					okResponse(100n),
-					errorResponse("trustline entry is missing for account G..."),
+					contractRefusal(13, "trustline entry is missing for account G..."),
 				]),
 			),
 		);
@@ -272,12 +272,7 @@ describe("overBalanceTransferCheck", () => {
 	it("FAILs a defective recipient read rather than submitting anyway", async () => {
 		const submit = stubSubmit(APPLIED);
 		const result = await overBalanceTransferCheck.run(
-			writeCtx(
-				sequencedServer([
-					okResponse(100n),
-					errorResponse("Error(Contract, #7)"),
-				]),
-			),
+			writeCtx(sequencedServer([okResponse(100n), contractRefusal(7)])),
 		);
 		expect(result.status).toBe("FAIL");
 		expect(result.actual).toContain("the premise cannot be established");
@@ -286,13 +281,17 @@ describe("overBalanceTransferCheck", () => {
 
 	// A defective balance() is the contract's fault whichever check reads
 	// it, and balanceCheck FAILs the same response.
+	// The trace the stub answers with names the call the check made: the
+	// contract under test, raising the error from its own `balance`.
 	it("FAILs a defective balance rather than calling it unreadable", async () => {
 		const submit = stubSubmit(APPLIED);
-		const result = await overBalanceTransferCheck.run(
-			writeCtx(sequencedServer([errorResponse("Error(Contract, #7)")])),
-		);
+		const ctx = writeCtx(sequencedServer([contractRefusal(7)]));
+		const result = await overBalanceTransferCheck.run(ctx);
 		expect(result.status).toBe("FAIL");
 		expect(result.actual).toContain("the premise cannot be established");
+		const evidence = JSON.stringify(result);
+		expect(evidence).toContain(`contract:${ctx.contractId}`);
+		expect(evidence).toMatch(/fn_call[^\]]*balance/);
 		expect(submit).not.toHaveBeenCalled();
 	});
 
@@ -301,7 +300,7 @@ describe("overBalanceTransferCheck", () => {
 		const result = await overBalanceTransferCheck.run(
 			writeCtx(
 				sequencedServer([
-					errorResponse("trustline entry is missing for account G..."),
+					contractRefusal(13, "trustline entry is missing for account G..."),
 				]),
 			),
 		);

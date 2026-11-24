@@ -55,8 +55,8 @@ describe.skipIf(!(OWNER && SPENDER))("SEP-41 suite against nothing", () => {
 		// `find` below would still succeed while a check had silently
 		// vanished from the run.
 		expect(new Set(results.map((r) => r.id)).size).toBe(16);
-		// By id, never by position: positional slices broke silently every
-		// time the suite grew, and these tests only run with env configured.
+		// By id, never by position: a positional slice breaks silently when
+		// the suite grows, and these tests only run with env configured.
 		const byId = (id: string) => results.find((r) => r.id === id);
 
 		// Nothing is deployed here, so every read traps — and a trap with no

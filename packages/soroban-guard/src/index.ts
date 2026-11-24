@@ -9,7 +9,26 @@
  */
 export * from "./core/ansi.ts";
 export * from "./core/funding.ts";
-export * from "./core/invoke.ts";
+// Named, not `*`: settling a sent transaction (`sendAndFollow`,
+// `lookupOutcome`, `mayHaveExpired`) is internal, and a wildcard would
+// publish every helper added to this module. The types come along only
+// where a public signature needs them.
+export {
+	addressArg,
+	amountArg,
+	type HistoryProgress,
+	I128_MAX,
+	type InclusionWindow,
+	type InvokeResult,
+	interpretSimulation,
+	ledgerArg,
+	type ReadCall,
+	type SubmitResult,
+	simulateRead,
+	submitWrite,
+	type WriteCall,
+	type WriteTiming,
+} from "./core/invoke.ts";
 export * from "./core/json-report.ts";
 export * from "./core/md-report.ts";
 export * from "./core/pretty.ts";

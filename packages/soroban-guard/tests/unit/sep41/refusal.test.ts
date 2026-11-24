@@ -26,10 +26,16 @@ function reading(result: SubmitResult): RefusalReading {
 }
 
 describe("readRefusal", () => {
-	it("credits a contract refusal as refused", () => {
-		expect(
-			reading({ kind: "rejected", diagnostics: "HostError", settled: false }),
-		).toEqual({ kind: "refused", diagnostics: "HostError" });
+	// `submitWrite` returns an unsettled rejection only when the contract's
+	// own code refused (see classifySimulationFailure), so this ladder
+	// credits it; host failures never reach here.
+	it("credits an unsettled rejection as refused", () => {
+		const diagnostics =
+			'Transaction simulation failed: "HostError: Error(Contract, #4)"';
+		expect(reading({ kind: "rejected", diagnostics, settled: false })).toEqual({
+			kind: "refused",
+			diagnostics,
+		});
 	});
 
 	it("reports an applied attempt as allowed, never as refused", () => {
@@ -85,6 +91,7 @@ describe("readRefusal", () => {
 			kind: "rejected",
 			diagnostics: "trustline entry is missing for account G...",
 			settled: false,
+			reason: "trustline entry is missing for account",
 		});
 		expect(result.kind).toBe("inconclusive");
 	});
@@ -98,6 +105,7 @@ describe("readRefusal", () => {
 			kind: "rejected",
 			diagnostics: "balance is deauthorized for account G...",
 			settled: false,
+			reason: "balance is deauthorized",
 		});
 		expect(result.kind).toBe("inconclusive");
 		if (result.kind === "inconclusive") {

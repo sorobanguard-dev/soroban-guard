@@ -1,5 +1,6 @@
 import type { Account, rpc } from "@stellar/stellar-sdk";
 import type { Signer } from "@stellar/stellar-sdk/contract";
+import type { HistoryProgress, InclusionWindow } from "../core/invoke.ts";
 
 /**
  * One party in a check, and whether this run can act as them.
@@ -106,6 +107,23 @@ export interface Sep41Context {
 		 * negative`). Undefined means nothing unsound has been observed.
 		 */
 		firstNegative?: string;
+		/**
+		 * The first submitted transaction whose outcome this run could not
+		 * establish, with its validity window when known, so a later lookup
+		 * can still prove it never applied, and how far the history was read
+		 * for that lookup to go on from.
+		 */
+		unresolvedWrite?: {
+			readonly txHash: string;
+			readonly window?: InclusionWindow;
+			readonly progress?: HistoryProgress;
+		};
+		/**
+		 * The latest ledger a transaction of this run is known to have
+		 * settled in. Every later read and simulation must describe state
+		 * from it or after (see `callRead`); undefined before any has.
+		 */
+		settledThrough?: number;
 	};
 	/**
 	 * The two roles, and the single home for their addresses. Reads take

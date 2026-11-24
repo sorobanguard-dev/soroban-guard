@@ -22,11 +22,13 @@
  * the opposite of what is built here, and registering it would teach the
  * `_from` checks to treat an expired grant as fresh.
  */
-import { addressArg, amountArg, submitWrite } from "../../core/invoke.ts";
+import type { Account } from "@stellar/stellar-sdk";
+import { addressArg, amountArg } from "../../core/invoke.ts";
 import type { CheckResult } from "../../core/types.ts";
 import type { Sep41Context } from "../context.ts";
+import { submitCheckWrite } from "../write.ts";
 import { submitApproval } from "./approve.ts";
-import { readAllowance, readBalance } from "./quantity.ts";
+import { type QuantityRead, readAllowance, readBalance } from "./quantity.ts";
 import {
 	inconclusiveResult,
 	type RefusalWording,
@@ -34,6 +36,8 @@ import {
 } from "./refusal.ts";
 import {
 	type CheckMeta,
+	callRead,
+	classifyStanding,
 	ISSUER_SENTINEL_BALANCE,
 	isDeclared,
 	notImplemented,
@@ -48,10 +52,9 @@ const SPEND_AMOUNT = 1n;
  * ledger read before the approval is simulated and submitted.
  *
  * Simulating, submitting and confirming the approval, then reading it
- * back, can take three ledgers on testnet. Two was too tight: the grant
- * was sometimes refused for expiring before it landed, or had already
- * lapsed when read back, and the check reported UNVERIFIABLE on a
- * conformant token.
+ * back, can take three ledgers on testnet. With little more than that to
+ * spare, the grant can expire before it lands or lapse before it is read
+ * back, and the check reports UNVERIFIABLE on a conformant token.
  */
 const SHORT_LIFETIME_LEDGERS = 6;
 
@@ -60,6 +63,22 @@ const SHORT_LIFETIME_LEDGERS = 6;
  * at up to six seconds each, with room for a slow round.
  */
 const MAX_WAIT_MS = 60_000;
+
+/**
+ * Rounds of observation that may be asked for to see the refused spend and
+ * both balances answered from one ledger. A round is three read-only
+ * requests at once, well inside a five-second ledger, so a round that
+ * straddles a ledger close is the exception.
+ */
+const SAME_LEDGER_ROUNDS = 4;
+
+/** One ledger's answers: the spend simulated read-only, and both balances. */
+interface OneLedger {
+	readonly ledger: number;
+	readonly spend: Awaited<ReturnType<typeof callRead>>["outcome"];
+	readonly holder: Extract<QuantityRead, { kind: "value" }>;
+	readonly recipient: Extract<QuantityRead, { kind: "value" }>;
+}
 const POLL_INTERVAL_MS = 2_000;
 
 const expiredMeta = {
@@ -273,8 +292,10 @@ export const expiredAllowanceCheck = {
 		// Re-read: the wait is wall-clock time in which anything could have
 		// moved the holder's balance, and a refusal against a drained
 		// account would say "nothing to take" rather than anything about
-		// the deadline.
-		const fresh = await readBalance(ctx, owner.address);
+		// the deadline. Every read from here, like the spend, comes from the
+		// ledger the wait observed or a later one: a backend still before it
+		// would describe state from before the deadline.
+		const fresh = await readBalance(ctx, owner.address, reached);
 		if (fresh.kind === "defect") {
 			return failed(
 				`${fresh.detail}; the premise cannot be established`,
@@ -298,7 +319,11 @@ export const expiredAllowanceCheck = {
 		// Same for the recipient: a trustline closed during the wait would
 		// refuse for asset policy rather than the deadline. Issuer status
 		// needs no re-check — addresses do not become issuers mid-run.
-		const freshRecipient = await readBalance(ctx, spender.address);
+		const freshRecipient = await readBalance(
+			ctx,
+			spender.address,
+			fresh.ledger,
+		);
 		if (freshRecipient.kind === "defect") {
 			return failed(
 				`${freshRecipient.detail}; the premise cannot be established`,
@@ -316,7 +341,12 @@ export const expiredAllowanceCheck = {
 		// The grant should be dead. If the contract still reports an amount,
 		// that is not yet a finding — `allowance()` is permitted to report a
 		// stale amount, and the spend is what settles it.
-		const standing = await readAllowance(ctx, owner.address, spender.address);
+		const standing = await readAllowance(
+			ctx,
+			owner.address,
+			spender.address,
+			freshRecipient.ledger,
+		);
 		// A defective allowance() is the contract's fault, and this check
 		// runs last — so recording it as merely "unreadable" and spending
 		// anyway is the one path where a defect reaches no verdict at all.
@@ -334,38 +364,149 @@ export const expiredAllowanceCheck = {
 		const reported =
 			standing.kind === "value" ? `${standing.amount}` : "unreadable";
 
-		const submitted = await submitWrite(
-			ctx.server,
-			{
-				contractId: ctx.contractId,
-				method: "transfer_from",
-				args: [
-					addressArg(spender.address),
-					addressArg(owner.address),
-					addressArg(spender.address),
-					amountArg(SPEND_AMOUNT),
-				],
-				signer: spender.signer,
-			},
-			ctx.networkPassphrase,
-		);
+		// Simulated at or after the latest of those reads, so the spend meets
+		// the state they describe or a later one.
+		const minLedger =
+			standing.kind === "value" ? standing.ledger : freshRecipient.ledger;
+		const submitted = await submitCheckWrite(ctx, {
+			method: "transfer_from",
+			args: [
+				addressArg(spender.address),
+				addressArg(owner.address),
+				addressArg(spender.address),
+				amountArg(SPEND_AMOUNT),
+			],
+			signer: spender.signer,
+			minLedger,
+		});
 
 		const reading = readRefusal(submitted, WORDING);
 		if (reading.kind === "inconclusive") {
 			return inconclusiveResult(reading, expiredMeta, EXPECTED, elapsed());
 		}
 		if (reading.kind === "refused") {
+			// The refusal is the deadline's only if, in the ledger it happened
+			// in, the holder had the funds and the recipient its standing.
+			// Reads either side of it cannot show that: on an account others
+			// can use, a balance can drop for the spend and recover after.
+			// The spend's simulation and both reads are read-only, so they are
+			// taken together, from the refusal's ledger on, and again when
+			// their answers come from different ledgers.
+			const at = reading.simulationLedger;
+			if (at === undefined || at < minLedger) {
+				return unverifiable(
+					"the refusal could not be tied to a ledger at or after the reads it was judged against",
+					elapsed(),
+					reading.diagnostics,
+				);
+			}
+			const spendArgs = [
+				addressArg(spender.address),
+				addressArg(owner.address),
+				addressArg(spender.address),
+				amountArg(SPEND_AMOUNT),
+			];
+			// The reads already taken count when they came from the
+			// refusal's own ledger.
+			let seen: OneLedger | undefined =
+				fresh.ledger === at && freshRecipient.ledger === at
+					? {
+							ledger: at,
+							spend: { kind: "trapped", diagnostics: reading.diagnostics },
+							holder: fresh,
+							recipient: freshRecipient,
+						}
+					: undefined;
+			let unread: Exclude<QuantityRead, { kind: "value" }> | undefined;
+			let spenderAccount: Account | undefined;
+			for (
+				let round = 0;
+				seen === undefined &&
+				unread === undefined &&
+				round < SAME_LEDGER_ROUNDS;
+				round += 1
+			) {
+				// Simulated as the spend was sent: with the spender's account
+				// as the source, as authorization is recorded relative to it.
+				spenderAccount ??= await ctx.server.getAccount(spender.address);
+				const [spend, holder, recipient] = await Promise.all([
+					callRead(ctx, "transfer_from", spendArgs, at, spenderAccount),
+					readBalance(ctx, owner.address, at),
+					readBalance(ctx, spender.address, at),
+				]);
+				// Both balances are in hand, so a defect in either is the
+				// contract's, whatever the other says.
+				const reads = [holder, recipient];
+				unread =
+					reads.find(
+						(read): read is Extract<QuantityRead, { kind: "defect" }> =>
+							read.kind === "defect",
+					) ??
+					reads.find(
+						(read): read is Exclude<QuantityRead, { kind: "value" }> =>
+							read.kind !== "value",
+					);
+				if (
+					unread === undefined &&
+					holder.kind === "value" &&
+					recipient.kind === "value" &&
+					spend.ledger === holder.ledger &&
+					spend.ledger === recipient.ledger
+				) {
+					seen = {
+						ledger: spend.ledger,
+						spend: spend.outcome,
+						holder,
+						recipient,
+					};
+				}
+			}
+			if (unread?.kind === "defect") {
+				return failed(
+					`${unread.detail}; the premise cannot be established`,
+					elapsed(),
+					unread.error === "" ? {} : { error: unread.error },
+				);
+			}
+			if (unread !== undefined) {
+				return unverifiable(
+					`a balance could not be read again after the refusal at ledger ${at} (${unread.detail}); a refusal then says nothing either way`,
+					elapsed(),
+					{ ledger: at, error: reading.diagnostics },
+				);
+			}
+			if (seen === undefined) {
+				return unverifiable(
+					`the refusal, the holder's balance and the recipient's could not be observed in one ledger in ${SAME_LEDGER_ROUNDS} rounds from ledger ${at}`,
+					elapsed(),
+					{ ledger: at, error: reading.diagnostics },
+				);
+			}
+			const { ledger, spend, holder, recipient } = seen;
+			if (holder.amount < SPEND_AMOUNT) {
+				return unverifiable(
+					`the holder held ${holder.amount} at ledger ${ledger}, less than the spend, so the refusal may have been for funds rather than the deadline`,
+					elapsed(),
+					{ ledger, error: reading.diagnostics },
+				);
+			}
+			if (spend.kind !== "trapped" || classifyStanding(spend) !== null) {
+				return unverifiable(
+					spend.kind === "trapped"
+						? `at ledger ${ledger} the spend was refused by the asset's own policy, not by the contract`
+						: spend.kind === "ok"
+							? `the spend refused at ledger ${at} would be allowed at ledger ${ledger}, with the holder funded, so the first refusal was not the deadline's`
+							: `the spend could not be simulated again at ledger ${ledger} (${spend.kind}: ${spend.diagnostics}), so the refusal at ledger ${at} cannot be tied to the deadline`,
+					elapsed(),
+					{ ledger, error: reading.diagnostics },
+				);
+			}
 			return {
 				...expiredMeta,
 				status: "PASS",
 				expected: EXPECTED,
-				actual: `a spend against an allowance that expired at ledger ${expiresAt} was refused at ledger ${reached}`,
+				actual: `a spend against an allowance that expired at ledger ${expiresAt} was refused at ledger ${ledger}, in which the holder held ${holder.amount} and the recipient could receive`,
 				evidence: {
-					// The post-wait reads, not the premise ones taken before
-					// the approval: the wait is wall-clock time in which the
-					// holder can spend elsewhere and still stay above
-					// SPEND_AMOUNT, and evidence that reports a balance which
-					// was not true at submission misdescribes the run.
 					before: {
 						// The grant as read back right after approving, then
 						// the amount reported after the wait. Without the first,
@@ -374,18 +515,20 @@ export const expiredAllowanceCheck = {
 						// a statement about the deadline.
 						granted: `${granted.amount}`,
 						allowance: reported,
-						holder: `${fresh.amount}`,
-						recipient: `${freshRecipient.amount}`,
+						// The balances in the ledger of the refusal, which is
+						// what makes it a refusal of the deadline.
+						holder: `${holder.amount}`,
+						recipient: `${recipient.amount}`,
 					},
-					ledger: reached,
-					error: reading.diagnostics,
+					ledger,
+					error: spend.diagnostics,
 				},
 				durationMs: elapsed(),
 			};
 		}
 
 		return failed(
-			`a spend succeeded against an allowance that expired at ledger ${expiresAt}, submitted at ledger ${reached}; consistent with the contract storing the amount but not its deadline, which would leave every approval it has ever granted permanent`,
+			`a spend succeeded against an allowance that expired at ledger ${expiresAt}, applied at ledger ${reading.ledger}; consistent with the contract storing the amount but not its deadline, which would leave every approval it has ever granted permanent`,
 			elapsed(),
 			{
 				// Post-wait, for the same reason as the PASS above: a FAIL

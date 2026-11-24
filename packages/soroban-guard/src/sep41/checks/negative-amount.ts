@@ -18,9 +18,10 @@
  * holding, and a refusal on those grounds would be credited as a sign check
  * the contract never performed.
  */
-import { addressArg, amountArg, submitWrite } from "../../core/invoke.ts";
+import { addressArg, amountArg } from "../../core/invoke.ts";
 import type { CheckResult } from "../../core/types.ts";
 import type { Sep41Context } from "../context.ts";
+import { submitCheckWrite } from "../write.ts";
 import { type QuantityRead, readBalance } from "./quantity.ts";
 import {
 	inconclusiveResult,
@@ -165,20 +166,15 @@ export const negativeAmountTransferCheck = {
 			);
 		}
 
-		const submitted = await submitWrite(
-			ctx.server,
-			{
-				contractId: ctx.contractId,
-				method: "transfer",
-				args: [
-					addressArg(owner.address),
-					addressArg(spender.address),
-					amountArg(ATTEMPT_AMOUNT),
-				],
-				signer: owner.signer,
-			},
-			ctx.networkPassphrase,
-		);
+		const submitted = await submitCheckWrite(ctx, {
+			method: "transfer",
+			args: [
+				addressArg(owner.address),
+				addressArg(spender.address),
+				amountArg(ATTEMPT_AMOUNT),
+			],
+			signer: owner.signer,
+		});
 
 		const reading = readRefusal(submitted, WORDING);
 		if (reading.kind === "inconclusive") {
@@ -211,7 +207,7 @@ export const negativeAmountTransferCheck = {
 		// subtraction (the holder lost anyway) — and both are reportable.
 		//
 		// The read is guarded because the FAIL is already earned: the move
-		// landed and its hash is the only handle on it. Letting a transport
+		// landed and its hash is the only record of it. Letting a transport
 		// throw escape here would reach the runner as SKIPPED and discard
 		// that evidence along with the finding.
 		let after: QuantityRead;

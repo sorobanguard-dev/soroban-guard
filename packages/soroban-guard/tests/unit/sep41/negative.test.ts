@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { unauthorizedTransferFromCheck } from "../../../src/sep41/checks/negative.ts";
 import type { Sep41Context } from "../../../src/sep41/context.ts";
 import {
-	errorResponse,
+	contractRefusal,
 	okResponse,
 	rejected,
 	sequencedServer,
@@ -153,7 +153,7 @@ describe("unauthorizedTransferFromCheck", () => {
 				sequencedServer([
 					okResponse(0n),
 					okResponse(100n),
-					errorResponse("trustline entry is missing for account G..."),
+					contractRefusal(13, "trustline entry is missing for account G..."),
 				]),
 			),
 		);
@@ -166,11 +166,7 @@ describe("unauthorizedTransferFromCheck", () => {
 		const submit = stubSubmit(rejected("refused"));
 		const result = await unauthorizedTransferFromCheck.run(
 			ctxWith(
-				sequencedServer([
-					okResponse(0n),
-					okResponse(100n),
-					errorResponse("Error(Contract, #7)"),
-				]),
+				sequencedServer([okResponse(0n), okResponse(100n), contractRefusal(7)]),
 			),
 		);
 		expect(result.status).toBe("FAIL");

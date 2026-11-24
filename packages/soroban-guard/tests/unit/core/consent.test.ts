@@ -8,8 +8,7 @@ import {
 /**
  * The consent model, pinned. Every other guard in this codebase protects a
  * contract from a false accusation; these protect the operator from their
- * own key. They used to be verified by a table pasted into a chat, which is
- * evidence that evaporates.
+ * own key.
  */
 
 const MAINNET = "Public Global Stellar Network ; September 2015";
