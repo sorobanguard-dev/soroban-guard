@@ -71,17 +71,19 @@ log, not here.
   ledger header's `txSetResultHash`. Missing or inconsistent ledger
   data leaves the outcome unresolved, and so does a result the checker
   cannot identify, which could be the transaction; a receipt in a later
-  ledger still settles it. Each status check resumes from the first
-  unverified ledger.
+  ledger still settles it. A result names a transaction by its own hash
+  whatever code failed it. Each status check resumes from the first
+  unverified ledger, even when its lookup by hash fails.
 - Every read, and every write's simulation, must describe state from the
   latest ledger a transaction of the run settled in: its funding, a
   trustline, or a write, including one that failed on the ledger. Servers
   behind one RPC URL can answer from a backend that has not reached that
   ledger, with state from before the transaction, so a transfer read back
   there could look as if it moved nothing and FAIL. Such an answer is
-  asked again for up to 20 seconds, as is a request that fails in that
-  time, then refused: a read reports
-  UNVERIFIABLE with the reason, and a write SKIPPED without sending. A
+  asked again for up to 20 seconds, and so is a request asked again that
+  fails in that time; a first request that fails is not retried. A stale
+  answer is then refused: a read reports UNVERIFIABLE with the reason,
+  and a write SKIPPED without sending. A
   write also takes its signer's sequence number from that ledger, and
   every new simulation of it starts from the envelope as first built. In
   the browser, a cleanup whose balance read comes back stale stays

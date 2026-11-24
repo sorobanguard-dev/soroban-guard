@@ -790,7 +790,12 @@ describe("submitWrite, once sent", () => {
 				Networks.TESTNET,
 				GIVES_UP,
 			),
-		).resolves.toEqual({ kind: "timeout", txHash: HASH, window: WINDOW });
+		).resolves.toEqual({
+			kind: "timeout",
+			txHash: HASH,
+			window: WINDOW,
+			progress: { txHash: HASH, from: 121, next: 121 },
+		});
 	});
 });
 
@@ -1092,6 +1097,7 @@ describe("lookupOutcome", () => {
 		server.getLedgers.mockResolvedValue(page);
 		await expect(lookupOutcome(server, HASH, WINDOW)).resolves.toEqual({
 			kind: "pending",
+			progress: { txHash: HASH, from: 121, next: 121 },
 			closedAfterDeadline: 200,
 		});
 	});
@@ -1106,6 +1112,7 @@ describe("lookupOutcome", () => {
 		const server = network({ lookups: [PAST_WINDOW], ledgers });
 		await expect(lookupOutcome(server, HASH, WINDOW)).resolves.toEqual({
 			kind: "pending",
+			progress: { txHash: HASH, from: 121, next: 121 },
 			closedAfterDeadline: 200,
 		});
 	});
@@ -1140,6 +1147,21 @@ describe("lookupOutcome", () => {
 		await expect(lookupOutcome(server, HASH, WINDOW)).resolves.toEqual({
 			kind: "applied",
 			ledger: 123,
+		});
+	});
+
+	// Its own hash names a transaction whatever code failed it; only a fee
+	// bump's inner hash goes unread under the other codes.
+	it("settles a transaction that failed under another code by its own hash", async () => {
+		const server = network({
+			lookups: [PAST_WINDOW],
+			ledgers: with124(
+				ledgerResult(HASH, xdr.TransactionResultResult.txBadSeq()),
+			),
+		});
+		await expect(lookupOutcome(server, HASH, WINDOW)).resolves.toEqual({
+			kind: "failed",
+			ledger: 124,
 		});
 	});
 
@@ -1242,29 +1264,39 @@ describe("lookupOutcome", () => {
 
 	// Hashes are matched as the SDK renders them. Rendered any other way than
 	// hex, none could ever match, and every ledger would look clear of it.
-	it("stays pending when the SDK renders a result's hash other than as hex", async () => {
-		const decoded = (pair: xdr.TransactionResultPair) =>
-			xdr.TransactionResultPair.fromXdr(pair.toXdr());
-		const rendering = vi
-			.spyOn(
-				Object.getPrototypeOf(decoded(other(1)).transactionHash),
-				"toString",
-			)
-			.mockReturnValue("q6urq6urq6urq6urq6urq6urq6urq6urq6urq6urq6s=");
-		try {
-			const server = network({
-				lookups: [PAST_WINDOW],
-				ledgers: (sequence) =>
-					sequence < 140
-						? ledger(sequence, VALID_UNTIL - 50, [decoded(other(sequence))])
-						: absent(sequence),
-			});
-			await expect(lookupOutcome(server, HASH, WINDOW)).resolves.toMatchObject({
-				kind: "pending",
-			});
-		} finally {
-			rendering.mockRestore();
-		}
+	// Only the rendering of the transaction's own hash changes: its bytes,
+	// the result set and the header that commits to it are as the ledger
+	// has them, so only the comparison of hashes is under test. A hash that
+	// cannot be compared could be the transaction's, so no expiry is proven.
+	it("proves no absence across a result whose hash the SDK does not render as hex", async () => {
+		const pair = ours();
+		const hidden = Object.assign(Object.create(pair), {
+			transactionHash: Object.assign(Object.create(pair.transactionHash), {
+				toString: () => "q6urq6urq6urq6urq6urq6urq6urq6urq6urq6urq6s=",
+			}),
+		}) as xdr.TransactionResultPair;
+		const real = ledger(124, VALID_UNTIL - 50, [pair]);
+		const server = network({
+			lookups: [PAST_WINDOW],
+			ledgers: (sequence) =>
+				sequence === 124
+					? {
+							...real,
+							metadataXdr: {
+								...real.metadataXdr,
+								v2: {
+									...real.metadataXdr.v2,
+									txProcessing: [{ result: hidden }],
+								},
+							},
+						}
+					: absent(sequence),
+		});
+		await expect(lookupOutcome(server, HASH, WINDOW)).resolves.toEqual({
+			kind: "pending",
+			progress: { txHash: HASH, from: 121, next: 140, unidentified: true },
+			closedAfterDeadline: 200,
+		});
 	});
 
 	// Contradictory history proves nothing, in either direction.
@@ -1346,7 +1378,11 @@ describe("lookupOutcome", () => {
 			});
 			await expect(
 				lookupOutcome(server, HASH, WINDOW, real() + 30),
-			).resolves.toEqual({ kind: "pending", closedAfterDeadline: 200 });
+			).resolves.toEqual({
+				kind: "pending",
+				progress: { txHash: HASH, from: 121, next: 121 },
+				closedAfterDeadline: 200,
+			});
 			expect(server.getLedgers).toHaveBeenCalledOnce();
 		} finally {
 			clock.mockRestore();
@@ -1438,6 +1474,7 @@ describe("lookupOutcome", () => {
 			await vi.advanceTimersByTimeAsync(1_000);
 			await expect(looking).resolves.toEqual({
 				kind: "pending",
+				progress: { txHash: HASH, from: 121, next: 121 },
 				closedAfterDeadline: 200,
 			});
 			expect(server.getLedgers).toHaveBeenCalledOnce();
@@ -1531,33 +1568,86 @@ describe("lookupOutcome", () => {
 		expect(starts(server)[0]).toBe(121);
 	});
 
-	// Only a lookup that saw the latest ledger close after the deadline
-	// names it.
-	it.each([
-		[
-			"the lookup fails",
-			() => network({ lookups: [new TypeError("fetch failed")] }),
-			{},
-		],
-		[
-			"the window is still open",
-			() => network({ lookups: [NOT_FOUND_YET] }),
-			{},
-		],
-		[
-			"the history read fails",
-			() =>
-				network({
-					lookups: [PAST_WINDOW],
-					ledgers: () => new Error("fetch failed"),
-				}),
-			{ closedAfterDeadline: 200 },
-		],
-	])("keeps the progress it was given when %s", async (_case, server, past) => {
+	it("keeps the progress it was given when the history read fails", async () => {
 		const progress = { txHash: HASH, from: 121, next: 126 };
+		const server = network({
+			lookups: [PAST_WINDOW],
+			ledgers: () => new Error("fetch failed"),
+		});
 		await expect(
-			lookupOutcome(server(), HASH, WINDOW, undefined, progress),
-		).resolves.toEqual({ kind: "pending", progress, ...past });
+			lookupOutcome(server, HASH, WINDOW, undefined, progress),
+		).resolves.toEqual({ kind: "pending", progress, closedAfterDeadline: 200 });
+	});
+
+	// A walk is only started past the deadline, so one under way goes on
+	// when the lookup by hash fails, or comes from a server still inside the
+	// window. Only a lookup that saw the deadline pass names the ledger.
+	it.each([
+		["fails", new TypeError("fetch failed")],
+		["comes from a server still inside the window", NOT_FOUND_YET],
+	])(
+		"goes on with a walk under way when the lookup by hash %s",
+		async (_case, lookup) => {
+			const progress = { txHash: HASH, from: 121, next: 126 };
+			const settles = network({
+				lookups: [lookup],
+				ledgers: (sequence) =>
+					sequence === 126
+						? ledger(126, VALID_UNTIL - 50, [ours()])
+						: absent(sequence),
+			});
+			await expect(
+				lookupOutcome(settles, HASH, WINDOW, undefined, progress),
+			).resolves.toEqual({ kind: "applied", ledger: 126 });
+			expect(starts(settles)[0]).toBe(126);
+			const stalls = network({
+				lookups: [lookup],
+				ledgers: () => new Error("fetch failed"),
+			});
+			await expect(
+				lookupOutcome(stalls, HASH, WINDOW, undefined, progress),
+			).resolves.toEqual({ kind: "pending", progress });
+		},
+	);
+
+	// The walk began even though its first page failed, so the next lookup
+	// goes on with it when the lookup by hash fails, and finds the receipt.
+	it("goes on with a walk whose first page failed when the lookup by hash then fails", async () => {
+		const first = network({
+			lookups: [PAST_WINDOW],
+			ledgers: () => new Error("fetch failed"),
+		});
+		const stopped = await lookupOutcome(first, HASH, WINDOW);
+		expect(stopped).toMatchObject({
+			kind: "pending",
+			progress: { txHash: HASH, from: 121, next: 121 },
+		});
+		const second = network({
+			lookups: [new Error("503 Service Unavailable")],
+			ledgers: (sequence) =>
+				sequence === 121
+					? ledger(121, VALID_UNTIL - 50, [ours()])
+					: absent(sequence),
+		});
+		await expect(
+			lookupOutcome(
+				second,
+				HASH,
+				WINDOW,
+				undefined,
+				stopped.kind === "pending" ? stopped.progress : undefined,
+			),
+		).resolves.toEqual({ kind: "applied", ledger: 121 });
+	});
+
+	// Without a walk of its own under way, nothing says the deadline passed.
+	it("starts no walk on another transaction's progress when the lookup fails", async () => {
+		const server = network({ lookups: [new TypeError("fetch failed")] });
+		const progress = { txHash: "cd".repeat(32), from: 121, next: 126 };
+		await expect(
+			lookupOutcome(server, HASH, WINDOW, undefined, progress),
+		).resolves.toEqual({ kind: "pending", progress });
+		expect(server.getLedgers).not.toHaveBeenCalled();
 	});
 
 	it("proves nothing without a window", async () => {
