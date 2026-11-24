@@ -76,6 +76,7 @@ it("closes the run to writes when a setup approval's outcome is unknown", async 
 		txHash: HASH,
 		window: WINDOW,
 		progress,
+		closedAfterDeadline: 200,
 	});
 	const ctx = writeCtx(sequencedServer([]));
 	await expect(submitApproval(ctx, 1n, 100)).resolves.toMatchObject({
@@ -83,11 +84,13 @@ it("closes the run to writes when a setup approval's outcome is unknown", async 
 	});
 	// The window travels with the hash, so the page's cleanup can later
 	// prove this approval never landed instead of waiting on it forever,
-	// and so does how far the history was read, for it to go on from.
+	// and so does how far the history was read, for it to go on from, and
+	// the ledger seen past its deadline, from which it can no longer land.
 	expect(ctx.soundness.unresolvedWrite).toEqual({
 		txHash: HASH,
 		window: WINDOW,
 		progress,
+		closedAfterDeadline: 200,
 	});
 
 	const later = await guardWriteCheck(burnCheck).run(ctx);

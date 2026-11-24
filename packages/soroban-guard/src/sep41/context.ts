@@ -117,6 +117,8 @@ export interface Sep41Context {
 			readonly txHash: string;
 			readonly window?: InclusionWindow;
 			readonly progress?: HistoryProgress;
+			/** A ledger a lookup saw close after its deadline, when one did. */
+			readonly closedAfterDeadline?: number;
 		};
 		/**
 		 * The latest ledger a transaction of this run is known to have

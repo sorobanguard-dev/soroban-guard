@@ -344,6 +344,26 @@ describe("the page after a faucet claim", () => {
 		expect(floorOfRun(0)).toBe(205);
 	});
 
+	// A claim checked after the visitor switched wallets is still the first
+	// wallet's: the message names that wallet, not whichever is connected.
+	it("names the wallet a claim was for, after a switch", async () => {
+		const freighter = await import("../src/scripts/freighter.ts");
+		const OTHER = "GBAMZ2D6RMSA4OQQ6CZ2L4UQOE2RL2PEOI5O7MTN3UUCQFJS6KCGRKUQ";
+		vi.mocked(run.claimDemoTokens).mockResolvedValue({ unresolved: OPEN });
+		vi.mocked(run.transactionStatus).mockResolvedValue({ landed: 205 });
+		vi.mocked(run.tokenBalance).mockResolvedValue(5n);
+
+		await element("faucet").fire("click");
+		vi.mocked(freighter.connect).mockResolvedValue(OTHER);
+		await element("connect").fire("click");
+		await element("faucet").fire("click");
+
+		expect(vi.mocked(run.tokenBalance).mock.calls.at(-1)?.[1]).toBe(WALLET);
+		expect(element("wallet-state").textContent).toBe(
+			`Received 5 units of VULN — ${WALLET} now holds 5. Run the checks.`,
+		);
+	});
+
 	// The floor is the latest of what the page has seen: a ledger reported
 	// after a later one does not take it back.
 	it("keeps the floor when a lower ledger is reported after a higher one", async () => {

@@ -690,6 +690,7 @@ describe("submitWrite, once sent", () => {
 			kind: "timeout",
 			txHash: HASH,
 			window: { validUntil: VALID_UNTIL },
+			closedAfterDeadline: 200,
 		});
 	});
 
@@ -795,6 +796,7 @@ describe("submitWrite, once sent", () => {
 			txHash: HASH,
 			window: WINDOW,
 			progress: { txHash: HASH, from: 121, next: 121 },
+			closedAfterDeadline: 200,
 		});
 	});
 });
@@ -889,6 +891,7 @@ describe("sendAndFollow", () => {
 			kind: "unknown",
 			txHash: HASH,
 			window: { validUntil: VALID_UNTIL },
+			closedAfterDeadline: 200,
 		});
 	});
 
@@ -917,6 +920,19 @@ describe("sendAndFollow", () => {
 		expect(starts(server)).toEqual([121, 126, 126, 126, 131, 136]);
 	});
 
+	// Only a lookup that saw the deadline pass names a ledger after it: a
+	// follow that gives up while the window is still open names none.
+	it("names no ledger past the deadline when it gives up inside the window", async () => {
+		await expect(
+			sendAndFollow(
+				network({ lookups: [NOT_FOUND_YET] }),
+				envelope,
+				PREPARED,
+				GIVES_UP,
+			),
+		).resolves.toEqual({ kind: "unknown", txHash: HASH, window: WINDOW });
+	});
+
 	it("reports how far the history was read when it gives up", async () => {
 		const server = network({
 			lookups: [PAST_WINDOW],
@@ -929,6 +945,7 @@ describe("sendAndFollow", () => {
 			txHash: HASH,
 			window: WINDOW,
 			progress: { txHash: HASH, from: 121, next: 126 },
+			closedAfterDeadline: 200,
 		});
 	});
 

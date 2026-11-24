@@ -67,6 +67,9 @@ export async function submitCheckWrite(
 			txHash: result.txHash,
 			...(result.window === undefined ? {} : { window: result.window }),
 			...(result.progress === undefined ? {} : { progress: result.progress }),
+			...(result.closedAfterDeadline === undefined
+				? {}
+				: { closedAfterDeadline: result.closedAfterDeadline }),
 		};
 	}
 	return result;

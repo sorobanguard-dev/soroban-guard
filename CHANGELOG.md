@@ -102,8 +102,9 @@ log, not here.
   where nothing is sent back, nothing waits. While a transaction the
   cleanup waits on may still land, the faucet and Run wait for it as well,
   since its units could arrive under a claim's balance read or a run's
-  checks. Once a status check finds the RPC reporting a ledger closed
-  after its deadline, it can no longer land, and both go on. Every token
+  checks. Once a status check, or the follow that gave up on it, finds the
+  RPC reporting a ledger closed after its deadline, it can no longer
+  land, and both go on. Every token
   read and write the page makes is held to the latest ledger by which a
   transaction it knows of may have moved the wallet's balance: one closed
   after such a deadline, or one a run, a status check or a faucet claim
@@ -116,8 +117,11 @@ log, not here.
   or unable to land. So does a run's write whose outcome stayed unknown
   with no send-back to wait on it, as on native XLM or with a named
   counterparty: Run becomes "Check the last run's transaction". The
-  browser skips the send-back when it cannot identify the underlying
-  asset, and reads that asset's `name()` from the run's ledger floor.
+  browser skips the send-back when it cannot identify the asset a Stellar
+  Asset Contract wraps, and reads that asset's `name()` from the run's
+  ledger floor. A contract counts as a Stellar Asset Contract by its
+  executable: a WASM token whose spec cannot be read still gets its
+  units back.
 - In the browser, a temporary second account that could not be set up is
   no longer used by the checks. They get a fresh address nothing has
   touched, since a funding or trustline transaction that may still land
