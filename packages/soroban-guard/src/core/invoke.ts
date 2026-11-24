@@ -124,7 +124,9 @@ export function mayHaveExpired(
  * transaction, so a later lookup goes on from there instead of starting
  * over: closed ledgers do not change, so what has been read stays read.
  * Every ledger from `from` up to, not including, `next` has been read, and
- * none of them holds a receipt for the transaction.
+ * none of them holds a receipt for the transaction. A walk only begins
+ * once a lookup has seen the deadline pass, so progress also records
+ * that, even before a ledger is read.
  */
 export interface HistoryProgress {
 	readonly txHash: string;
@@ -201,38 +203,52 @@ const LEDGERS_PER_PAGE = 5;
 const HISTORY_PAGES = 25;
 
 /**
- * One transaction a ledger applied: the hashes it answers to, undefined
- * when it cannot be identified, and whether it succeeded.
+ * One transaction a ledger applied: the hashes it answers to, whether it
+ * succeeded, and whether it may also answer to a hash that cannot be read.
  */
 interface Applied {
-	readonly hashes: readonly string[] | undefined;
+	readonly hashes: readonly string[];
 	readonly succeeded: boolean;
+	readonly unreadable: boolean;
 }
 
 /**
  * One applied transaction, from its result pair. It answers to its own
  * hash and, for a fee bump, to the inner one, which is the one signed
- * here. Only the four codes a ledger gives a plain or fee-bumped
- * transaction identify it: under any other, a fee bump's inner hash cannot
- * be read, and the pair could be the transaction being looked for.
+ * here. Any code but `txSuccess` and a fee bump's inner success is a
+ * failure. Under a code other than the four a ledger gives a plain or
+ * fee-bumped transaction, a fee bump's inner hash is not carried, so the
+ * pair could wrap the transaction being looked for; so could one whose
+ * hash the SDK did not render as hex, which nothing here can compare.
  */
 function appliedFrom(pair: xdr.TransactionResultPair): Applied {
-	const own = String(pair.transactionHash);
 	const outcome = pair.result.result;
+	const rendered = [String(pair.transactionHash)];
+	let succeeded = false;
+	let innerUnread = false;
 	if (outcome.type === "txSuccess" || outcome.type === "txFailed") {
-		return { hashes: [own], succeeded: outcome.type === "txSuccess" };
-	}
-	if (
+		succeeded = outcome.type === "txSuccess";
+	} else if (
 		outcome.type === "txFeeBumpInnerSuccess" ||
 		outcome.type === "txFeeBumpInnerFailed"
 	) {
-		return {
-			hashes: [own, String(outcome.innerResultPair.transactionHash)],
-			succeeded: outcome.type === "txFeeBumpInnerSuccess",
-		};
+		rendered.push(String(outcome.innerResultPair.transactionHash));
+		succeeded = outcome.type === "txFeeBumpInnerSuccess";
+	} else {
+		// Failed under a code that does not carry a fee bump's inner result:
+		// its own hash still names it, but one it wraps cannot be read.
+		innerUnread = true;
 	}
-	return { hashes: undefined, succeeded: false };
+	const hashes = rendered.filter((rendering) => HEX_HASH.test(rendering));
+	return {
+		hashes,
+		succeeded,
+		unreadable: innerUnread || hashes.length < rendered.length,
+	};
 }
+
+/** A transaction hash as the network writes it, and as `toHex` renders one. */
+const HEX_HASH = /^[0-9a-f]{64}$/;
 
 /** Read only the complete transaction result set committed to by this header. */
 function appliedIn(
@@ -300,18 +316,17 @@ async function searchHistory(
 			: undefined;
 	let next = resumed?.next ?? earliest;
 	let unidentified = resumed?.unidentified === true;
-	const pending = (): Lookup =>
-		next === earliest
-			? { kind: "pending" }
-			: {
-					kind: "pending",
-					progress: {
-						txHash,
-						from: earliest,
-						next,
-						...(unidentified ? { unidentified: true } : {}),
-					},
-				};
+	// Kept even before a ledger is read: that the walk began is itself the
+	// record that a lookup saw the deadline pass (see `lookupOutcome`).
+	const pending = (): Lookup => ({
+		kind: "pending",
+		progress: {
+			txHash,
+			from: earliest,
+			next,
+			...(unidentified ? { unidentified: true } : {}),
+		},
+	});
 	for (let page = 0; page < HISTORY_PAGES; page += 1) {
 		const start = next;
 		// Asked for one ledger only when the server refused the page: a page
@@ -345,7 +360,7 @@ async function searchHistory(
 			if (applied === undefined || performance.now() >= until) {
 				return pending();
 			}
-			const found = applied.find((tx) => tx.hashes?.includes(txHash) === true);
+			const found = applied.find((tx) => tx.hashes.includes(txHash));
 			if (closed > deadline) {
 				return found === undefined && !unidentified
 					? { kind: "expired" }
@@ -359,7 +374,7 @@ async function searchHistory(
 					? { kind: "applied", ledger: next }
 					: { kind: "failed", ledger: next };
 			}
-			if (applied.some((tx) => tx.hashes === undefined)) {
+			if (applied.some((tx) => tx.unreadable)) {
 				unidentified = true;
 			}
 			next += 1;
@@ -376,9 +391,11 @@ async function searchHistory(
  * the transaction before its ledger range, and servers behind one URL can
  * each miss a ledger that landed. Past the deadline, the ledgers' own
  * data decides (see `searchHistory`), going on from
- * `progress` when an earlier lookup of the same transaction left some. A
- * `pending` answer carries the progress forward, whether or not this
- * lookup read further, and past the deadline names `closedAfterDeadline`.
+ * `progress` when an earlier lookup of the same transaction left some:
+ * that walk began past the deadline, so it goes on even when this lookup
+ * by hash fails. A `pending` answer carries the progress forward, whether
+ * or not this lookup read further, and names `closedAfterDeadline` when
+ * this lookup saw the deadline pass.
  *
  * `until`, a `performance.now()` time, bounds the whole lookup: no request
  * starts after it, and an answer that comes later is not accepted. A
@@ -397,18 +414,24 @@ export async function lookupOutcome(
 	if (settled !== undefined) {
 		return settled;
 	}
+	const closedAfterDeadline =
+		seen !== undefined && window !== undefined && mayHaveExpired(seen, window)
+			? seen.latestLedger
+			: undefined;
+	// A walk is only ever started past the deadline, so one under way goes
+	// on whatever this lookup by hash says, or fails to.
+	const underWay = progress?.txHash === txHash;
 	if (
-		seen === undefined ||
 		window === undefined ||
-		!mayHaveExpired(seen, window)
+		(closedAfterDeadline === undefined && !underWay)
 	) {
 		return progress === undefined
 			? { kind: "pending" }
 			: { kind: "pending", progress };
 	}
 	const found = await searchHistory(server, txHash, window, until, progress);
-	return found.kind === "pending"
-		? { ...found, closedAfterDeadline: seen.latestLedger }
+	return found.kind === "pending" && closedAfterDeadline !== undefined
+		? { ...found, closedAfterDeadline }
 		: found;
 }
 

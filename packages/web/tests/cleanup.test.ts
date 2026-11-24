@@ -331,16 +331,15 @@ describe("runChecks cleanup", () => {
 		});
 	});
 
-	// A receipt with neither SUCCESS nor FAILED says nothing about the
-	// transfer, so the page keeps waiting rather than sending again.
-	it("keeps waiting when the history's receipt has no clear status", async () => {
+	// The send-back's own hash, failed on the ledger under a code other than
+	// txFailed: it moved nothing, so the units are sent again, read from
+	// that ledger on.
+	it("sends again after the history shows the send-back failed under any code", async () => {
 		const hash = "ef".repeat(32);
 		vi.mocked(interpretSimulation).mockReturnValue(balance(5n));
-		vi.mocked(submitWrite).mockResolvedValue({
-			kind: "timeout",
-			txHash: hash,
-			window: WINDOW,
-		});
+		vi.mocked(submitWrite)
+			.mockResolvedValueOnce({ kind: "timeout", txHash: hash, window: WINDOW })
+			.mockResolvedValueOnce(applied);
 		vi.spyOn(rpc.Server.prototype, "getTransaction").mockResolvedValue(
 			notFound(WINDOW.validUntil + 5),
 		);
@@ -350,8 +349,13 @@ describe("runChecks cleanup", () => {
 
 		const { cleanup } = await runChecks(REQUEST);
 
-		pendingCleanup(await pendingCleanup(cleanup, hash)(), hash);
-		expect(submitWrite).toHaveBeenCalledOnce();
+		await expect(pendingCleanup(cleanup, hash)()).resolves.toEqual({
+			returned: 5n,
+			settledThrough: 130,
+		});
+		expect(vi.mocked(submitWrite).mock.calls[1]?.[1]).toMatchObject({
+			minLedger: 130,
+		});
 	});
 
 	// The status lookup behind "Check transaction status" waits a minute at
@@ -915,6 +919,8 @@ describe("the page's reads, held to a ledger", () => {
 				unresolved: {
 					txHash: "cd".repeat(32),
 					window: WINDOW,
+					// The walk began, though the history did not reach back.
+					progress: { txHash: "cd".repeat(32), from: 121, next: 121 },
 					closedAfterDeadline: 200,
 				},
 			},
