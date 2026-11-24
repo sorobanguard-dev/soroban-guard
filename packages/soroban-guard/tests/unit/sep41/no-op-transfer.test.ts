@@ -7,7 +7,7 @@ import {
 import type { Sep41Context } from "../../../src/sep41/context.ts";
 import {
 	APPLIED,
-	errorResponse,
+	contractRefusal,
 	OWNER,
 	okResponse,
 	rejected,
@@ -89,7 +89,7 @@ describe("zeroAmountTransferCheck", () => {
 					okResponse(100n),
 					okResponse(7n),
 					okResponse(100n),
-					errorResponse("trustline entry is missing for account G..."),
+					contractRefusal(13, "trustline entry is missing for account G..."),
 				]),
 			),
 		);
@@ -143,7 +143,7 @@ describe("zeroAmountTransferCheck", () => {
 					okResponse(100n), // holder before
 					okResponse(7n), // recipient before
 					okResponse(101n), // holder after: moved on a zero transfer
-					errorResponse("trustline entry is missing for account G..."),
+					contractRefusal(13, "trustline entry is missing for account G..."),
 				]),
 			),
 		);
@@ -224,7 +224,7 @@ describe("zeroAmountTransferCheck", () => {
 				sequencedServer([
 					okResponse(100n),
 					okResponse(7n),
-					errorResponse("trustline entry is missing for account G..."),
+					contractRefusal(13, "trustline entry is missing for account G..."),
 				]),
 			),
 		);
@@ -269,9 +269,9 @@ describe("zeroAmountTransferCheck", () => {
 		expect(result.evidence.error).toContain("ECONNREFUSED");
 	});
 
-	// The recipient after-read is the fourth call, and it had no guard: a
-	// transport failure there reached the runner as SKIPPED and took the
-	// hash of an accepted call down with it.
+	// The recipient after-read is the fourth call: unguarded, a transport
+	// failure there would reach the runner as SKIPPED and take the hash of
+	// an accepted call down with it.
 	it("keeps the hash as UNVERIFIABLE when the recipient after-read throws", async () => {
 		stubSubmit(APPLIED);
 		let reads = 0;
@@ -355,7 +355,7 @@ describe("zeroAmountTransferCheck", () => {
 	it("FAILs a defective balance rather than calling it unreadable", async () => {
 		const submit = stubSubmit(APPLIED);
 		const result = await zeroAmountTransferCheck.run(
-			writeCtx(sequencedServer([errorResponse("Error(Contract, #7)")])),
+			writeCtx(sequencedServer([contractRefusal(7)])),
 		);
 		expect(result.status).toBe("FAIL");
 		expect(result.actual).toContain("the premise cannot be established");
@@ -397,7 +397,7 @@ describe("selfTransferCheck", () => {
 	// The other direction, and the one seen in the wild: a contract that
 	// reads both balances into locals before writing either lets the credit
 	// overwrite the debit, so the holder *gains*. fixtures/vulnerable-token
-	// does exactly this, and the live log caught it as 1000 → 1001. Pinned
+	// does exactly this, turning a balance of 1000 into 1001. Pinned
 	// separately from the loss above because a check that only noticed
 	// subtraction would pass the token that mints.
 	it("FAILs when the credit overwrote the debit and the holder gained", async () => {
@@ -462,8 +462,7 @@ describe("selfTransferCheck", () => {
  * The native XLM SAC, in miniature. The holder signs, so it also pays the
  * network fee — in the very asset being measured — and an accepted no-op
  * leaves it a little lower. That is the network's charge, not the
- * contract moving value: 0.4.3 reported it as FAIL, which is how a run
- * against XLM came to "fail" two checks it had not failed.
+ * contract moving value, so it is no FAIL.
  *
  * The excuse is narrow on purpose, the same rule `transfer` follows: a fee
  * only ever lowers the payer, and only on the fee asset. A holder that
@@ -543,7 +542,7 @@ describe("no-op checks on the fee asset", () => {
 						okResponse(100n),
 						okResponse(7n),
 						okResponse(99n),
-						errorResponse("trustline entry is missing for account G..."),
+						contractRefusal(13, "trustline entry is missing for account G..."),
 					]),
 				),
 			),

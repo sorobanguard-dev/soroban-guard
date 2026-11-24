@@ -16,9 +16,10 @@
  * the exact-delta assertion reads it as the contract destroying the wrong
  * amount. Use addresses dedicated to the run.
  */
-import { addressArg, amountArg, submitWrite } from "../../core/invoke.ts";
+import { addressArg, amountArg } from "../../core/invoke.ts";
 import type { CheckResult } from "../../core/types.ts";
 import type { Sep41Context } from "../context.ts";
+import { submitCheckWrite } from "../write.ts";
 import { assertDeltas, writeEvidence } from "./delta.ts";
 import { type QuantityRead, readBalance } from "./quantity.ts";
 import {
@@ -102,16 +103,11 @@ export const burnCheck = {
 			);
 		}
 
-		const submitted = await submitWrite(
-			ctx.server,
-			{
-				contractId: ctx.contractId,
-				method: "burn",
-				args: [addressArg(owner.address), amountArg(BURN_AMOUNT)],
-				signer: owner.signer,
-			},
-			ctx.networkPassphrase,
-		);
+		const submitted = await submitCheckWrite(ctx, {
+			method: "burn",
+			args: [addressArg(owner.address), amountArg(BURN_AMOUNT)],
+			signer: owner.signer,
+		});
 
 		if (submitted.kind === "timeout") {
 			return {
@@ -148,7 +144,7 @@ export const burnCheck = {
 						: { ledger: submitted.ledger }),
 				});
 			}
-			const standing = classifyStanding(submitted.diagnostics);
+			const standing = classifyStanding(submitted);
 			if (standing !== null) {
 				return unverifiable(
 					"the burn was refused by the asset's own trustline policy, not by a defect in the contract",
@@ -164,7 +160,7 @@ export const burnCheck = {
 				// no exemption, so the clause is unmet however deliberate the
 				// refusal. The sentence says which it is, so a reader is not
 				// left hunting a defect that is a documented property.
-				actual: isNativeAssetRefusal(submitted.diagnostics)
+				actual: isNativeAssetRefusal(submitted)
 					? "the Stellar Asset Contract refuses burn on the native asset, which it gates deliberately — the clause is unmet, but this is a known property of XLM rather than a defect in this contract"
 					: "a burn of an affordable amount, signed by the holder, was refused",
 				evidence: { error: submitted.diagnostics },

@@ -19,18 +19,31 @@ export type QuantityRead =
 /**
  * `method` names the SEP-41 getter so diagnostics say which one misbehaved,
  * and `noun` names what it returns for the operator-facing message.
+ * `minLedger` is a ledger the read must reach beyond the run's own (see
+ * `callRead`).
  */
 async function readQuantity(
 	ctx: Sep41Context,
 	method: "balance" | "allowance",
 	noun: string,
 	addresses: readonly string[],
+	minLedger: number | undefined,
 ): Promise<QuantityRead> {
-	const { outcome, ledger, fromArchive } = await callRead(
+	const { outcome, ledger, fromArchive, stale } = await callRead(
 		ctx,
 		method,
 		addresses.map(addressArg),
+		minLedger,
 	);
+	// State from before the ledger the read had to reach is state that
+	// ledger's transactions may have changed: neither a baseline nor an
+	// after-state.
+	if (stale !== undefined) {
+		return {
+			kind: "no-answer",
+			detail: `the ${noun} could not be read at a current ledger: ${stale}`,
+		};
+	}
 	// A restored answer is last-known state, and the write will bring the
 	// entry current — so an archived baseline would be differenced against a
 	// fresh after-read and the gap blamed on the contract.
@@ -102,7 +115,7 @@ async function readQuantity(
 		return { kind: "value", amount: outcome.value, ledger };
 	}
 	if (outcome.kind === "trapped") {
-		return classifyStanding(outcome.diagnostics) === null
+		return classifyStanding(outcome) === null
 			? {
 					kind: "defect",
 					detail: `${method}() trapped`,
@@ -116,14 +129,22 @@ async function readQuantity(
 export function readBalance(
 	ctx: Sep41Context,
 	address: string,
+	minLedger?: number,
 ): Promise<QuantityRead> {
-	return readQuantity(ctx, "balance", "balance", [address]);
+	return readQuantity(ctx, "balance", "balance", [address], minLedger);
 }
 
 export function readAllowance(
 	ctx: Sep41Context,
 	owner: string,
 	spender: string,
+	minLedger?: number,
 ): Promise<QuantityRead> {
-	return readQuantity(ctx, "allowance", "allowance", [owner, spender]);
+	return readQuantity(
+		ctx,
+		"allowance",
+		"allowance",
+		[owner, spender],
+		minLedger,
+	);
 }

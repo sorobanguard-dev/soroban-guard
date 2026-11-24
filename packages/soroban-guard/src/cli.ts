@@ -5,7 +5,8 @@ import { type Account, Keypair, rpc, StrKey } from "@stellar/stellar-sdk";
 import { KeypairSigner } from "@stellar/stellar-sdk/contract";
 import { supportsColor } from "./core/ansi.ts";
 import { TESTNET_PASSPHRASE, writeRefusalReason } from "./core/consent.ts";
-import { fundAccount, loadSourceAccount } from "./core/funding.ts";
+import { fundAccountInLedger, loadSourceAccount } from "./core/funding.ts";
+import { RPC_TIMEOUT_MS } from "./core/invoke.ts";
 import { renderJsonReport } from "./core/json-report.ts";
 import { renderMarkdownReport } from "./core/md-report.ts";
 import { renderPretty } from "./core/pretty.ts";
@@ -15,6 +16,7 @@ import { inspectContract } from "./core/spec.ts";
 import type { CheckResult } from "./core/types.ts";
 import type { Party, Sep41Context } from "./sep41/context.ts";
 import { sep41Suite, withCoverageGaps } from "./sep41/index.ts";
+import { noteSettled } from "./sep41/write.ts";
 
 const USAGE =
 	"usage: soroban-guard <contract-id> [--rpc-url URL] [--passphrase P] [--format text|md|json] [--no-color] [--allow-http] [--allow-non-testnet-write] [--version]";
@@ -92,9 +94,8 @@ if (values.version) {
 	});
 	process.exit(0);
 }
-// Any positional alongside --help is a usage error, not a help request:
-// `--help extra-garbage` used to slip through because only 2+
-// positionals were rejected before the help branch.
+// Any positional alongside --help is a usage error, not a help request,
+// so `--help extra-garbage` exits 2 with usage like any stray argument.
 if (extraPositionals.length > 0 || (values.help && positionals.length > 0)) {
 	console.error(USAGE);
 	process.exit(2);
@@ -290,6 +291,9 @@ if (refusal !== null) {
 let server: rpc.Server;
 let source: Account;
 let specFunctions: readonly string[] | null;
+// The run's own funding is a transaction like its writes: reads after it
+// must describe state from the ledger it landed in, or after.
+const soundness: Sep41Context["soundness"] = {};
 try {
 	// The SDK validates the transport scheme eagerly and throws outside any
 	// RPC call, so construction lives inside the guarded block too.
@@ -300,6 +304,7 @@ try {
 	// post-funding load failure genuinely means unreachable.
 	server = new rpc.Server(rpcUrl, {
 		allowHttp: values["allow-http"] === true,
+		timeout: RPC_TIMEOUT_MS,
 	});
 	const inspected = await inspectContract(server, contractId);
 	if (inspected.kind === "missing") {
@@ -318,9 +323,15 @@ try {
 	// two that attempt a spend the contract should refuse. Without funding,
 	// a fresh SPENDER_SECRET makes all four throw and report SKIPPED, which
 	// reads as "unknown" instead of the assessment that was asked for.
-	await fundAccount(server, parties.owner.address);
+	noteSettled(
+		soundness,
+		await fundAccountInLedger(server, parties.owner.address),
+	);
 	if (parties.spender.signer !== undefined) {
-		await fundAccount(server, parties.spender.address);
+		noteSettled(
+			soundness,
+			await fundAccountInLedger(server, parties.spender.address),
+		);
 	}
 	source = await loadSourceAccount(server, parties.owner.address);
 } catch (error) {
@@ -342,7 +353,7 @@ const ctx: Sep41Context = {
 	establishedAllowances: new Set(),
 	// Fresh per run: what one contract's accounting did says nothing about
 	// the next one's.
-	soundness: {},
+	soundness,
 };
 
 const assessed = await runSuite(sep41Suite, ctx);

@@ -54,7 +54,8 @@ function accountLedgerKey(publicKey: string): xdr.LedgerKey {
 }
 
 /**
- * True when the account entry exists. Absence (no entry for the key) is
+ * The account entry, by the ledger it last changed in, when it exists;
+ * null when it does not. Absence (no entry for the key) is
  * data; anything else — transport failures, malformed keys — propagates
  * untouched. The "failed to find an entry" text is getLedgerEntry's own
  * absence signal (see its source), never produced for transport problems.
@@ -79,16 +80,24 @@ function accountLedgerKey(publicKey: string): xdr.LedgerKey {
 async function accountExists(
 	server: rpc.Server,
 	publicKey: string,
-): Promise<boolean> {
+): Promise<{ readonly changedIn: number | undefined } | null> {
 	try {
-		await server.getLedgerEntry(accountLedgerKey(publicKey));
-		return true;
+		const entry = await server.getLedgerEntry(accountLedgerKey(publicKey));
+		const changedIn: unknown = entry?.lastModifiedLedgerSeq;
+		return {
+			changedIn:
+				typeof changedIn === "number" &&
+				Number.isSafeInteger(changedIn) &&
+				changedIn > 0
+					? changedIn
+					: undefined,
+		};
 	} catch (error) {
 		if (
 			error instanceof Error &&
 			/failed to find an entry/i.test(error.message)
 		) {
-			return false;
+			return null;
 		}
 		throw error;
 	}
@@ -106,12 +115,29 @@ async function accountExists(
  *
  * Testnet only. Friendbot funds XLM for fees; token balances and trustlines
  * are the caller's business.
+ *
+ * `fundAccountInLedger` does the same and says which ledger the funding
+ * landed in.
  */
 export async function fundAccount(
 	server: rpc.Server,
 	publicKey: string,
 	options: FundOptions = {},
 ): Promise<void> {
+	await fundAccountInLedger(server, publicKey, options);
+}
+
+/**
+ * Fund `publicKey` as `fundAccount` does, and resolve to the ledger the
+ * funding landed in, by the account entry the poll found, so later reads
+ * can be held to state from it or after: undefined when the account already
+ * existed, or the RPC did not say.
+ */
+export async function fundAccountInLedger(
+	server: rpc.Server,
+	publicKey: string,
+	options: FundOptions = {},
+): Promise<number | undefined> {
 	const attempts = options.attempts ?? DEFAULT_ATTEMPTS;
 	const delayMs = options.delayMs ?? DEFAULT_DELAY_MS;
 	const sleep = options.sleep ?? realSleep;
@@ -125,16 +151,17 @@ export async function fundAccount(
 			`funding delay must be a finite non-negative number, got ${delayMs}`,
 		);
 	}
-	if (await accountExists(server, publicKey)) {
-		return;
+	if ((await accountExists(server, publicKey)) !== null) {
+		return undefined;
 	}
 	await server.fundAddress(publicKey);
 	for (let attempt = 0; attempt < attempts; attempt++) {
 		// Transport failures propagate immediately: mid-poll outages are
 		// harness errors, not evidence of absence. Only a confirmed miss
 		// waits out another ledger close.
-		if (await accountExists(server, publicKey)) {
-			return;
+		const found = await accountExists(server, publicKey);
+		if (found !== null) {
+			return found.changedIn;
 		}
 		if (attempt < attempts - 1) {
 			await sleep(delayMs);

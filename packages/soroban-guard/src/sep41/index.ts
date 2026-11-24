@@ -27,6 +27,7 @@ import { symbolCheck } from "./checks/symbol.ts";
 import { transferCheck } from "./checks/transfer.ts";
 import { transferFromCheck } from "./checks/transfer_from.ts";
 import type { Sep41Context } from "./context.ts";
+import { guardWriteCheck } from "./write.ts";
 
 export type { Sep41Context } from "./context.ts";
 
@@ -129,7 +130,7 @@ export const sep41Suite: Suite<Sep41Context> = {
 		// that matters most into UNVERIFIABLE. It costs nothing to move,
 		// since a correct contract refuses at simulation and touches no
 		// state at all.
-		unauthorizedTransferFromCheck,
+		guardWriteCheck(unauthorizedTransferFromCheck),
 		// Refusal checks before the moves they would otherwise be starved by:
 		// they need a readable balance, not a large one, and they spend
 		// nothing when the contract behaves — but a holder drained to zero by
@@ -156,21 +157,21 @@ export const sep41Suite: Suite<Sep41Context> = {
 		// `soundness` on Sep41Context). Putting it last costs nothing on a
 		// conformant token and is the difference between learning one defect
 		// and learning all of them.
-		zeroAmountTransferCheck,
-		selfTransferCheck,
-		negativeAmountTransferCheck,
-		overBalanceTransferCheck,
-		transferCheck,
-		approveCheck,
-		transferFromCheck,
-		burnCheck,
-		burnFromCheck,
+		guardWriteCheck(zeroAmountTransferCheck),
+		guardWriteCheck(selfTransferCheck),
+		guardWriteCheck(negativeAmountTransferCheck),
+		guardWriteCheck(overBalanceTransferCheck),
+		guardWriteCheck(transferCheck),
+		guardWriteCheck(approveCheck),
+		guardWriteCheck(transferFromCheck),
+		guardWriteCheck(burnCheck),
+		guardWriteCheck(burnFromCheck),
 		// Last: the only check that waits on wall-clock time. It approves a
 		// grant built to lapse, waits ~10s for the ledger to pass it, then
 		// spends — so running it earlier would delay every verdict behind it
 		// for a question none of them depend on. Its own allowance is
 		// deliberately unregistered, so it cannot disturb the _from checks
 		// above either.
-		expiredAllowanceCheck,
+		guardWriteCheck(expiredAllowanceCheck),
 	],
 };

@@ -15,7 +15,7 @@ import { transferCheck } from "../../../src/sep41/checks/transfer.ts";
 import type { Sep41Context } from "../../../src/sep41/context.ts";
 import {
 	collidingKeyMap,
-	errorResponse,
+	contractRefusal,
 	okResponse,
 	rejected,
 	restoreResponse,
@@ -428,9 +428,9 @@ describe("transferCheck", () => {
 		expect(submit).not.toHaveBeenCalled();
 	});
 
-	// The mirror case, and the one the first fix missed: a transfer TO the
-	// issuer burns, so the recipient is never credited and the check read it
-	// as value vanishing. Found by following the SAC docs, not by testing.
+	// The mirror case: a transfer TO the issuer burns, so the recipient is
+	// never credited. That is the SAC's documented behaviour, not value
+	// vanishing.
 	it("is UNVERIFIABLE when the recipient is the asset issuer", async () => {
 		const submit = stubSubmit(APPLIED);
 		const result = await transferCheck.run(
@@ -449,8 +449,8 @@ describe("transferCheck", () => {
 		const result = await transferCheck.run(
 			ctxWith(
 				sequencedServer([
-					errorResponse("trustline entry is missing"),
-					errorResponse("trustline entry is missing"),
+					contractRefusal(13, "trustline entry is missing"),
+					contractRefusal(13, "trustline entry is missing"),
 				]),
 			),
 		);
@@ -464,16 +464,11 @@ describe("transferCheck", () => {
 	it("FAILs when balance() traps for a reason that is not standing", async () => {
 		const submit = stubSubmit(APPLIED);
 		const result = await transferCheck.run(
-			ctxWith(
-				sequencedServer([
-					errorResponse("Error(Contract, #7)"),
-					errorResponse("Error(Contract, #7)"),
-				]),
-			),
+			ctxWith(sequencedServer([contractRefusal(7), contractRefusal(7)])),
 		);
 		expect(result.status).toBe("FAIL");
 		expect(result.actual).toContain("balance() trapped");
-		expect(result.evidence.error).toBe("Error(Contract, #7)");
+		expect(result.evidence.error).toContain("Error(Contract, #7)");
 		expect(submit).not.toHaveBeenCalled();
 	});
 
@@ -512,8 +507,8 @@ describe("transferCheck", () => {
 				sequencedServer([
 					okResponse(100n),
 					okResponse(5n),
-					errorResponse("trustline entry is missing"),
-					errorResponse("trustline entry is missing"),
+					contractRefusal(13, "trustline entry is missing"),
+					contractRefusal(13, "trustline entry is missing"),
 				]),
 			),
 		);
@@ -524,8 +519,8 @@ describe("transferCheck", () => {
 		expect(result.evidence.txHash).toBe("abc123");
 	});
 
-	// CodeRabbit finding: the same defective response must not be FAIL before
-	// the transfer and UNVERIFIABLE after it.
+	// The same defective response must not be FAIL before the transfer and
+	// UNVERIFIABLE after it.
 	it("FAILs an after-read defect, matching the before-read verdict", async () => {
 		stubSubmit(APPLIED);
 		const result = await transferCheck.run(
@@ -533,8 +528,8 @@ describe("transferCheck", () => {
 				sequencedServer([
 					okResponse(100n),
 					okResponse(5n),
-					errorResponse("Error(Contract, #7)"),
-					errorResponse("Error(Contract, #7)"),
+					contractRefusal(7),
+					contractRefusal(7),
 				]),
 			),
 		);
@@ -583,5 +578,32 @@ describe("transferCheck", () => {
 		});
 		expect(result.status).toBe("NOT_IMPLEMENTED");
 		expect(result.layer).toBe("interface");
+	});
+});
+
+describe("transferCheck, read behind its own transfer", () => {
+	afterEach(() => {
+		vi.restoreAllMocks();
+		vi.useRealTimers();
+	});
+
+	// A load-balanced RPC can answer the after-reads from a backend that has
+	// not reached the transfer's ledger. Those are the balances from before
+	// the transfer, and judged as after-state they would accuse a conformant
+	// token of moving nothing.
+	it("does not judge a transfer by balances read from before it", async () => {
+		vi.useFakeTimers();
+		stubSubmit(APPLIED);
+		const fresh = [okResponse(100n), okResponse(5n)];
+		const behind = { ...okResponse(100n), latestLedger: APPLIED.ledger - 1 };
+		const server = {
+			simulateTransaction: vi.fn(async () => fresh.shift() ?? behind),
+		} as unknown as rpc.Server;
+		const running = transferCheck.run(ctxWith(server));
+		await vi.advanceTimersByTimeAsync(60_000);
+		const result = await running;
+		expect(result.status).toBe("UNVERIFIABLE");
+		expect(result.actual).toContain("unreadable afterwards");
+		expect(result.evidence).toMatchObject({ txHash: APPLIED.txHash });
 	});
 });

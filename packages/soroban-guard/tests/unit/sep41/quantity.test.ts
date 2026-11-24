@@ -1,4 +1,4 @@
-import { nativeToScVal } from "@stellar/stellar-sdk";
+import { nativeToScVal, type rpc } from "@stellar/stellar-sdk";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
 	readAllowance,
@@ -9,6 +9,7 @@ import {
 	collidingKeyMap,
 	okResponse,
 	sequencedServer,
+	WRITE_LEDGER,
 	writeCtx,
 } from "../fixtures.ts";
 
@@ -24,6 +25,7 @@ describe("undecodable quantities", () => {
 			},
 			ledger: 1,
 			fromArchive: false,
+			stale: undefined,
 		});
 		const ctx = writeCtx(sequencedServer([]));
 		const read = await readBalance(ctx, ctx.parties.owner.address);
@@ -163,5 +165,57 @@ describe("readBalance on a negative quantity", () => {
 		// Nothing unsound observed, so nothing recorded: a later negative in
 		// a different run must still read as the first.
 		expect(ctx.soundness.firstNegative).toBeUndefined();
+	});
+});
+
+/**
+ * A read must describe state from the latest ledger a transaction of this
+ * run settled in, or after. A backend behind it answers with state from
+ * before that transaction, which neither a baseline nor an after-state can
+ * be taken from.
+ */
+describe("reads behind the run's latest transaction", () => {
+	afterEach(() => vi.useRealTimers());
+
+	it("gives no answer from a ledger before it, after waiting for the RPC", async () => {
+		vi.useFakeTimers();
+		const behind = { ...okResponse(5n), latestLedger: WRITE_LEDGER - 1 };
+		const server = {
+			simulateTransaction: vi.fn(async () => behind),
+		} as unknown as rpc.Server & {
+			simulateTransaction: ReturnType<typeof vi.fn>;
+		};
+		const ctx = writeCtx(server);
+		ctx.soundness.settledThrough = WRITE_LEDGER;
+		const reading = readBalance(ctx, ctx.parties.owner.address);
+		await vi.advanceTimersByTimeAsync(20_000);
+		await expect(reading).resolves.toEqual({
+			kind: "no-answer",
+			detail: `the balance could not be read at a current ledger: the RPC simulated this at ledger ${WRITE_LEDGER - 1}, before ledger ${WRITE_LEDGER}, whose state it had to reflect`,
+		});
+		expect(server.simulateTransaction.mock.calls.length).toBeGreaterThan(1);
+	});
+
+	it("reads the answer once the RPC catches up", async () => {
+		vi.useFakeTimers();
+		const ctx = writeCtx(
+			sequencedServer([
+				{ ...okResponse(5n), latestLedger: WRITE_LEDGER - 1 },
+				okResponse(7n),
+			]),
+		);
+		ctx.soundness.settledThrough = WRITE_LEDGER;
+		const reading = readBalance(ctx, ctx.parties.owner.address);
+		await vi.advanceTimersByTimeAsync(1_000);
+		await expect(reading).resolves.toMatchObject({ kind: "value", amount: 7n });
+	});
+
+	it("takes any ledger before the run has settled a transaction", async () => {
+		const ctx = writeCtx(
+			sequencedServer([{ ...okResponse(5n), latestLedger: 1 }]),
+		);
+		await expect(
+			readBalance(ctx, ctx.parties.owner.address),
+		).resolves.toMatchObject({ kind: "value", amount: 5n });
 	});
 });

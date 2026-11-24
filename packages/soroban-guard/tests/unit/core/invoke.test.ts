@@ -1,18 +1,19 @@
 import { Keypair, scValToNative, xdr } from "@stellar/stellar-sdk";
-import { SentTransaction } from "@stellar/stellar-sdk/contract";
 import { describe, expect, it } from "vitest";
 import {
 	addressArg,
 	amountArg,
 	interpretSimulation,
-	isContractOutcome,
 } from "../../../src/core/invoke.ts";
 import {
 	answerlessSuccess,
 	collidingKeyMap,
+	contractRefusal,
 	errorResponse,
+	hostError,
 	okResponse,
 	restoreResponse,
+	setTrap,
 } from "../fixtures.ts";
 
 describe("interpretSimulation", () => {
@@ -41,10 +42,36 @@ describe("interpretSimulation", () => {
 		}
 	});
 
-	it("maps a simulation error to trapped with diagnostics", () => {
-		expect(
-			interpretSimulation(errorResponse("host invocation trapped")),
-		).toEqual({ kind: "trapped", diagnostics: "host invocation trapped" });
+	// A read can FAIL on `trapped`, so it is only the contract's own refusal.
+	it("maps an error the contract raised to trapped, with diagnostics", () => {
+		expect(interpretSimulation(contractRefusal(1, "refused"))).toEqual({
+			kind: "trapped",
+			reason: "refused",
+			diagnostics: expect.stringContaining('data:["refused"]'),
+		});
+	});
+
+	it("maps the invoked method trapping to trapped, with diagnostics", () => {
+		expect(interpretSimulation(setTrap())).toEqual({
+			kind: "trapped",
+			reason: "VM call trapped: UnreachableCodeReached",
+			// The events travel with it: they are the evidence of the trap.
+			diagnostics: expect.stringContaining(
+				'data:["VM call trapped: UnreachableCodeReached", transfer]',
+			),
+		});
+	});
+
+	// Anything else observed nothing, so it must not become a read FAIL.
+	it.each([
+		[
+			"the host ran out of budget",
+			errorResponse(hostError("Error(Budget, ExceededLimit)")),
+		],
+		["a VM error before the method ran", setTrap({ events: "none" })],
+		["a failure with no host error", errorResponse("transaction is malformed")],
+	])("maps a failure where %s to inconclusive", (_case, sim) => {
+		expect(interpretSimulation(sim)).toMatchObject({ kind: "inconclusive" });
 	});
 
 	it("decodes a restore that carries an answer as ok", () => {
@@ -114,75 +141,5 @@ describe("amountArg", () => {
 	it("encodes zero and negative amounts", () => {
 		expect(scValToNative(amountArg(0n))).toBe(0n);
 		expect(scValToNative(amountArg(-1n))).toBe(-1n);
-	});
-});
-
-/**
- * This one predicate decides FAIL vs SKIPPED for every write the tool makes,
- * so both sides are pinned against the SDK's real wording rather than
- * paraphrases. The true cases come from AssembledTransaction's
- * SimulationFailed throw (`Transaction simulation failed: "<sim.error>"`),
- * one of them captured verbatim from a testnet run against a deauthorized
- * trustline. The false cases are the ways we fail to reach the ledger at
- * all — plus ExpiredState, which is a restore requirement rather than a
- * verdict and must not be read as one.
- */
-describe("isContractOutcome", () => {
-	it.each([
-		'Transaction simulation failed: "HostError: Error(Contract, #11)"',
-		'Transaction simulation failed: "HostError: Error(Contract, #13)\n\nEvent log (newest first):\n   0: [Diagnostic Event] topics:[error, Error(Contract, #11)], data:"balance is deauthorized""',
-		"HostError: Error(Contract, #7)",
-	])("treats a completed simulation as the contract's own outcome: %s", (m) => {
-		expect(isContractOutcome(m)).toBe(true);
-	});
-
-	it.each([
-		["network unreachable", "fetch failed"],
-		["connection refused", "Request failed: ECONNREFUSED"],
-		[
-			"restore required, not a verdict",
-			"You need to restore some contract state before you can invoke this method.",
-		],
-		[
-			"no signer configured",
-			"NoSigner: You must provide a signTransaction function",
-		],
-		["insufficient fee reserve", "tx_insufficient_balance"],
-		["stale sequence", "tx_bad_seq"],
-	])("propagates a harness failure (%s)", (_label, message) => {
-		expect(isContractOutcome(message)).toBe(false);
-	});
-
-	it("errs toward propagation on an unrecognised message", () => {
-		// Conservative by design: an unknown failure costs a SKIPPED (exit 2,
-		// "unknown") rather than a FAIL that accuses a conformant contract.
-		expect(isContractOutcome("something nobody anticipated")).toBe(false);
-	});
-});
-
-/**
- * Polling that ends without the transaction appearing throws
- * `TransactionStillPending` rather than returning a NOT_FOUND response, so
- * the timeout branch is reached by catching that class — not by inspecting a
- * result that never arrives. Pinned because the error's message is a JSON
- * dump of the send response: nothing should be parsing it, and without the
- * catch the union member is unreachable from real code.
- */
-describe("TransactionStillPending", () => {
-	it("is not mistaken for something the contract did", () => {
-		const message =
-			"Waited 30 seconds for transaction to complete, but it did not. " +
-			"Returning anyway. Check the transaction status manually. " +
-			'Sent transaction: { "status": "PENDING", "hash": "abc123" }';
-		// Were this to match, a transaction that may yet apply would be
-		// reported as the contract refusing.
-		expect(isContractOutcome(message)).toBe(false);
-	});
-
-	it("is exported by the SDK, so it can be caught by class", () => {
-		const error = new SentTransaction.Errors.TransactionStillPending("x");
-		expect(error).toBeInstanceOf(
-			SentTransaction.Errors.TransactionStillPending,
-		);
 	});
 });

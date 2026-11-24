@@ -232,8 +232,7 @@ describe("inspectContract", () => {
  * Code the network serves but the SDK's spec parser refuses. Losing the
  * spec only loses the NOT_IMPLEMENTED shortcut (every member is then
  * attempted), so both ways of reaching the code must fall back to native.
- * The external-ref path used to rethrow the parser's error as if it were a
- * transport failure, and the run never started.
+ * A parser error on either path is not a transport failure.
  */
 describe("inspectContract with code whose spec cannot be read", () => {
 	const HEADER = [0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00];

@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { negativeAmountTransferCheck } from "../../../src/sep41/checks/negative-amount.ts";
 import {
 	APPLIED,
-	errorResponse,
+	contractRefusal,
 	OWNER,
 	okResponse,
 	rejected,
@@ -177,11 +177,7 @@ describe("negativeAmountTransferCheck", () => {
 		stubSubmit(APPLIED);
 		const result = await negativeAmountTransferCheck.run(
 			writeCtx(
-				sequencedServer([
-					okResponse(100n),
-					okResponse(5n),
-					errorResponse("Error(Contract, #7)"),
-				]),
+				sequencedServer([okResponse(100n), okResponse(5n), contractRefusal(7)]),
 			),
 		);
 		expect(result.status).toBe("FAIL");
@@ -325,7 +321,7 @@ describe("negativeAmountTransferCheck", () => {
 	it("FAILs a defective balance rather than calling it unreadable", async () => {
 		const submit = stubSubmit(APPLIED);
 		const result = await negativeAmountTransferCheck.run(
-			writeCtx(sequencedServer([errorResponse("Error(Contract, #7)")])),
+			writeCtx(sequencedServer([contractRefusal(7)])),
 		);
 		expect(result.status).toBe("FAIL");
 		expect(result.actual).toContain("the premise cannot be established");
@@ -338,7 +334,7 @@ describe("negativeAmountTransferCheck", () => {
 			writeCtx(
 				sequencedServer([
 					okResponse(100n),
-					errorResponse("trustline entry is missing for account G..."),
+					contractRefusal(13, "trustline entry is missing for account G..."),
 				]),
 			),
 		);

@@ -1,16 +1,26 @@
-import { scValToNative, type xdr } from "@stellar/stellar-sdk";
+import {
+	Account,
+	type rpc,
+	scValToNative,
+	type Transaction,
+	xdr,
+} from "@stellar/stellar-sdk";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import * as invoke from "../../../src/core/invoke.ts";
 import { expiredAllowanceCheck } from "../../../src/sep41/checks/expired-allowance.ts";
 import type { Sep41Context } from "../../../src/sep41/context.ts";
 import {
 	APPLIED,
-	errorResponse,
+	answerlessSuccess,
+	contractRefusal,
 	okResponse,
 	rejected,
 	sequencedServer,
 	settledFailure,
 	stubSubmit,
+	testTrustlineMissing,
+	WRITE_LEDGER,
+	withFields,
 	writeCtx,
 } from "../fixtures.ts";
 
@@ -44,6 +54,7 @@ function ctxWithLedger(
 	const ctx = writeCtx(server);
 	let calls = 0;
 	const ledgerServer = Object.assign(ctx.server, {
+		getAccount: vi.fn(async (address: string) => new Account(address, "7")),
 		getLatestLedger: async () => {
 			calls += 1;
 			// First call sets the baseline; later ones are the wait polling.
@@ -73,27 +84,37 @@ const PREMISE = [
 	okResponse(1n),
 ];
 
+function spendRefused(diagnostics: string, simulationLedger = WRITE_LEDGER) {
+	return { ...rejected(diagnostics), simulationLedger };
+}
+
+/** An answer from `ledger`: what a read-only simulation saw there. */
+function at<T extends object>(response: T, ledger: number): T {
+	return withFields(response, { latestLedger: ledger });
+}
+
 describe("expiredAllowanceCheck", () => {
 	// The whole point: the grant lapsed, so refusing is correct.
 	it("PASSes when the contract refuses a spend on a lapsed grant", async () => {
 		vi.spyOn(invoke, "submitWrite")
 			// The setup approval lands, then the spend is refused.
 			.mockResolvedValueOnce(APPLIED)
-			.mockResolvedValueOnce(rejected("HostError: Error(Contract, #4)"));
+			.mockResolvedValueOnce(spendRefused("HostError: Error(Contract, #4)"));
 		const result = await expiredAllowanceCheck.run(
 			ctxWithLedger(sequencedServer(PREMISE)),
 		);
 		expect(result.status).toBe("PASS");
 		expect(result.actual).toContain("expired at ledger 106");
 		expect(result.actual).toContain("refused");
+		expect(result.evidence.ledger).toBe(WRITE_LEDGER);
 		// The evidence names the grant that was confirmed before the wait:
 		// without it, the post-wait allowance alone cannot tell an expired
 		// grant from one that never landed.
 		expect(result.evidence.before?.granted).toBe("1");
 	});
 
-	// Two ledgers was too tight on testnet: the approval could expire
-	// before it landed, or before it was read back. Six leaves room.
+	// Testnet can take three ledgers to land and read back the approval,
+	// and a grant much shorter can expire before then. Six leave room.
 	it("grants six ledgers past the ledger it read", async () => {
 		const submit = vi
 			.spyOn(invoke, "submitWrite")
@@ -193,7 +214,7 @@ describe("expiredAllowanceCheck", () => {
 					okResponse(5n), // recipient premise
 					okResponse(1n), // grant confirmed after the approval
 					okResponse(100n), // holder after the wait: fine
-					errorResponse("trustline entry is missing for account G..."), // recipient after the wait
+					contractRefusal(13, "trustline entry is missing for account G..."), // recipient after the wait
 				]),
 			),
 		);
@@ -217,7 +238,7 @@ describe("expiredAllowanceCheck", () => {
 	it("leaves its short-lived grant out of the run registry", async () => {
 		vi.spyOn(invoke, "submitWrite")
 			.mockResolvedValueOnce(APPLIED)
-			.mockResolvedValueOnce(rejected("HostError: Error(Contract, #4)"));
+			.mockResolvedValueOnce(spendRefused("HostError: Error(Contract, #4)"));
 		const ctx = ctxWithLedger(sequencedServer(PREMISE));
 		const result = await expiredAllowanceCheck.run(ctx);
 		expect(result.status).toBe("PASS");
@@ -311,7 +332,7 @@ describe("expiredAllowanceCheck", () => {
 	it("FAILs a defective balance rather than calling it unreadable", async () => {
 		const submit = stubSubmit(APPLIED);
 		const result = await expiredAllowanceCheck.run(
-			ctxWithLedger(sequencedServer([errorResponse("Error(Contract, #7)")])),
+			ctxWithLedger(sequencedServer([contractRefusal(7)])),
 		);
 		expect(result.status).toBe("FAIL");
 		expect(result.actual).toContain("the premise cannot be established");
@@ -341,5 +362,252 @@ describe("expiredAllowanceCheck", () => {
 		expect(result.status).toBe("UNVERIFIABLE");
 		expect(result.actual).toContain("declares no approve");
 		expect(submit).not.toHaveBeenCalled();
+	});
+});
+
+describe("expiredAllowanceCheck, simulated past the deadline", () => {
+	afterEach(() => vi.restoreAllMocks());
+
+	// The wait saw a ledger past the deadline, but an RPC backend still
+	// before it would simulate the spend against a live grant.
+	it("simulates the spend at a ledger past the one the grant expires at", async () => {
+		const submit = vi
+			.spyOn(invoke, "submitWrite")
+			.mockResolvedValueOnce({ ...APPLIED, ledger: 101 })
+			.mockResolvedValueOnce(rejected("HostError: Error(Contract, #4)"));
+		await expiredAllowanceCheck.run(ctxWithLedger(sequencedServer(PREMISE)));
+		expect(submit.mock.calls[1]?.[1]).toMatchObject({
+			method: "transfer_from",
+			minLedger: WRITE_LEDGER,
+		});
+	});
+
+	// Each read after the wait asks for a ledger past the deadline on its
+	// own: the holder's balance, the recipient's, and the allowance. The two
+	// premises before the approval need none; the grant read back after it
+	// needs the approval's ledger.
+	it("holds each read after the wait to a ledger past the deadline", async () => {
+		const reads = vi.spyOn(invoke, "simulateRead");
+		vi.spyOn(invoke, "submitWrite")
+			.mockResolvedValueOnce({ ...APPLIED, ledger: 101 })
+			.mockResolvedValueOnce(rejected("HostError: Error(Contract, #4)"));
+		await expiredAllowanceCheck.run(ctxWithLedger(sequencedServer(PREMISE)));
+		expect(reads.mock.calls.map(([, , call]) => call.minLedger)).toEqual([
+			undefined,
+			undefined,
+			101,
+			200,
+			WRITE_LEDGER,
+			WRITE_LEDGER,
+		]);
+	});
+
+	it("rejects a read past expiry but older than the ledger the wait observed", async () => {
+		vi.useFakeTimers();
+		try {
+			const submit = vi
+				.spyOn(invoke, "submitWrite")
+				.mockResolvedValueOnce({ ...APPLIED, ledger: 101 })
+				.mockResolvedValueOnce(rejected("HostError: Error(Contract, #4)"));
+			const premises = PREMISE.slice(0, 3);
+			const behindWait = { ...okResponse(100n), latestLedger: 107 };
+			const server = {
+				simulateTransaction: vi.fn(async () => premises.shift() ?? behindWait),
+			} as unknown as rpc.Server;
+			const running = expiredAllowanceCheck.run(ctxWithLedger(server));
+			await vi.advanceTimersByTimeAsync(60_000);
+			const result = await running;
+			expect(result.status).toBe("UNVERIFIABLE");
+			expect(result.actual).toContain("at ledger 107, before ledger 200");
+			expect(submit).toHaveBeenCalledOnce();
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+
+	// A refusal is the deadline's only if, in the ledger it happened in, the
+	// holder had the funds and the recipient its standing. Each round asks
+	// for the spend, simulated read-only, and both balances at once; the
+	// answers count when they share a ledger. The refusal here comes at
+	// ledger R, after the post-wait reads, so the check asks again.
+	const R = WRITE_LEDGER + 1;
+	const refused = (ledger: number) => at(contractRefusal(4), ledger);
+	const allowed = (ledger: number) =>
+		at(okResponse(xdr.ScVal.scvVoid()), ledger);
+	const balance = (amount: bigint, ledger: number) =>
+		at(okResponse(amount), ledger);
+	it.each([
+		[
+			"the refused spend and both balances share its ledger",
+			[[refused(R), balance(100n, R), balance(5n, R)]],
+			"PASS",
+			R,
+		],
+		// Drained for the refusal, funded again a ledger later: the later
+		// ledger is one consistent observation, and it shows a refusal with
+		// the funds there.
+		[
+			"they share a later ledger, where the holder is funded again",
+			[[refused(R + 1), balance(100n, R + 1), balance(5n, R + 1)]],
+			"PASS",
+			R + 1,
+		],
+		[
+			"the holder was drained in that ledger",
+			[[refused(R), balance(0n, R), balance(5n, R)]],
+			"UNVERIFIABLE",
+			R,
+		],
+		[
+			"they share a ledger only on the second round",
+			[
+				[refused(R), balance(100n, R + 1), balance(5n, R)],
+				[refused(R + 1), balance(100n, R + 1), balance(5n, R + 1)],
+			],
+			"PASS",
+			R + 1,
+		],
+		[
+			"they never share a ledger",
+			Array.from({ length: 4 }, () => [
+				refused(R),
+				balance(100n, R + 1),
+				balance(5n, R),
+			]),
+			"UNVERIFIABLE",
+			R,
+		],
+		[
+			"the spend is allowed in that ledger",
+			[[allowed(R), balance(100n, R), balance(5n, R)]],
+			"UNVERIFIABLE",
+			R,
+		],
+		[
+			"the asset's own policy refuses it in that ledger",
+			[[at(testTrustlineMissing(), R), balance(100n, R), balance(5n, R)]],
+			"UNVERIFIABLE",
+			R,
+		],
+		[
+			"the recipient cannot be read",
+			[[refused(R), balance(100n, R), at(answerlessSuccess(), R)]],
+			"UNVERIFIABLE",
+			R,
+		],
+	])("judges a refusal where %s", async (_case, rounds, status, ledger) => {
+		vi.spyOn(invoke, "submitWrite")
+			.mockResolvedValueOnce(APPLIED)
+			.mockResolvedValueOnce(spendRefused("HostError: Error(Contract, #4)", R));
+		const server = sequencedServer([
+			...PREMISE,
+			...(rounds as rpc.Api.SimulateTransactionResponse[][]).flat(),
+		]);
+		const result = await expiredAllowanceCheck.run(ctxWithLedger(server));
+		expect(result.status).toBe(status);
+		expect(result.evidence.ledger).toBe(ledger);
+	});
+
+	// The report says which it was: a spend that would now go through, or
+	// one that could not be simulated again, which says nothing either way.
+	it.each([
+		["allowed", allowed(R), "would be allowed at ledger"],
+		[
+			"not answered",
+			at(answerlessSuccess(), R),
+			"could not be simulated again at ledger",
+		],
+	])(
+		"says why a spend %s in that ledger is no proof",
+		async (_case, spend, said) => {
+			vi.spyOn(invoke, "submitWrite")
+				.mockResolvedValueOnce(APPLIED)
+				.mockResolvedValueOnce(
+					spendRefused("HostError: Error(Contract, #4)", R),
+				);
+			const server = sequencedServer([
+				...PREMISE,
+				spend,
+				balance(100n, R),
+				balance(5n, R),
+			]);
+			const result = await expiredAllowanceCheck.run(ctxWithLedger(server));
+			expect(result.status).toBe("UNVERIFIABLE");
+			expect(result.actual).toContain(said);
+		},
+	);
+
+	// Both balances come back from one round, so a defect in either is the
+	// contract's, whatever the other says: an unreadable one does not hide
+	// it.
+	it.each([
+		[
+			"the holder's is unreadable",
+			at(answerlessSuccess(), R),
+			at(okResponse(xdr.ScVal.scvU32(5)), R),
+		],
+		[
+			"the recipient's is unreadable",
+			at(okResponse(xdr.ScVal.scvU32(100)), R),
+			at(answerlessSuccess(), R),
+		],
+	])("FAILs a defective balance when %s", async (_case, holder, recipient) => {
+		vi.spyOn(invoke, "submitWrite")
+			.mockResolvedValueOnce(APPLIED)
+			.mockResolvedValueOnce(spendRefused("HostError: Error(Contract, #4)", R));
+		const server = sequencedServer([...PREMISE, refused(R), holder, recipient]);
+		const result = await expiredAllowanceCheck.run(ctxWithLedger(server));
+		expect(result.status).toBe("FAIL");
+	});
+
+	// The spend is simulated again as it was sent, with the spender's
+	// account as the source: authorization is recorded relative to it.
+	it("simulates the spend again with the spender as its source", async () => {
+		vi.spyOn(invoke, "submitWrite")
+			.mockResolvedValueOnce(APPLIED)
+			.mockResolvedValueOnce(spendRefused("HostError: Error(Contract, #4)", R));
+		const server = sequencedServer([
+			...PREMISE,
+			refused(R),
+			balance(100n, R),
+			balance(5n, R),
+		]);
+		const simulated = vi.spyOn(server, "simulateTransaction");
+		const ctx = ctxWithLedger(server);
+		await expect(expiredAllowanceCheck.run(ctx)).resolves.toMatchObject({
+			status: "PASS",
+		});
+		const spend = simulated.mock.calls[PREMISE.length]?.[0] as
+			| Transaction
+			| undefined;
+		expect(spend?.source).toBe(ctx.parties.spender.address);
+		expect(spend?.source).not.toBe(ctx.source.accountId());
+	});
+
+	// A balance that is not one in the refusal's ledger is the contract's
+	// defect, as it is before the spend.
+	it("FAILs a holder balance of the wrong type read after the refusal", async () => {
+		vi.spyOn(invoke, "submitWrite")
+			.mockResolvedValueOnce(APPLIED)
+			.mockResolvedValueOnce(spendRefused("HostError: Error(Contract, #4)", R));
+		const server = sequencedServer([
+			...PREMISE,
+			refused(R),
+			at(okResponse(xdr.ScVal.scvU32(100)), R),
+			balance(5n, R),
+		]);
+		const result = await expiredAllowanceCheck.run(ctxWithLedger(server));
+		expect(result.status).toBe("FAIL");
+	});
+
+	it("credits no refusal it cannot tie to a ledger", async () => {
+		vi.spyOn(invoke, "submitWrite")
+			.mockResolvedValueOnce(APPLIED)
+			.mockResolvedValueOnce(rejected("HostError: Error(Contract, #4)"));
+		const result = await expiredAllowanceCheck.run(
+			ctxWithLedger(sequencedServer(PREMISE)),
+		);
+		expect(result.status).toBe("UNVERIFIABLE");
+		expect(result.actual).toContain("could not be tied to a ledger");
 	});
 });

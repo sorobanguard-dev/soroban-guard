@@ -35,7 +35,7 @@ export const balanceCheck: Check<Sep41Context> = {
 			addressArg(owner.address),
 		]);
 		if (outcome.kind === "trapped") {
-			const reason = noStanding(outcome.diagnostics);
+			const reason = noStanding(outcome);
 			if (reason !== null) {
 				return noStandingTrap(
 					balanceMeta,

@@ -7,7 +7,7 @@ import {
 	type rpc,
 	xdr,
 } from "@stellar/stellar-sdk";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { exitCodeFor } from "../../../src/core/report.ts";
 import { runSuite } from "../../../src/core/runner.ts";
 import { allowanceCheck } from "../../../src/sep41/checks/allowance.ts";
@@ -19,10 +19,13 @@ import { symbolCheck } from "../../../src/sep41/checks/symbol.ts";
 import type { Sep41Context } from "../../../src/sep41/context.ts";
 import {
 	answerlessSuccess,
+	asAnswerTo,
 	collidingKeyMap,
-	errorResponse,
+	contractRefusal,
 	okResponse,
 	restoreResponse,
+	testTrustlineMissing,
+	WRITE_LEDGER,
 } from "../fixtures.ts";
 
 /**
@@ -33,7 +36,7 @@ import {
  */
 function stubServer(response: rpc.Api.SimulateTransactionResponse): rpc.Server {
 	return {
-		simulateTransaction: async () => response,
+		simulateTransaction: async (tx: unknown) => asAnswerTo(tx, response),
 	} as unknown as rpc.Server;
 }
 
@@ -96,7 +99,7 @@ describe("undecodable contract returns", () => {
 			expect(results[0]?.status).toBe("FAIL");
 			expect(results[0]?.actual).toContain("scvMap");
 			expect(results[0]?.evidence.error).toContain("more than one key");
-			expect(results[0]?.evidence.ledger).toBe(1);
+			expect(results[0]?.evidence.ledger).toBe(WRITE_LEDGER);
 			expect(exitCodeFor(results)).toBe(1);
 		},
 	);
@@ -139,10 +142,10 @@ describe("decimalsCheck", () => {
 
 	it("fails a trap with the diagnostic preserved", async () => {
 		const result = await decimalsCheck.run(
-			ctxWith(stubServer(errorResponse("host invocation trapped"))),
+			ctxWith(stubServer(contractRefusal(1, "host invocation trapped"))),
 		);
 		expect(result.status).toBe("FAIL");
-		expect(result.evidence.error).toBe("host invocation trapped");
+		expect(result.evidence.error).toContain("host invocation trapped");
 	});
 
 	it("still fails a trap on a generated probe", async () => {
@@ -150,10 +153,14 @@ describe("decimalsCheck", () => {
 		// allowance only. A decimals trap is genuine contract behavior even
 		// when the probe is throwaway, so it stays FAIL.
 		const result = await decimalsCheck.run(
-			ctxWith(stubServer(errorResponse("host invocation trapped")), null, true),
+			ctxWith(
+				stubServer(contractRefusal(1, "host invocation trapped")),
+				null,
+				true,
+			),
 		);
 		expect(result.status).toBe("FAIL");
-		expect(result.evidence.error).toBe("host invocation trapped");
+		expect(result.evidence.error).toContain("host invocation trapped");
 	});
 
 	it("reports UNVERIFIABLE when restoration is needed", async () => {
@@ -225,19 +232,50 @@ describe("balanceCheck", () => {
 	});
 
 	it("reports UNVERIFIABLE for a missing-trustline trap", async () => {
-		const server = stubServer(errorResponse("trustline entry is missing"));
+		const server = stubServer(
+			contractRefusal(13, "trustline entry is missing"),
+		);
 		const result = await balanceCheck.run(ctxWith(server, null, true));
 		expect(result.status).toBe("UNVERIFIABLE");
 		expect(result.actual).toContain("holds no trustline");
-		expect(result.evidence.error).toBe("trustline entry is missing");
+		expect(result.evidence.error).toContain("trustline entry is missing");
 	});
 
-	// Regression: this used to FAIL. Whether the address was generated or
-	// supplied says nothing about standing — a real account that simply
-	// does not hold the asset is the ordinary case, not a contract defect.
+	// The standing reason is the refusing event's own message. The same
+	// words in a log beside a refusal of the contract's own are not it.
+	it("FAILs a trap whose only mention of a trustline is a log", async () => {
+		const result = await balanceCheck.run(
+			ctxWith(
+				stubServer(
+					contractRefusal(4, undefined, {
+						log: "trustline entry is missing for account",
+					}),
+				),
+				null,
+				true,
+			),
+		);
+		expect(result.status).toBe("FAIL");
+		// The log is still in the evidence a person reads.
+		expect(result.evidence.error).toContain("trustline entry is missing");
+	});
+
+	// Today's RPC names only `Error(Contract, #13)` in its error, with the
+	// reason in the events alone. Read from the error alone, it is a FAIL.
+	it("reports UNVERIFIABLE for the missing trustline testnet actually returns", async () => {
+		const result = await balanceCheck.run(
+			ctxWith(stubServer(testTrustlineMissing()), null, true),
+		);
+		expect(result.status).toBe("UNVERIFIABLE");
+		expect(result.actual).toContain("holds no trustline");
+	});
+
+	// Whether the address was generated or supplied says nothing about
+	// standing: a real account that does not hold the asset is the
+	// ordinary case, not a contract defect.
 	it("is UNVERIFIABLE for a missing-trustline trap on a supplied owner", async () => {
 		const result = await balanceCheck.run(
-			ctxWith(stubServer(errorResponse("trustline entry is missing"))),
+			ctxWith(stubServer(contractRefusal(13, "trustline entry is missing"))),
 		);
 		expect(result.status).toBe("UNVERIFIABLE");
 		expect(result.actual).toContain("holds no trustline");
@@ -245,7 +283,7 @@ describe("balanceCheck", () => {
 
 	it("is UNVERIFIABLE when the trustline exists but is deauthorized", async () => {
 		const result = await balanceCheck.run(
-			ctxWith(stubServer(errorResponse("balance is deauthorized"))),
+			ctxWith(stubServer(contractRefusal(11, "balance is deauthorized"))),
 		);
 		expect(result.status).toBe("UNVERIFIABLE");
 		expect(result.actual).toContain("not authorized");
@@ -259,7 +297,9 @@ describe("balanceCheck", () => {
 	// token reporting a missing trustline is describing the same standing
 	// problem, so it is UNVERIFIABLE there too.
 	it("classifies by the diagnostic, not by whether a spec was declared", async () => {
-		const server = stubServer(errorResponse("trustline entry is missing"));
+		const server = stubServer(
+			contractRefusal(13, "trustline entry is missing"),
+		);
 		const result = await balanceCheck.run(
 			ctxWith(server, ["balance", "allowance"], true),
 		);
@@ -267,10 +307,10 @@ describe("balanceCheck", () => {
 	});
 
 	it("still FAILs a trap that is genuine contract behavior", async () => {
-		const server = stubServer(errorResponse("Error(Contract, #7)"));
+		const server = stubServer(contractRefusal(7));
 		const result = await balanceCheck.run(ctxWith(server, null, true));
 		expect(result.status).toBe("FAIL");
-		expect(result.evidence.error).toBe("Error(Contract, #7)");
+		expect(result.evidence.error).toContain("Error(Contract, #7)");
 	});
 });
 
@@ -285,10 +325,10 @@ describe("allowanceCheck", () => {
 
 	it("fails a trap with the diagnostic preserved", async () => {
 		const result = await allowanceCheck.run(
-			ctxWith(stubServer(errorResponse("no allowance entry"))),
+			ctxWith(stubServer(contractRefusal(9, "no allowance entry"))),
 		);
 		expect(result.status).toBe("FAIL");
-		expect(result.evidence.error).toBe("no allowance entry");
+		expect(result.evidence.error).toContain("no allowance entry");
 	});
 
 	it("reports UNVERIFIABLE for zero on a generated probe", async () => {
@@ -299,16 +339,20 @@ describe("allowanceCheck", () => {
 	});
 
 	it("reports UNVERIFIABLE for a missing-trustline trap", async () => {
-		const server = stubServer(errorResponse("trustline entry is missing"));
+		const server = stubServer(
+			contractRefusal(13, "trustline entry is missing"),
+		);
 		const result = await allowanceCheck.run(ctxWith(server, null, true));
 		expect(result.status).toBe("UNVERIFIABLE");
 		expect(result.actual).toContain("holds no trustline");
-		expect(result.evidence.error).toBe("trustline entry is missing");
+		expect(result.evidence.error).toContain("trustline entry is missing");
 	});
 
 	// Classification follows the symptom, not the contract kind.
 	it("classifies by the diagnostic, not by whether a spec was declared", async () => {
-		const server = stubServer(errorResponse("trustline entry is missing"));
+		const server = stubServer(
+			contractRefusal(13, "trustline entry is missing"),
+		);
 		const result = await allowanceCheck.run(
 			ctxWith(server, ["allowance"], true),
 		);
@@ -316,10 +360,10 @@ describe("allowanceCheck", () => {
 	});
 
 	it("still FAILs a trap that is genuine contract behavior", async () => {
-		const server = stubServer(errorResponse("Error(Contract, #7)"));
+		const server = stubServer(contractRefusal(7));
 		const result = await allowanceCheck.run(ctxWith(server, null, true));
 		expect(result.status).toBe("FAIL");
-		expect(result.evidence.error).toBe("Error(Contract, #7)");
+		expect(result.evidence.error).toContain("Error(Contract, #7)");
 	});
 });
 
@@ -431,5 +475,29 @@ describe("symbolCheck", () => {
 			ctxWith(stubServer(okResponse(xdr.ScVal.scvU32(7)))),
 		);
 		expect(result.status).toBe("FAIL");
+	});
+});
+
+describe("reads behind the run's latest transaction", () => {
+	// A read from a backend before it is no answer about the contract, and
+	// the report says why.
+	it("reports a read from before it UNVERIFIABLE, saying why", async () => {
+		vi.useFakeTimers();
+		try {
+			const ctx = ctxWith(
+				stubServer({ ...okResponse(5n), latestLedger: WRITE_LEDGER - 1 }),
+			);
+			ctx.soundness.settledThrough = WRITE_LEDGER;
+			const running = runSuite(
+				{ standard: "SEP-41", checks: [balanceCheck] },
+				ctx,
+			);
+			await vi.advanceTimersByTimeAsync(20_000);
+			const [result] = await running;
+			expect(result?.status).toBe("UNVERIFIABLE");
+			expect(result?.evidence.error).toContain(`before ledger ${WRITE_LEDGER}`);
+		} finally {
+			vi.useRealTimers();
+		}
 	});
 });

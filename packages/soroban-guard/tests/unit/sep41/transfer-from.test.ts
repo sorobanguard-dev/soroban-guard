@@ -4,7 +4,7 @@ import { grantKey } from "../../../src/sep41/checks/approve.ts";
 import { transferFromCheck } from "../../../src/sep41/checks/transfer_from.ts";
 import {
 	APPLIED,
-	errorResponse,
+	contractRefusal,
 	OWNER,
 	okResponse,
 	rejected,
@@ -91,7 +91,7 @@ describe("transferFromCheck", () => {
 					okResponse(100n),
 					okResponse(5n),
 					okResponse(0n),
-					errorResponse("Error(Contract, #7)"),
+					contractRefusal(7),
 				]),
 			),
 		);
@@ -255,12 +255,7 @@ describe("transferFromCheck", () => {
 
 	it("FAILs a defective balance rather than calling it unreadable", async () => {
 		const result = await transferFromCheck.run(
-			writeCtx(
-				sequencedServer([
-					errorResponse("Error(Contract, #7)"),
-					errorResponse("Error(Contract, #7)"),
-				]),
-			),
+			writeCtx(sequencedServer([contractRefusal(7), contractRefusal(7)])),
 		);
 		expect(result.status).toBe("FAIL");
 		expect(result.actual).toContain("balance() trapped");

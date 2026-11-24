@@ -36,7 +36,7 @@ export const allowanceCheck: Check<Sep41Context> = {
 			addressArg(spender.address),
 		]);
 		if (outcome.kind === "trapped") {
-			const reason = noStanding(outcome.diagnostics);
+			const reason = noStanding(outcome);
 			if (reason !== null) {
 				return noStandingTrap(
 					allowanceMeta,

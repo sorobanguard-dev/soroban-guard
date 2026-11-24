@@ -56,8 +56,8 @@ const _layerOrderIsExhaustive: [_MissingLayer] extends [never] ? true : never =
 /**
  * One glyph per status, shared by every terminal renderer.
  *
- * The plain and pretty reports had identical copies of this. Two copies is
- * how a ✗ becomes a ✘ in one report and not the other, and an operator who
+ * The plain and pretty reports both read this one. Two copies is how a ✗
+ * becomes a ✘ in one report and not the other, and an operator who
  * has learned to scan for one glyph then misses the failure in the other.
  */
 export const STATUS_GLYPH: Record<CheckStatus, string> = {
