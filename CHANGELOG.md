@@ -15,6 +15,14 @@ log, not here.
 
 ## [Unreleased]
 
+### Added
+
+- `fundAccountInLedger`, which funds an account as `fundAccount` does and
+  resolves to the ledger the funding landed in. It resolves to `undefined`
+  when the account already existed, so nothing was funded, and when the
+  RPC's account entry does not say which ledger last changed it.
+  `fundAccount` is unchanged.
+
 ### Fixed
 
 - Read checks and write balance/allowance premises report FAIL when a
@@ -29,6 +37,93 @@ log, not here.
   run when its contract spec cannot be read (no spec section, or since SDK
   17.3 more than one). It falls back to attempting every member, as
   contracts with directly deployed code already did.
+- RPC requests time out after 30 seconds, in the CLI and the browser, and
+  writes now use that same bounded connection. An RPC that never answered
+  used to hold a run indefinitely.
+- A failed call counts as the contract refusing only when the
+  simulation's diagnostic events show the contract's own code refused it
+  (see the check reference). Other failures, such as the host running out
+  of budget, used to count as refusals, so a negative check could PASS on
+  them and a read or a valid transfer could FAIL. They now give no
+  verdict: a read reports UNVERIFIABLE and a write SKIPPED. An RPC or
+  wallet error that happened to mention `HostError` is now a harness
+  failure rather than a refusal. An RPC that simulates without diagnostic
+  events can attribute no refusal, and the evidence then says so.
+- A Stellar Asset Contract's own policy, such as a missing trustline, is
+  recognised again on the current testnet RPC, which gives the reason only
+  in a simulation's diagnostic events. A read of a holder with no
+  trustline reported FAIL instead of UNVERIFIABLE, and a negative check
+  could credit the asset's trustline policy as the contract refusing.
+  Simulation diagnostics now appear in error evidence.
+- Once sent, a transaction can apply, fail on the ledger, expire unapplied,
+  or remain unresolved. An unresolved write reports UNVERIFIABLE with its
+  hash. Contract writes have a 180-second validity window. A send
+  answered with `DUPLICATE` used to count as refused, and a lost send
+  request reported SKIPPED without its hash. Both are now followed as
+  sent, since either may still apply. A receipt settles either; a
+  `DUPLICATE` send cannot be proven expired, since nothing says from
+  which ledger the network may have had it. A write is sent only as
+  it was prepared: a signer that returns a different transaction is
+  refused before anything is sent. A send the network declines names the
+  result code it came back with, such as `ERROR: txInsufficientFee`.
+- To establish expiry, the checker reads consecutive ledgers through the
+  first close after the deadline. It verifies each result set against the
+  ledger header's `txSetResultHash`. Missing or inconsistent ledger
+  data leaves the outcome unresolved, and so does a result the checker
+  cannot identify, which could be the transaction; a receipt in a later
+  ledger still settles it. Each status check resumes from the first
+  unverified ledger.
+- Every read, and every write's simulation, must describe state from the
+  latest ledger a transaction of the run settled in: its funding, a
+  trustline, or a write, including one that failed on the ledger. Servers
+  behind one RPC URL can answer from a backend that has not reached that
+  ledger, with state from before the transaction, so a transfer read back
+  there could look as if it moved nothing and FAIL. Such an answer is
+  asked again for up to 20 seconds, as is a request that fails in that
+  time, then refused: a read reports
+  UNVERIFIABLE with the reason, and a write SKIPPED without sending. A
+  write also takes its signer's sequence number from that ledger, and
+  every new simulation of it starts from the envelope as first built. In
+  the browser, a cleanup whose balance read comes back stale stays
+  retryable with the same key. `sep41-transfer_from-expired` reads and
+  simulates from the ledger its wait observed, and credits a refusal only
+  when one ledger shows it refused with the holder funded and the
+  recipient's balance readable.
+- After a token operation's outcome is unknown, the suite skips its later
+  writes, setup approvals included. The check it belonged to reports
+  UNVERIFIABLE with its hash, and each later write check reports SKIPPED
+  with the same hash instead of measuring balances that transaction can
+  still change. Previously the next check went ahead and could PASS on
+  uncertain state. In the browser, sending the temporary account's units
+  back waits too: "Check transaction status" resumes it once that
+  transaction has settled or provably expired unapplied. On native XLM,
+  where nothing is sent back, nothing waits. While a transaction the
+  cleanup waits on may still land, the faucet and Run wait for it as well,
+  since its units could arrive under a claim's balance read or a run's
+  checks. Once a status check finds the RPC reporting a ledger closed
+  after its deadline, it can no longer land, and both go on. Every token
+  read and write the page makes is held to the latest ledger by which a
+  transaction it knows of may have moved the wallet's balance: one closed
+  after such a deadline, or one a run, a status check or a faucet claim
+  reported a transaction settling in. The page keeps the key and sends
+  nothing again until it knows whether the transaction applied; a new run
+  discards the key, and the page warns first that it will. A faucet claim
+  sent but not confirmed holds Run the same way, and the faucet button
+  becomes "Check the faucet claim" until it finds the claim landed, failed
+  or unable to land. The browser skips the send-back when it cannot
+  identify the underlying asset.
+- In the browser, a temporary second account that could not be set up is
+  no longer used by the checks. They get a fresh address nothing has
+  touched, since a funding or trustline transaction that may still land
+  could change that account between the checks that name it. A trustline
+  that cannot be confirmed is reported as possibly applying, with its
+  hash, where it used to be reported as not landed.
+
+### Removed
+
+- `isContractOutcome`, exported since 0.4.5, which judged whether an error
+  was a contract refusal from its message text. Message text is not
+  evidence of a refusal, so nothing replaces it.
 
 ## [0.4.5] — 2026-10-19
 

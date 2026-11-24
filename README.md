@@ -298,20 +298,27 @@ and leave the counterparty field empty: the page creates a temporary
 second account for the run — funded by Friendbot, given a trustline if the
 token is a classic Stellar asset — and signs as it for the four checks that
 must be signed by the spender (`transfer_from`, `burn_from`, and the
-unauthorized and expired `transfer_from` cases). Its key lives only in
-that browser tab. When the run ends the page tries to send whatever it
-received back to your wallet, and says whether that worked — a token that
-refuses the transfer, as the vulnerable fixture can, leaves those few
-units in the temporary account, and when retrying could help the page
-offers to try again while it still holds that account's key. On native
-XLM nothing is sent back: what the temporary account holds is
-Friendbot's funding, not yours. If the temporary account cannot be set
-up at all — Friendbot down, a trustline refused — the run goes ahead
-without it, and the four spender-signed checks say what they need.
+unauthorized and expired `transfer_from` cases). When the run ends, the
+page tries to return any units the temporary account received and reports
+the result. For a native XLM run, cleanup leaves the temporary account's
+remaining XLM in place.
+If setup fails, the run uses a fresh address without a signer, and the
+affected checks report what they need.
+
+If the return transfer is unresolved, use **Check transaction status**. The
+page checks the original transaction for up to a minute. If it confirms that
+the transfer failed or expired without landing, the same click can start a
+new transfer, which the page follows separately. Keep the tab open while
+cleanup is pending because it holds the temporary account's only key.
+Starting a new run discards that key, and the page warns before it does.
+Run and the faucet wait until a status check shows the transfer can no
+longer land. The page's contract writes are valid for three minutes, so
+this is usually the first check.
 
 **No token of your own?** The page offers a demo token: a copy of
 `fixtures/vulnerable-token` with a faucet that gives any wallet the five
-units a full run spends, so anyone can see the fixture's two defects.
+units a full run spends, so anyone can see the fixture's two defects. If a
+claim is not confirmed, use **Check the faucet claim** before running.
 
 ```sh
 pnpm --filter @soroban-guard/web dev   # run the site locally
