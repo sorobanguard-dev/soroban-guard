@@ -1,5 +1,27 @@
 import { describe, expect, it } from "vitest";
-import { owedSendBack } from "../src/scripts/owed.ts";
+import { mayStillLand, owedSendBack } from "../src/scripts/owed.ts";
+
+// Only a cleanup that waits on a transaction holds Run and the faucet, and
+// only until a ledger closes past that transaction's deadline: up to then
+// it can still land and move the wallet's balance.
+describe("mayStillLand", () => {
+	it.each([
+		["nothing is owed", undefined, false],
+		["a send-back failed and can be retried", { failed: "x" }, false],
+		[
+			"a send-back may still apply",
+			{ failed: "x", pendingTxHash: "ab".repeat(32) },
+			true,
+		],
+		[
+			"a ledger closed after its deadline, whether or not it applied",
+			{ failed: "x", pendingTxHash: "ab".repeat(32), closedAfterDeadline: 200 },
+			false,
+		],
+	])("is right when %s", (_case, owed, expected) => {
+		expect(mayStillLand(owed)).toBe(expected);
+	});
+});
 
 /**
  * Run with units still owed back: the temporary account's key lives only
@@ -59,5 +81,32 @@ describe("owedSendBack", () => {
 		owed.owe(Symbol("retry"));
 		owed.owe(undefined);
 		expect(owed.onRun()).toBe("run");
+	});
+
+	// The retry reaches the temporary key, so a send-back the page no longer
+	// owes is not held, not even as the one last warned about: offered again
+	// afterwards, it is warned about afresh.
+	it.each([
+		[
+			"the run abandons it",
+			(owed: ReturnType<typeof owedSendBack<symbol>>) => owed.abandon(),
+		],
+		[
+			"another one replaces it",
+			(owed: ReturnType<typeof owedSendBack<symbol>>) =>
+				owed.owe(Symbol("other")),
+		],
+		[
+			"nothing is owed any more",
+			(owed: ReturnType<typeof owedSendBack<symbol>>) => owed.owe(undefined),
+		],
+	])("lets go of a send-back once %s", (_case, release) => {
+		const owed = owedSendBack<symbol>();
+		const retry = Symbol("retry");
+		owed.owe(retry);
+		expect(owed.onRun()).toBe("warn");
+		release(owed);
+		owed.owe(retry);
+		expect(owed.onRun()).toBe("warn");
 	});
 });

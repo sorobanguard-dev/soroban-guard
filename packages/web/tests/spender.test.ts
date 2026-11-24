@@ -6,10 +6,12 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
  * exercises, because on a healthy testnet setup always succeeds.
  */
 vi.mock("soroban-guard/src/core/funding.ts", () => ({
-	fundAccount: vi.fn(),
+	fundAccountInLedger: vi.fn(),
 }));
 
-const { fundAccount } = await import("soroban-guard/src/core/funding.ts");
+const { fundAccountInLedger } = await import(
+	"soroban-guard/src/core/funding.ts"
+);
 const { spenderParty } = await import("../src/scripts/run.ts");
 
 const PASS = "Test SDF Network ; September 2015";
@@ -25,15 +27,16 @@ const server = {} as rpc.Server;
 const source = {} as Awaited<ReturnType<rpc.Server["getAccount"]>>;
 
 beforeEach(() => {
-	vi.mocked(fundAccount).mockReset();
+	vi.mocked(fundAccountInLedger).mockReset();
 });
 
 describe("spenderParty", () => {
-	// The review's one robustness finding: setup trouble used to abort the
-	// whole run, reads included. It must cost the four spender-signed checks
-	// and nothing more.
+	// Setup trouble costs the checks that need a usable second account, not
+	// the whole run: the reads and the holder's other writes still run.
 	it("falls back to a keyless address when setup fails", async () => {
-		vi.mocked(fundAccount).mockRejectedValue(new Error("friendbot is down"));
+		vi.mocked(fundAccountInLedger).mockRejectedValue(
+			new Error("friendbot is down"),
+		);
 		const stages: string[] = [];
 		const result = await spenderParty(REQUEST, server, source, false, (s) =>
 			stages.push(s),
@@ -45,6 +48,10 @@ describe("spenderParty", () => {
 		// reports what the four checks would need.
 		expect(result.party.isThrowaway).toBe(true);
 		expect(result.party.address).toMatch(/^G[A-Z2-7]{55}$/);
+		// Not the account setup tried to fund: that funding may still land.
+		expect(result.party.address).not.toBe(
+			vi.mocked(fundAccountInLedger).mock.calls[0]?.[1],
+		);
 	});
 
 	it("uses a named counterparty as given, creating nothing", async () => {
@@ -55,7 +62,7 @@ describe("spenderParty", () => {
 			source,
 			false,
 		);
-		expect(fundAccount).not.toHaveBeenCalled();
+		expect(fundAccountInLedger).not.toHaveBeenCalled();
 		expect(result.party).toEqual({ address: named, isThrowaway: false });
 		expect(result.temporary).toBeUndefined();
 		expect(result.setupFailed).toBeUndefined();
@@ -64,7 +71,7 @@ describe("spenderParty", () => {
 	// A custom token is never asked for a trustline: with setup otherwise
 	// succeeding, no asset is read and the temporary account signs.
 	it("creates a signing account for a custom token without a trustline", async () => {
-		vi.mocked(fundAccount).mockResolvedValue(undefined);
+		vi.mocked(fundAccountInLedger).mockResolvedValue(undefined);
 		const stages: string[] = [];
 		const result = await spenderParty(REQUEST, server, source, false, (s) =>
 			stages.push(s),

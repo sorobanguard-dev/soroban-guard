@@ -114,7 +114,7 @@ describe("CHANGELOG.md", () => {
 	});
 
 	// Latent until the next entry lands in [Unreleased], which is exactly
-	// when it would have shipped wrong.
+	// when it would ship wrong.
 	it("never calls an unreleased section the latest release", () => {
 		const releases = parseChangelog(
 			"# Changelog\n\n## [Unreleased]\n\n### Fixed\n\n- A thing.\n\n## [0.4.1] — 2026-09-29\n\n### Fixed\n\n- Another.\n",

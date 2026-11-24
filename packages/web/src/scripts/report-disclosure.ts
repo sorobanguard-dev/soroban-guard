@@ -3,10 +3,10 @@
  * adds later wire their own buttons, because they do not exist yet when
  * this runs.
  *
- * Scoped by class to the recorded report's container rather than by id.
- * An earlier version gave the container `id="rows"`, which the live checker
- * also used: `getElementById` returned this one, so starting a run would
- * have wiped the recorded report and appended list items into a div.
+ * Scoped by class to the recorded report's container rather than by id:
+ * the live checker owns `id="rows"`, and a second element with it could be
+ * the one `getElementById` returns, so starting a run would wipe the
+ * recorded report and append list items into a div.
  */
 for (const row of document.querySelectorAll<HTMLElement>(
 	".recorded-report .row",
