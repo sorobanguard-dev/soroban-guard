@@ -531,12 +531,15 @@ export type SendOutcome =
 	/**
 	 * Unsettled when we stopped looking; `window` lets a later lookup settle
 	 * it, going on from `progress` when the history was being read.
+	 * `closedAfterDeadline` is the latest ledger a lookup saw close after the
+	 * deadline (see `Lookup`), when one did.
 	 */
 	| {
 			readonly kind: "unknown";
 			readonly txHash: string;
 			readonly window: InclusionWindow;
 			readonly progress?: HistoryProgress;
+			readonly closedAfterDeadline?: number;
 	  };
 
 /**
@@ -697,10 +700,15 @@ export async function sendAndFollow(
 			Math.min(untilExpiry + EXPIRY_MARGIN_MS, MAX_FOLLOW_MS));
 	// Each lookup goes on with the history where the one before stopped.
 	let progress: HistoryProgress | undefined;
-	const unknown = (): SendOutcome =>
-		progress === undefined
-			? { kind: "unknown", txHash, window }
-			: { kind: "unknown", txHash, window, progress };
+	// Only a lookup that saw the deadline pass sets it; progress alone does not.
+	let closedAfterDeadline: number | undefined;
+	const unknown = (): SendOutcome => ({
+		kind: "unknown",
+		txHash,
+		window,
+		...(progress === undefined ? {} : { progress }),
+		...(closedAfterDeadline === undefined ? {} : { closedAfterDeadline }),
+	});
 	for (;;) {
 		// Each lookup gets only the time left, so a slow last one cannot
 		// carry the follow past its limit.
@@ -719,6 +727,7 @@ export async function sendAndFollow(
 			return { ...seen, txHash };
 		}
 		progress = seen.progress;
+		closedAfterDeadline = seen.closedAfterDeadline ?? closedAfterDeadline;
 		const rest = giveUpAt - performance.now();
 		if (rest <= 0) {
 			return unknown();
@@ -847,6 +856,8 @@ export type SubmitResult =
 			readonly window?: InclusionWindow;
 			/** How far the history was read, for that lookup to go on from. */
 			readonly progress?: HistoryProgress;
+			/** A ledger seen to close after the deadline (see `Lookup`). */
+			readonly closedAfterDeadline?: number;
 	  };
 
 /**
@@ -1205,6 +1216,9 @@ export async function submitWrite(
 				...(outcome.progress === undefined
 					? {}
 					: { progress: outcome.progress }),
+				...(outcome.closedAfterDeadline === undefined
+					? {}
+					: { closedAfterDeadline: outcome.closedAfterDeadline }),
 			};
 	}
 }

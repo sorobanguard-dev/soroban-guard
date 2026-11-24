@@ -434,7 +434,7 @@ async function showSettlement(
 		const held =
 			kind === "claim" ? await tokenBalance(heldTo(target), holder) : undefined;
 		setWalletState(
-			`${name} ${tx.txHash} can no longer land: ledger ${past} closed after its deadline. Whether it landed before then is not known${held === undefined ? "" : `; this wallet holds ${held} VULN`}.`,
+			`${name} ${tx.txHash} can no longer land: ledger ${past} closed after its deadline. Whether it landed before then is not known${held === undefined ? "" : `; ${holder} holds ${held} VULN`}.`,
 			"ready",
 		);
 		return;
@@ -464,7 +464,9 @@ async function showSettlement(
 	}
 	const held = await tokenBalance(heldTo(target), holder);
 	setWalletState(
-		`Received ${DEMO_FAUCET_UNITS} units of VULN${held === undefined ? "" : ` — this wallet now holds ${held}`}. Run the checks.`,
+		// The wallet the claim was for, which a delayed check may no longer be
+		// the one connected.
+		`Received ${DEMO_FAUCET_UNITS} units of VULN${held === undefined ? "" : ` — ${holder} now holds ${held}`}. Run the checks.`,
 		"ready",
 	);
 }

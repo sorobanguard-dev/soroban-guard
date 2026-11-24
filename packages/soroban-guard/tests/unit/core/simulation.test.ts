@@ -246,6 +246,17 @@ describe("classifySimulationFailure, other failures", () => {
 			),
 		).toEqual({ byContract: false, error: undefined });
 	});
+
+	// The same, with the invoked contract's own #4 events in the trace: the
+	// primary error still decides, whatever later evidence matches.
+	it("ignores a later contract error even when its events are present", () => {
+		expect(
+			classifySimulationFailure({
+				...contractRefusal(4, "refused"),
+				error: hostError("Error(Budget, ExceededLimit)", "Error(Contract, #4)"),
+			}),
+		).toEqual({ byContract: false, error: "Error(Budget, ExceededLimit)" });
+	});
 });
 
 /**

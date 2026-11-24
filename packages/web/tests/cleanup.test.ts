@@ -555,7 +555,10 @@ describe("runChecks cleanup", () => {
 		async (_case, oldestLedger) => {
 			vi.useFakeTimers();
 			try {
-				vi.mocked(inspectContract).mockResolvedValue({ kind: "native" });
+				vi.mocked(inspectContract).mockResolvedValue({
+					kind: "native",
+					stellarAsset: true,
+				});
 				vi.mocked(interpretSimulation).mockReturnValue({
 					kind: "ok",
 					type: "scvString",
@@ -601,7 +604,10 @@ describe("runChecks cleanup", () => {
 	);
 
 	it("fails setup as known when the trustline provably never landed", async () => {
-		vi.mocked(inspectContract).mockResolvedValue({ kind: "native" });
+		vi.mocked(inspectContract).mockResolvedValue({
+			kind: "native",
+			stellarAsset: true,
+		});
 		vi.mocked(interpretSimulation).mockReturnValue({
 			kind: "ok",
 			type: "scvString",
@@ -694,7 +700,10 @@ describe("runChecks cleanup", () => {
 
 	it("holds the suite to the ledger its trustline landed in", async () => {
 		vi.mocked(fundAccountInLedger).mockResolvedValue(300);
-		vi.mocked(inspectContract).mockResolvedValue({ kind: "native" });
+		vi.mocked(inspectContract).mockResolvedValue({
+			kind: "native",
+			stellarAsset: true,
+		});
 		vi.mocked(interpretSimulation).mockReturnValue({
 			kind: "ok",
 			type: "scvString",
@@ -718,7 +727,10 @@ describe("runChecks cleanup", () => {
 	// hash.
 	it("waits on nothing for native XLM, which is not sent back", async () => {
 		const hash = "ab".repeat(32);
-		vi.mocked(inspectContract).mockResolvedValue({ kind: "native" });
+		vi.mocked(inspectContract).mockResolvedValue({
+			kind: "native",
+			stellarAsset: true,
+		});
 		vi.mocked(interpretSimulation).mockReturnValue({
 			kind: "ok",
 			type: "scvString",
@@ -777,7 +789,10 @@ describe("runChecks cleanup", () => {
 			/the asset contract's name\(\) could not be read/,
 		],
 	])("%s", async (_case, answeredAt, setupFailed) => {
-		vi.mocked(inspectContract).mockResolvedValue({ kind: "native" });
+		vi.mocked(inspectContract).mockResolvedValue({
+			kind: "native",
+			stellarAsset: true,
+		});
 		vi.mocked(simulateRead).mockResolvedValue({
 			latestLedger: answeredAt,
 		} as never);
@@ -803,7 +818,10 @@ describe("runChecks cleanup", () => {
 	// not sent back; an issued asset's gave the account no trustline, so it
 	// holds none. The balance read here would find units all the same.
 	it("sends nothing back from an asset contract whose asset could not be read", async () => {
-		vi.mocked(inspectContract).mockResolvedValue({ kind: "native" });
+		vi.mocked(inspectContract).mockResolvedValue({
+			kind: "native",
+			stellarAsset: true,
+		});
 		vi.mocked(interpretSimulation)
 			.mockReturnValueOnce({ kind: "trapped", diagnostics: "name failed" })
 			.mockReturnValue(balance(5n));
@@ -814,8 +832,50 @@ describe("runChecks cleanup", () => {
 		expect(submitWrite).not.toHaveBeenCalled();
 	});
 
+	// WASM whose spec cannot be read is no asset contract: nothing about it
+	// is read as an asset, and what the account received goes back.
+	it("sends back from a WASM token whose spec cannot be read", async () => {
+		vi.mocked(inspectContract).mockResolvedValue({
+			kind: "native",
+			stellarAsset: false,
+		});
+		vi.mocked(interpretSimulation).mockReturnValue(balance(5n));
+		vi.mocked(submitWrite).mockResolvedValue(applied);
+
+		const { cleanup } = await runChecks(REQUEST);
+		expect(cleanup).toEqual({ returned: 5n, settledThrough: 1 });
+		expect(
+			vi.mocked(simulateRead).mock.calls.map(([, , call]) => call.method),
+		).not.toContain("name");
+	});
+
+	// A follow that saw the deadline pass hands that ledger on, so the first
+	// cleanup already lets the page go on, while it still waits for proof
+	// before sending again.
+	it("starts a cleanup the page can go on from when the follow saw the deadline pass", async () => {
+		const hash = "ef".repeat(32);
+		vi.mocked(interpretSimulation).mockReturnValue(balance(5n));
+		vi.mocked(submitWrite).mockResolvedValue({
+			kind: "timeout",
+			txHash: hash,
+			window: WINDOW,
+			closedAfterDeadline: 200,
+		});
+
+		const { cleanup } = await runChecks(REQUEST);
+		expect(cleanup).toMatchObject({
+			pendingTxHash: hash,
+			closedAfterDeadline: 200,
+		});
+		expect(mayStillLand(cleanup)).toBe(false);
+		expect(submitWrite).toHaveBeenCalledOnce();
+	});
+
 	it("says why the network declined the trustline", async () => {
-		vi.mocked(inspectContract).mockResolvedValue({ kind: "native" });
+		vi.mocked(inspectContract).mockResolvedValue({
+			kind: "native",
+			stellarAsset: true,
+		});
 		vi.mocked(interpretSimulation).mockReturnValue({
 			kind: "ok",
 			type: "scvString",
@@ -959,6 +1019,22 @@ describe("the page's reads, held to a ledger", () => {
 			"was sent and not confirmed",
 			{ kind: "timeout", txHash: "cd".repeat(32), window: WINDOW },
 			{ unresolved: { txHash: "cd".repeat(32), window: WINDOW } },
+		],
+		[
+			"was not confirmed, past a ledger closed after its deadline",
+			{
+				kind: "timeout",
+				txHash: "cd".repeat(32),
+				window: WINDOW,
+				closedAfterDeadline: 200,
+			},
+			{
+				unresolved: {
+					txHash: "cd".repeat(32),
+					window: WINDOW,
+					closedAfterDeadline: 200,
+				},
+			},
 		],
 		[
 			"failed on the ledger",

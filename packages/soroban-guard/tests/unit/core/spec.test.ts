@@ -62,7 +62,7 @@ describe("inspectContract", () => {
 				server,
 				"CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM",
 			),
-		).resolves.toEqual({ kind: "native" });
+		).resolves.toEqual({ kind: "native", stellarAsset: true });
 	});
 
 	it("reports missing on message-shaped not-found errors too", async () => {
@@ -121,7 +121,7 @@ describe("inspectContract", () => {
 				server,
 				"CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM",
 			),
-		).resolves.toEqual({ kind: "native" });
+		).resolves.toEqual({ kind: "native", stellarAsset: false });
 		expect(fetched).toBe(true);
 	});
 
@@ -156,7 +156,7 @@ describe("inspectContract", () => {
 				server,
 				"CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM",
 			),
-		).resolves.toEqual({ kind: "native" });
+		).resolves.toEqual({ kind: "native", stellarAsset: false });
 		expect(server.getExternalRefWasmHash).not.toHaveBeenCalled();
 	});
 
@@ -179,7 +179,7 @@ describe("inspectContract", () => {
 				server,
 				"CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM",
 			),
-		).resolves.toEqual({ kind: "native" });
+		).resolves.toEqual({ kind: "native", stellarAsset: false });
 		expect(server.getExternalRefWasmHash).toHaveBeenCalledTimes(1);
 	});
 
@@ -200,7 +200,7 @@ describe("inspectContract", () => {
 				server,
 				"CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM",
 			),
-		).resolves.toEqual({ kind: "native" });
+		).resolves.toEqual({ kind: "native", stellarAsset: false });
 	});
 
 	it("propagates transport failures from external-ref resolution", async () => {
@@ -264,6 +264,7 @@ describe("inspectContract with code whose spec cannot be read", () => {
 			} as unknown as rpc.Server;
 			await expect(inspectContract(server, ID)).resolves.toEqual({
 				kind: "native",
+				stellarAsset: false,
 			});
 		},
 	);
@@ -283,6 +284,7 @@ describe("inspectContract with code whose spec cannot be read", () => {
 			} as unknown as rpc.Server;
 			await expect(inspectContract(server, ID)).resolves.toEqual({
 				kind: "native",
+				stellarAsset: false,
 			});
 		},
 	);

@@ -6,11 +6,18 @@ import { contract, type rpc } from "@stellar/stellar-sdk";
  * (no instance entry at all) both mean the spec is undeterminable and
  * callers must proceed as today. `missing` additionally tells the CLI the
  * address names nothing, which is a usage error rather than a verdict.
+ *
+ * `stellarAsset` says whether a `native` contract is a Stellar Asset
+ * Contract, from its executable: code whose spec cannot be read is
+ * `native` too, and is not one.
  */
 export type ContractCode =
 	| { readonly kind: "missing" }
-	| { readonly kind: "native" }
+	| { readonly kind: "native"; readonly stellarAsset: boolean }
 	| { readonly kind: "wasm"; readonly functions: readonly string[] };
+
+/** No usable spec, from code that is not a Stellar Asset Contract. */
+const UNREADABLE: ContractCode = { kind: "native", stellarAsset: false };
 
 /**
  * Pure: function names declared by a parsed spec. Tested with hand-built
@@ -90,7 +97,7 @@ export async function inspectContract(
 		const ref = (executable as unknown as { externalRef?: unknown })
 			.externalRef;
 		if (ref === undefined || ref === null) {
-			return { kind: "native" };
+			return UNREADABLE;
 		}
 		let wasm: Uint8Array;
 		try {
@@ -105,7 +112,7 @@ export async function inspectContract(
 			// that degrade to native. Only transport failures propagate —
 			// a wrong turn here loses an optimization, never a verdict.
 			if (isNotFound(error) || getErrorCode(error) === 400) {
-				return { kind: "native" };
+				return UNREADABLE;
 			}
 			throw error;
 		}
@@ -121,7 +128,10 @@ export async function inspectContract(
 		// here (see server.getContractWasmByContractId); a future SDK that
 		// reshapes these arms fails typecheck at upgrade time, which is the
 		// guard — no runtime string can protect against unknown shapes.
-		return { kind: "native" };
+		return {
+			kind: "native",
+			stellarAsset: executable?.type === "contractExecutableStellarAsset",
+		};
 	}
 	let wasm: Uint8Array;
 	try {
@@ -129,13 +139,13 @@ export async function inspectContract(
 		const hash = (executable as unknown as { value?: { value?: Uint8Array } })
 			.value?.value;
 		if (!(hash instanceof Uint8Array)) {
-			return { kind: "native" };
+			return UNREADABLE;
 		}
 		wasm = await server.getContractWasmByHash(hash);
 	} catch (error) {
 		if (isNotFound(error)) {
 			// Archived/expired code: undeterminable, proceed as today.
-			return { kind: "native" };
+			return UNREADABLE;
 		}
 		throw error;
 	}
@@ -154,6 +164,6 @@ function specOrNative(wasm: Uint8Array): ContractCode {
 			functions: specFunctionNames(contract.Spec.fromWasm(wasm)),
 		};
 	} catch {
-		return { kind: "native" };
+		return UNREADABLE;
 	}
 }

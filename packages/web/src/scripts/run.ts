@@ -31,6 +31,7 @@ import {
 	type Lookup,
 	lookupOutcome,
 	RPC_TIMEOUT_MS,
+	type SubmitResult,
 	sendAndFollow,
 	simulateRead,
 	staleAnswer,
@@ -358,16 +359,7 @@ async function returnUnits(
 			noteSettled(soundness, sent.ledger);
 		}
 		if (sent.kind === "timeout") {
-			return {
-				pending: {
-					transfer: {
-						txHash: sent.txHash,
-						...(sent.window === undefined ? {} : { window: sent.window }),
-						...(sent.progress === undefined ? {} : { progress: sent.progress }),
-					},
-					amount: held,
-				},
-			};
+			return { pending: { transfer: unresolvedFrom(sent), amount: held } };
 		}
 		return sent.kind === "applied"
 			? { returned: held }
@@ -551,15 +543,7 @@ export async function claimDemoTokens(
 		case "applied":
 			return { landed: outcome.ledger };
 		case "timeout":
-			return {
-				unresolved: {
-					txHash: outcome.txHash,
-					...(outcome.window === undefined ? {} : { window: outcome.window }),
-					...(outcome.progress === undefined
-						? {}
-						: { progress: outcome.progress }),
-				},
-			};
+			return { unresolved: unresolvedFrom(outcome) };
 		case "rejected":
 			return outcome.ledger === undefined
 				? { failed: outcome.diagnostics }
@@ -606,6 +590,23 @@ export async function transactionStatus(
 		case "pending":
 			return { unresolved: goneOn(open, seen) };
 	}
+}
+
+/**
+ * A write the follow gave up on, as the page waits on it: everything the
+ * follow learned, the ledger it saw close past the deadline included.
+ */
+function unresolvedFrom(
+	sent: Extract<SubmitResult, { kind: "timeout" }>,
+): Unresolved {
+	return {
+		txHash: sent.txHash,
+		...(sent.window === undefined ? {} : { window: sent.window }),
+		...(sent.progress === undefined ? {} : { progress: sent.progress }),
+		...(sent.closedAfterDeadline === undefined
+			? {}
+			: { closedAfterDeadline: sent.closedAfterDeadline }),
+	};
 }
 
 /**
@@ -805,7 +806,9 @@ export async function runChecks(
 		request,
 		server,
 		source,
-		inspected.kind === "native",
+		// An asset contract by its executable, not by a spec that could not
+		// be read: WASM whose spec cannot be read is a custom token.
+		inspected.kind === "native" && inspected.stellarAsset,
 		onStage,
 	);
 	// The setup's own transactions count like the suite's writes: every read
