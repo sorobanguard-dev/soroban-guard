@@ -29,10 +29,11 @@ or watch the walkthrough — the CLI and the web checker, start to finish:
 
 > **Scope, stated plainly:** this checks **SEP-41 token contracts only**,
 > and is built for **testnet**. Reads on other networks need a funded account
-> supplied through `OWNER_ADDRESS` or `OWNER_SECRET`. Writes require a test
-> network unless you pass `--allow-non-testnet-write`. A full run burns units
-> where it lands. The name is broader than the tool — it does not audit
-> arbitrary Soroban contracts, review WASM, or check any other SEP.
+> supplied through `OWNER_ADDRESS` or `OWNER_SECRET`. The CLI allows writes
+> by default on Testnet, Futurenet, and the standard standalone network.
+> Writes on other networks require `--allow-non-testnet-write`. A full run
+> burns units where it lands. The name is broader than the tool — it does
+> not audit arbitrary Soroban contracts, review WASM, or check any other SEP.
 > A contract that passes here has been shown to honour the SEP-41
 > interface as this suite exercises it; that is not a security audit, and
 > no run of this tool should be read as one.
@@ -270,13 +271,11 @@ caveat on time rather than tokens: `transfer_from-expired` has to wait for
 its grant to lapse before it can spend, which adds about half a minute
 to a keyed run.
 
-> **Testnet only, by default.** This signs and submits real transactions, so
-> a run that holds a secret exits before touching the network unless two
-> things agree: the passphrase must be a test network (or
-> `--allow-non-testnet-write` given), and the RPC endpoint must not
-> contradict it. Funding is check-first, so neither can be caught by the
-> faucet — an already-funded mainnet account would otherwise sail straight
-> through. Reads run anywhere and sign nothing.
+> **Network requirements for signed runs.** The CLI accepts Testnet,
+> Futurenet, and the standard standalone passphrase by default. Other
+> passphrases require `--allow-non-testnet-write`. A known RPC endpoint must
+> match the passphrase even when the flag is set. The CLI checks both
+> conditions before funding or signing.
 >
 > Recipient control is enforced per check rather than at that gate: a
 > generated `SPENDER_ADDRESS` has a key this process discards at exit, so
