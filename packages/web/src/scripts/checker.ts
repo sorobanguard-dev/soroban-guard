@@ -366,13 +366,13 @@ async function xlmShortfall(address: string): Promise<string | undefined> {
 	if (spendable === null) {
 		// Friendbot creates an account; it cannot top one up, which is why
 		// this case gets its own advice rather than the shortfall below.
-		return "This wallet's account does not exist on testnet yet, so it cannot pay for anything. Fund it with Friendbot — Freighter offers “Fund with Friendbot” for a new testnet account — then run again.";
+		return "This wallet's account does not exist on Testnet yet. Fund it with Friendbot, then run again.";
 	}
 	if (spendable >= MIN_SPENDABLE) {
 		return undefined;
 	}
 	const shown = (Number(spendable < 0n ? 0n : spendable) / 1e7).toFixed(2);
-	return `This wallet has ${shown} XLM available above the reserve every Stellar account must keep, and each write costs a fee. A full run needs about half an XLM. Send it some testnet XLM from another account — or create a new account in Freighter and fund it with Friendbot — then run again.`;
+	return `This wallet has ${shown} XLM available above the account reserve. A full run needs about half an XLM for fees. Add Testnet XLM from another account, or fund a new account in Varial with Friendbot, then run again.`;
 }
 
 /**
@@ -494,7 +494,7 @@ useDemoButton.addEventListener("click", () => {
 	contractInput.dispatchEvent(new Event("input"));
 	setWalletState(
 		connected === null
-			? "Demo token selected. Connect Freighter, then get test VULN from the faucet."
+			? "Demo token selected. Connect Varial, then get test VULN from the faucet."
 			: `Demo token selected. Get ${DEMO_FAUCET_UNITS} test VULN if this wallet has none, then run.`,
 	);
 });
@@ -517,7 +517,7 @@ faucetButton.addEventListener("click", async () => {
 	refreshRunButton();
 	faucetButton.disabled = true;
 	faucetButton.textContent =
-		open === undefined ? "Approve in Freighter…" : "Checking the claim…";
+		open === undefined ? "Approve in Varial…" : "Checking the claim…";
 	try {
 		if (open !== undefined) {
 			await showSettlement(
@@ -567,7 +567,7 @@ async function requireTestnet(): Promise<void> {
 	const network = await walletNetwork();
 	if (network.networkPassphrase !== TESTNET_PASSPHRASE) {
 		throw new WalletError(
-			`Freighter is on ${network.network}. Switch it to Testnet — this tool submits to testnet, and signing for another network would fail in ways that look like contract faults.`,
+			`Varial is on ${network.network}. Switch it to Testnet before signing.`,
 		);
 	}
 }
@@ -576,10 +576,8 @@ connectButton.addEventListener("click", async () => {
 	connectButton.disabled = true;
 	try {
 		// `connect()` checks the extension is installed before anything else,
-		// then opens Freighter's approval dialog.
-		setWalletState(
-			"Waiting for Freighter — approve the request in the extension.",
-		);
+		// then opens Varial's approval dialog.
+		setWalletState("Approve the connection request in Varial.");
 		const address = await connect();
 		await requireTestnet();
 		connected = address;
@@ -793,7 +791,7 @@ form.addEventListener("submit", async (event) => {
 	}
 	if (connected === null) {
 		setWalletState(
-			"Connect Freighter first — the eleven checks that write need a wallet to sign them.",
+			"Connect Varial to sign the transactions this run needs.",
 			"error",
 		);
 		return;
@@ -947,7 +945,7 @@ form.addEventListener("submit", async (event) => {
 				...(spenderRaw === "" ? {} : { spenderAddress: spenderRaw }),
 			},
 			(completed, total) => {
-				progress.textContent = `${completed} of ${total} checks complete — approve each prompt in Freighter.`;
+				progress.textContent = `${completed} of ${total} checks complete. Approve each wallet prompt in Varial.`;
 			},
 			(stage) => {
 				progress.textContent = stage;
@@ -1068,7 +1066,7 @@ copyJson.addEventListener("click", () => {
 void isFreighterInstalled().then((present) => {
 	if (!present) {
 		setWalletState(
-			"Freighter not detected. Install it from freighter.app and reload — the eleven checks that write need a wallet to sign them.",
+			"Varial (formerly Freighter) was not detected. Install the extension from varialwallet.com and reload this page.",
 		);
 	}
 });

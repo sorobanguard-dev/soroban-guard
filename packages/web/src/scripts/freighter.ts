@@ -57,7 +57,7 @@ function errorText(error: unknown): string | undefined {
 			return message;
 		}
 	}
-	return "Freighter reported an error without a message.";
+	return "Varial reported an error without a message.";
 }
 
 function throwIfError(result: { error?: unknown }): void {
@@ -112,7 +112,7 @@ export async function isFreighterInstalled(): Promise<boolean> {
 export async function connect(): Promise<string> {
 	if (!(await isFreighterInstalled())) {
 		throw new WalletError(
-			"Freighter is not installed in this browser. Install it from freighter.app, then reload this page.",
+			"Varial (formerly Freighter) is not installed in this browser. Install the extension from varialwallet.com and reload this page.",
 		);
 	}
 	const granted = await requestAccess();
@@ -122,7 +122,7 @@ export async function connect(): Promise<string> {
 	// error instead of the wallet problem it actually is.
 	if (typeof granted.address !== "string" || granted.address === "") {
 		throw new WalletError(
-			"Freighter returned no address. It may be locked, or the request was dismissed — open the extension, unlock it, and try again.",
+			"Varial returned no address. Open the extension, unlock it, and approve the connection request.",
 		);
 	}
 	return granted.address;
@@ -143,7 +143,7 @@ export async function walletNetwork(): Promise<{
 		result.networkPassphrase === ""
 	) {
 		throw new WalletError(
-			"Freighter did not report which network it is on. Reopen the extension and try again.",
+			"Varial did not report which network it is on. Reopen the extension and try again.",
 		);
 	}
 	return {
@@ -168,7 +168,7 @@ function requireSigner(signerAddress: unknown, address: string): void {
 		signerAddress !== address
 	) {
 		throw new WalletError(
-			`Freighter signed as ${signerAddress}, but this run connected as ${address}. Switch Freighter back to that account, or reconnect, and run again.`,
+			`Varial signed as ${signerAddress}. Switch back to the connected account ${address}, or reconnect and run again.`,
 		);
 	}
 }
@@ -200,7 +200,7 @@ export function freighterSigner(address: string, networkPassphrase: string) {
 			// confusion this tool exists to prevent.
 			if (typeof signed.signedTxXdr !== "string" || signed.signedTxXdr === "") {
 				throw new WalletError(
-					"Freighter returned no signed transaction. The request may have been dismissed — approve the prompt to continue.",
+					"Varial returned no signed transaction. Approve the wallet prompt to continue.",
 				);
 			}
 			requireSigner(signed.signerAddress, address);
@@ -219,7 +219,7 @@ export function freighterSigner(address: string, networkPassphrase: string) {
 				signed.signedAuthEntry === ""
 			) {
 				throw new WalletError(
-					"Freighter returned no signed authorization entry. The request may have been dismissed — approve the prompt to continue.",
+					"Varial returned no signed authorization entry. Approve the wallet prompt to continue.",
 				);
 			}
 			requireSigner(signed.signerAddress, address);

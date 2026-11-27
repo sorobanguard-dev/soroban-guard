@@ -59,7 +59,7 @@ function preload(): void {
 if (section !== null) {
 	/*
 	 * A click that lands before the module has loaded is held, then
-	 * replayed. Without this, the first press of "Connect Freighter" on a
+	 * replayed. Without this, the first press of "Connect Varial" on a
 	 * cold cache went nowhere: `pointerdown` started the download, the
 	 * click fired a moment later, and no handler existed yet to receive it
 	 * — the button looked broken. Capture phase, so it runs before the

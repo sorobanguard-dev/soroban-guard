@@ -53,7 +53,7 @@ The layers, and what each one proves:
 | CLI | `packages/soroban-guard/tests/unit/cli.test.ts` | the real `cli.ts` process: arguments, keys, consent, exit codes |
 | Live | `packages/soroban-guard/tests/live/`, `*.live.test.ts` | the checks against real testnet contracts |
 | Package | CI `package` job | the packed tarball installs and its CLI runs from `node_modules` |
-| Browser | by hand, with Freighter | the web checker's DOM wiring |
+| Browser | by hand, with Varial (formerly Freighter) | the web checker's DOM wiring |
 
 CI also runs a changed-test gate: a pull request from outside the
 maintainers that changes `packages/*/src/` or `packages/*/scripts/`
@@ -86,7 +86,7 @@ Small, one concern, green CI. Fill in the template: describe the
 behavior change, link the issue it addresses (`Fixes #123`) when there is
 one, and say how it was verified (offline tests + live output where
 applicable). Changes to the web checker also say what was clicked
-through in a browser with Freighter: the page script's DOM wiring has
+through in a browser with Varial: the page script's DOM wiring has
 no unit tests, only the DOM-free modules it calls do.
 
 CodeRabbit reviews every pull request. Address each of its comments

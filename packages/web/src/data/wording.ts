@@ -69,9 +69,9 @@ const NETWORK_REFUSALS: Readonly<Record<string, string>> = {
 	tx_insufficient_balance:
 		"the wallet has too little XLM to pay the fee — send it some testnet XLM and run again",
 	tx_insufficient_fee:
-		"the fee was lowered below what the network requires — approve the fee Freighter proposes",
+		"the fee was lowered below what the network requires — approve the fee Varial proposes",
 	tx_bad_auth:
-		"the signature did not match the account — check Freighter is on Testnet and signing with the connected account",
+		"the signature did not match the account — check Varial is on Testnet and signing with the connected account",
 	tx_bad_seq:
 		"the wallet sent another transaction at the same time — run again",
 	tx_too_late:

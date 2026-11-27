@@ -46,7 +46,7 @@ or watch the walkthrough — the CLI and the web checker, start to finish:
 | Writes (`transfer`, `approve`, `transfer_from`, `burn`, `burn_from`) | Done, asserted against on-chain deltas |
 | Negative checks (unauthorized, over-balance, negative, expired, zero, self) | Done, proven to fire against `fixtures/vulnerable-token` |
 | Reports (terminal, `md`, `json`) | Done — `--format` |
-| Browser UI | Done — same suite, signed by Freighter; a demo token with a faucet runs all sixteen from one wallet |
+| Browser UI | Same suite, signed by Varial (formerly Freighter). A demo token with a faucet lets you run all sixteen from one wallet. |
 | Events layer | Not started — balances asserted, topics unread |
 | Custom WASM results | SET and OZPT passed all sixteen checks. `fixtures/vulnerable-token` had two failures. See [real-token results](https://sorobanguard.com/results). |
 
@@ -307,9 +307,10 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for the development workflow.
 this browser checker, from pasting a contract to reading the report.
 
 [**sorobanguard.com/run**](https://sorobanguard.com/run) runs
-the same sixteen checks in the browser, signed by your own Freighter wallet
-on testnet. Paste a contract ID, approve each write as Freighter proposes
-it, and get the verdicts the CLI would print — with live progress,
+the same sixteen checks in the browser with your
+[Varial wallet](https://varialwallet.com/) (formerly Freighter) on Testnet.
+Paste a contract ID and approve the transaction prompts in Varial to get
+the same verdicts as the CLI, with live progress,
 an explorer link for every transaction, and CHECKS.md / JSON export.
 
 There is no backend. The page talks to Soroban RPC directly and signing

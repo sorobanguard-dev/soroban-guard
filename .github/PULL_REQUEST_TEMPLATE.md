@@ -22,9 +22,8 @@
 ## How it was verified
 
 <!-- Required: the commands run and what they showed. For a change to the
-     web checker, also what was clicked through in a browser with
-     Freighter — the page script's DOM wiring has no unit tests, only
-     the DOM-free modules it calls do. -->
+     web checker, describe what you tried in a browser with Varial
+     (formerly Freighter). -->
 
 ## Checklist
 

@@ -16,7 +16,7 @@ import Base from "../layouts/Base.astro";
 
 const title = "Run SEP-41 checks in your browser — soroban-guard";
 const description =
-	"Paste a deployed SEP-41 contract and run the same sixteen conformance checks the CLI runs, signed by your own Freighter wallet. Testnet only.";
+	"Run sixteen SEP-41 conformance checks against a deployed token with Varial (formerly Freighter) on Stellar Testnet.";
 
 /**
  * What a run actually involves, in order.
@@ -28,7 +28,7 @@ const description =
 const STEPS = [
 	{
 		title: "Connect a wallet",
-		body: "Freighter signs every write. Your secret key stays in the extension — this page never sees it, and never asks for it.",
+		body: "Connect Varial (formerly Freighter) to sign transactions. Your secret key stays in the extension.",
 	},
 	{
 		title: "Name a contract",
@@ -36,7 +36,7 @@ const STEPS = [
 	},
 	{
 		title: "Approve each write",
-		body: "Five members are read, eleven are exercised. Each write is a real transaction you approve in Freighter, and burn and burn_from each destroy one unit for good.",
+		body: "Approve each wallet prompt in Varial. The burn and burn_from checks each destroy one unit.",
 	},
 	{
 		title: "Read the verdicts",
