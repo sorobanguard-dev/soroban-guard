@@ -19,7 +19,7 @@ log, not here.
 
 ### Added
 
-- CLI progress on stderr shows elapsed time and explains waits for
+- CLI progress on stderr times setup and each check, and explains waits for
   transaction confirmation and allowance expiry. Completed checks use short
   names and aligned verdicts, colored in supported terminals. Use `--progress`
   for non-interactive logs or `--no-progress` to hide progress.
