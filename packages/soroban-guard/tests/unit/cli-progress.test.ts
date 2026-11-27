@@ -13,6 +13,11 @@ it("refreshes elapsed time during a wait and clears the line when stopped", () =
 		},
 	);
 	try {
+		progress.stage("inspecting contract");
+		vi.advanceTimersByTime(65_000);
+		expect(write).toHaveBeenLastCalledWith(
+			"\r\u001B[2K0/2 complete | 65s setup | inspecting contract",
+		);
 		progress.check({
 			kind: "started",
 			id: "sep41-transfer_from-expired",
@@ -20,12 +25,16 @@ it("refreshes elapsed time during a wait and clears the line when stopped", () =
 			total: 2,
 		});
 		expect(write).toHaveBeenLastCalledWith(
-			"\r\u001B[2K1/2 complete | checking transfer_from-expired | 0s elapsed",
+			"\r\u001B[2K1/2 complete | 0s this check | checking transfer_from-expired",
 		);
 		progress.stage("waiting for allowance expiry");
 		vi.advanceTimersByTime(3_000);
 		expect(write).toHaveBeenLastCalledWith(
-			"\r\u001B[2K1/2 complete | waiting for allowance expiry | 3s elapsed",
+			"\r\u001B[2K1/2 complete | 3s this check | waiting for allowance expiry",
+		);
+		progress.stage("preparing transfer_from transaction");
+		expect(write).toHaveBeenLastCalledWith(
+			"\r\u001B[2K1/2 complete | 3s this check | preparing transfer_from transaction",
 		);
 		progress.stop();
 		expect(write).toHaveBeenLastCalledWith("\r\u001B[2K");

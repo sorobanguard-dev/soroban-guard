@@ -19,17 +19,19 @@ export function createCliProgress(
 		(width, { id }) => Math.max(width, shortCheckId(id).length),
 		0,
 	);
-	const started = performance.now();
+	const setupStartedAt = performance.now();
 	let completed = 0;
-	let check: string | undefined;
+	let check: { name: string; startedAt: number } | undefined;
 	let stage: string | undefined;
 	let visible = false;
 
 	function refresh(): void {
-		const activity = stage ?? check;
+		const activity = stage ?? (check && `checking ${check.name}`);
 		if (activity === undefined) return;
-		const elapsed = `${Math.floor((performance.now() - started) / 1000)}s elapsed`;
-		const text = `${completed}/${total} complete | ${activity} | ${elapsed}`;
+		const startedAt = check?.startedAt ?? setupStartedAt;
+		const elapsed = Math.floor((performance.now() - startedAt) / 1000);
+		const timing = check === undefined ? "setup" : "this check";
+		const text = `${completed}/${total} complete | ${elapsed}s ${timing} | ${activity}`;
 		if (interactive) {
 			// Leave a column free so the terminal does not wrap the live line.
 			const width = Math.max(1, (stream.columns || 80) - 1);
@@ -51,7 +53,7 @@ export function createCliProgress(
 			completed = event.completed;
 			stage = undefined;
 			if (event.kind === "started") {
-				check = `checking ${shortCheckId(event.id)}`;
+				check = { name: shortCheckId(event.id), startedAt: performance.now() };
 				if (interactive) refresh();
 				return;
 			}

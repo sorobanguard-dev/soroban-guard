@@ -142,9 +142,9 @@ three rows are from a signed SEP-41 run.
 [16/16] transfer_from-expired        (36.7s)  PASS
 ```
 
-While a check is running, the terminal shows elapsed time and whether it
-is waiting for a transaction to settle or an allowance to expire. Each
-report retains the full check IDs, such as `sep41-decimals`.
+The terminal shows how long setup or the current check has been running
+and whether it is waiting for a transaction to settle or an allowance to
+expire. Each report retains the full check IDs, such as `sep41-decimals`.
 
 Progress goes to stderr, so `--format json > report.json` saves only the
 final report. Use `--progress` to log progress when stderr is redirected,
@@ -232,6 +232,11 @@ Each secret settles its own address, so `*_ADDRESS` is redundant alongside
 it — supply both only if you want the mismatch checked. Each write acts on
 **1 unit**, the smallest amount that proves movement, and reports the
 before/after quantities with the transaction hash and ledger.
+
+Run one signed suite at a time per set of accounts. Concurrent runs can
+compete for transaction sequence numbers and change the balances or
+allowances another run is measuring. For parallel runs, use a separate
+funded holder and spender for each run.
 
 Use a spender that holds no allowance yet. Two checks need that absence as
 their premise — `transfer_from-unauthorized` has nothing to violate
