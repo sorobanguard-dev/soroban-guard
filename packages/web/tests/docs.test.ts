@@ -79,9 +79,12 @@ describe("blocks", () => {
 });
 
 describe("CHANGELOG.md", () => {
-	// An empty `[Unreleased]` section yields nothing, as right after a release.
 	it("yields every tagged release, newest first", () => {
-		expect(RELEASES.map((r) => r.version)).toEqual([
+		const tagged = RELEASES.filter(
+			(release) => release.version !== "Unreleased",
+		);
+		expect(tagged.map((r) => r.version)).toEqual([
+			"0.5.1",
 			"0.5.0",
 			"0.4.5",
 			"0.4.4",
@@ -92,7 +95,7 @@ describe("CHANGELOG.md", () => {
 			"0.2.0",
 			"0.1.0",
 		]);
-		expect(latestRelease(RELEASES)?.version).toBe("0.5.0");
+		expect(latestRelease(RELEASES)?.version).toBe("0.5.1");
 	});
 
 	it("dates every shipped release and leaves Unreleased undated", () => {
