@@ -2,7 +2,7 @@
 	"name": "@soroban-guard/web",
 	"version": "0.5.1",
 	"private": true,
-	"description": "soroban-guard website, and an in-browser runner for the SEP-41 checks signed with Freighter",
+	"description": "soroban-guard website and an in-browser runner for SEP-41 checks signed with Varial",
 	"license": "Apache-2.0",
 	"author": "Sergei Birtanov <arigatosf@gmail.com> (https://github.com/birserg)",
 	"type": "module",

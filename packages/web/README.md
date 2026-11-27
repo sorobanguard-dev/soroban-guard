@@ -2,7 +2,7 @@
 
 The public site: pages that explain the tool, and a checker that runs **the
 same sixteen checks as the CLI** in the browser, signed by the visitor's own
-Freighter wallet.
+Varial wallet (formerly Freighter).
 
 > **The element ids in `components/Checker.astro` are a contract.**
 > `scripts/checker.ts` looks fourteen of them up by name and throws at
@@ -49,8 +49,7 @@ src/scripts/              → the browser logic (freighter, run, checker); the
 
 Nothing about conformance. `runSuite`, the checks, `exitCodeFor`,
 `STATUS_GLYPH` and both report renderers are imported from `soroban-guard`.
-This package supplies a `Signer` backed by Freighter instead of one backed by
-an environment variable, and renders results as HTML instead of ANSI.
+This package supplies a Varial-backed `Signer` and renders results as HTML.
 
 ```
 CLI:  KeypairSigner(secret from env)  ─┐

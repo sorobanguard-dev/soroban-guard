@@ -75,7 +75,7 @@ describe("connect", () => {
 		await expect(connect()).rejects.toBeInstanceOf(WalletError);
 	});
 
-	it("shows Freighter's message, not [object Object]", async () => {
+	it("shows the wallet's message", async () => {
 		api.isConnected.mockResolvedValue({ isConnected: true });
 		api.requestAccess.mockResolvedValue({
 			address: "",
@@ -158,7 +158,7 @@ describe("freighterSigner", () => {
 			const { freighterSigner } = await load();
 			await expect(
 				freighterSigner(OWNER, PASSPHRASE)[method]("x"),
-			).rejects.toThrow(`Freighter signed as ${OTHER}`);
+			).rejects.toThrow(`Varial signed as ${OTHER}`);
 		},
 	);
 });
