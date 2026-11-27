@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { parseArgs } from "node:util";
 import { type Account, Keypair, rpc, StrKey } from "@stellar/stellar-sdk";
 import { KeypairSigner } from "@stellar/stellar-sdk/contract";
+import { createCliProgress } from "./cli-progress.ts";
 import { supportsColor } from "./core/ansi.ts";
 import { TESTNET_PASSPHRASE, writeRefusalReason } from "./core/consent.ts";
 import { fundAccountInLedger, loadSourceAccount } from "./core/funding.ts";
@@ -19,7 +20,7 @@ import { sep41Suite, withCoverageGaps } from "./sep41/index.ts";
 import { noteSettled } from "./sep41/write.ts";
 
 const USAGE =
-	"usage: soroban-guard <contract-id> [--rpc-url URL] [--passphrase P] [--format text|md|json] [--no-color] [--allow-http] [--allow-non-testnet-write] [--version]";
+	"usage: soroban-guard <contract-id> [--rpc-url URL] [--passphrase P] [--format text|md|json] [--progress|--no-progress] [--no-color] [--allow-http] [--allow-non-testnet-write] [--version]";
 
 /**
  * The version in the manifest next to this file — `package.json` sits
@@ -53,6 +54,8 @@ let values: {
 	"rpc-url"?: string;
 	passphrase?: string;
 	format?: string;
+	progress?: boolean;
+	"no-progress"?: boolean;
 	"no-color"?: boolean;
 	"allow-http"?: boolean;
 	"allow-non-testnet-write"?: boolean;
@@ -66,6 +69,8 @@ try {
 			"rpc-url": { type: "string" },
 			passphrase: { type: "string" },
 			format: { type: "string" },
+			progress: { type: "boolean" },
+			"no-progress": { type: "boolean" },
 			"no-color": { type: "boolean" },
 			"allow-http": { type: "boolean" },
 			"allow-non-testnet-write": { type: "boolean" },
@@ -288,81 +293,96 @@ if (refusal !== null) {
 	process.exit(2);
 }
 
-let server: rpc.Server;
-let source: Account;
-let specFunctions: readonly string[] | null;
-// The run's own funding is a transaction like its writes: reads after it
-// must describe state from the ledger it landed in, or after.
-const soundness: Sep41Context["soundness"] = {};
-try {
-	// The SDK validates the transport scheme eagerly and throws outside any
-	// RPC call, so construction lives inside the guarded block too.
-	// Order inside is deliberate: inspect first, so a missing ID exits
-	// before spending faucet quota or waiting out polls; fund next
-	// (check-first, owner only: it sources and signs every call, and an
-	// untouched funded account costs nothing); load last, so a
-	// post-funding load failure genuinely means unreachable.
-	server = new rpc.Server(rpcUrl, {
-		allowHttp: values["allow-http"] === true,
-		timeout: RPC_TIMEOUT_MS,
-	});
-	const inspected = await inspectContract(server, contractId);
-	if (inspected.kind === "missing") {
-		console.error(`no contract found at ${contractId}`);
-		console.log(render([]));
-		process.exit(2);
-	}
-	specFunctions = inspected.kind === "wasm" ? inspected.functions : null;
-	// Fund whoever signs, because a transaction is sourced from its signer
-	// and needs that account to exist and hold fees. The owner always does;
-	// the spender does only when it holds a key, and an address that merely
-	// receives needs nothing — so the second is conditional rather than
-	// unconditional faucet spend.
-	//
-	// Four checks submit as the spender: transfer_from, burn_from, and the
-	// two that attempt a spend the contract should refuse. Without funding,
-	// a fresh SPENDER_SECRET makes all four throw and report SKIPPED, which
-	// reads as "unknown" instead of the assessment that was asked for.
-	noteSettled(
-		soundness,
-		await fundAccountInLedger(server, parties.owner.address),
-	);
-	if (parties.spender.signer !== undefined) {
+const terminal = process.stderr.isTTY === true;
+const interactive = terminal && process.env.TERM !== "dumb";
+const progress =
+	values["no-progress"] !== true && (terminal || values.progress === true)
+		? createCliProgress(sep41Suite.checks, process.stderr, {
+				interactive,
+				color:
+					interactive &&
+					values["no-color"] !== true &&
+					supportsColor(process.stderr),
+			})
+		: undefined;
+
+async function assess(): Promise<CheckResult[]> {
+	let server: rpc.Server;
+	let source: Account;
+	let specFunctions: readonly string[] | null;
+	// The run's own funding is a transaction like its writes: reads after it
+	// must describe state from the ledger it landed in, or after.
+	const soundness: Sep41Context["soundness"] = {};
+	try {
+		progress?.stage("inspecting contract");
+		// The SDK validates the transport scheme eagerly and throws outside any
+		// RPC call, so construction lives inside the guarded block too.
+		// Order inside is deliberate: inspect first, so a missing ID exits
+		// before spending faucet quota or waiting out polls; fund next
+		// (check-first, owner only: it sources and signs every call, and an
+		// untouched funded account costs nothing); load last, so a
+		// post-funding load failure genuinely means unreachable.
+		server = new rpc.Server(rpcUrl, {
+			allowHttp: values["allow-http"] === true,
+			timeout: RPC_TIMEOUT_MS,
+		});
+		const inspected = await inspectContract(server, target);
+		if (inspected.kind === "missing") {
+			progress?.stop();
+			console.error(`no contract found at ${target}`);
+			return [];
+		}
+		specFunctions = inspected.kind === "wasm" ? inspected.functions : null;
+		// Fund whoever signs, because a transaction is sourced from its signer
+		// and needs that account to exist and hold fees. The owner always does;
+		// the spender does only when it holds a key, and an address that merely
+		// receives needs nothing — so the second is conditional rather than
+		// unconditional faucet spend.
+		//
+		// Four checks submit as the spender: transfer_from, burn_from, and the
+		// two that attempt a spend the contract should refuse. Without funding,
+		// a fresh SPENDER_SECRET makes all four throw and report SKIPPED, which
+		// reads as "unknown" instead of the assessment that was asked for.
+		progress?.stage("checking owner account funding");
 		noteSettled(
 			soundness,
-			await fundAccountInLedger(server, parties.spender.address),
+			await fundAccountInLedger(server, parties.owner.address),
 		);
+		if (parties.spender.signer !== undefined) {
+			progress?.stage("checking spender account funding");
+			noteSettled(
+				soundness,
+				await fundAccountInLedger(server, parties.spender.address),
+			);
+		}
+		progress?.stage("loading owner account");
+		source = await loadSourceAccount(server, parties.owner.address);
+	} catch (error) {
+		progress?.stop();
+		console.error(
+			`cannot prepare run: ${error instanceof Error ? error.message : String(error)}`,
+		);
+		return [];
 	}
-	source = await loadSourceAccount(server, parties.owner.address);
-} catch (error) {
-	console.error(
-		`cannot prepare run: ${error instanceof Error ? error.message : String(error)}`,
-	);
-	console.log(render([]));
-	process.exit(2);
-}
-const ctx: Sep41Context = {
-	server,
-	contractId,
-	source,
-	networkPassphrase,
-	specFunctions,
-	parties,
-	// Fresh per run: grants established by earlier checks are fresh by
-	// construction, which is the only expiry proof allowance() can give.
-	establishedAllowances: new Set(),
-	// Fresh per run: what one contract's accounting did says nothing about
-	// the next one's.
-	soundness,
-};
+	const ctx: Sep41Context = {
+		server,
+		contractId: target,
+		...(progress === undefined ? {} : { onWait: progress.stage }),
+		source,
+		networkPassphrase,
+		specFunctions,
+		parties,
+		// Fresh per run: grants established by earlier checks are fresh by
+		// construction, which is the only expiry proof allowance() can give.
+		establishedAllowances: new Set(),
+		// Fresh per run: what one contract's accounting did says nothing about
+		// the next one's.
+		soundness,
+	};
 
-const assessed = await runSuite(sep41Suite, ctx);
-// Unassessed members become UNVERIFIABLE rows: without this, a suite that
-// passes every check it happens to own would exit 0 — "verified conformant"
-// — while the members it never examined went unreported.
-const results = withCoverageGaps(assessed);
+	return withCoverageGaps(await runSuite(sep41Suite, ctx, progress?.check));
+}
+
+const results = await assess().finally(() => progress?.stop());
 console.log(render(results));
-// 0 = verified conformant, 1 = verified violation, 2 = unknown (see
-// exitCodeFor). SKIPPED/UNVERIFIABLE are not contract verdicts and must
-// never exit 1.
-process.exit(exitCodeFor(results));
+process.exitCode = exitCodeFor(results);

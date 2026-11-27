@@ -54,6 +54,8 @@ export interface Party {
  * and a trap is judged on its own terms.
  */
 export interface Sep41Context {
+	/** Describe the current wait. Undefined returns to the active check name. */
+	readonly onWait?: (message: string | undefined) => void;
 	readonly server: rpc.Server;
 	readonly contractId: string;
 	readonly source: Account;

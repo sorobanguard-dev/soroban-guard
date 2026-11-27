@@ -100,13 +100,18 @@ describe("expiredAllowanceCheck", () => {
 			// The setup approval lands, then the spend is refused.
 			.mockResolvedValueOnce(APPLIED)
 			.mockResolvedValueOnce(spendRefused("HostError: Error(Contract, #4)"));
-		const result = await expiredAllowanceCheck.run(
-			ctxWithLedger(sequencedServer(PREMISE)),
-		);
+		const onWait = vi.fn();
+		const result = await expiredAllowanceCheck.run({
+			...ctxWithLedger(sequencedServer(PREMISE)),
+			onWait,
+		});
 		expect(result.status).toBe("PASS");
 		expect(result.actual).toContain("expired at ledger 106");
 		expect(result.actual).toContain("refused");
 		expect(result.evidence.ledger).toBe(WRITE_LEDGER);
+		expect(onWait.mock.calls).toContainEqual([
+			"waiting for allowance expiry after ledger 106",
+		]);
 		// The evidence names the grant that was confirmed before the wait:
 		// without it, the post-wait allowance alone cannot tell an expired
 		// grant from one that never landed.

@@ -570,6 +570,17 @@ describe("submitWrite, before sending", () => {
 });
 
 describe("submitWrite, once sent", () => {
+	it("reports the confirmation stage before submitting the signed transaction", async () => {
+		const onSubmit = vi.fn();
+		built();
+		const server = network({ lookups: [SUCCESS] });
+		await expect(
+			submitWrite(server, call, Networks.TESTNET, { ...SETTLES, onSubmit }),
+		).resolves.toMatchObject({ kind: "applied" });
+		expect(onSubmit).toHaveBeenCalledOnce();
+		expect(onSubmit).toHaveBeenCalledBefore(server.sendTransaction);
+	});
+
 	it("returns applied with the signed hash when the transaction lands", async () => {
 		built();
 		await expect(

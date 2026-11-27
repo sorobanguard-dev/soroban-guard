@@ -775,10 +775,8 @@ export function looksLikeAccountId(value: string): boolean {
 /**
  * Run the full suite against a contract, signing through the wallet.
  *
- * Sequential and slow by nature: each write waits for a ledger to close,
- * and the expiry check waits for two. `onProgress` exists so the page can
- * show rows as they land rather than a spinner for a minute — the suite
- * itself has no notion of progress, so this wraps it at the check level.
+ * Each write waits for a ledger to close. `onProgress` reports completed
+ * checks while the suite is running.
  */
 export async function runChecks(
 	request: RunRequest,
@@ -838,22 +836,11 @@ export async function runChecks(
 		soundness,
 	};
 
-	const total = sep41Suite.checks.length;
-	let completed = 0;
-	const instrumented = {
-		...sep41Suite,
-		checks: sep41Suite.checks.map((check) => ({
-			...check,
-			async run(context: Sep41Context) {
-				const result = await check.run(context);
-				completed += 1;
-				onProgress?.(completed, total);
-				return result;
-			},
-		})),
-	};
-
-	const assessed = await runSuite(instrumented, ctx);
+	const assessed = await runSuite(sep41Suite, ctx, (event) => {
+		if (event.kind === "finished") {
+			onProgress?.(event.completed, event.total);
+		}
+	});
 	const results = withCoverageGaps(assessed);
 	const settled = () =>
 		soundness.settledThrough === undefined

@@ -15,7 +15,7 @@ import Base from "../layouts/Base.astro";
 
 const title = "soroban-guard — SEP-41 conformance for Soroban tokens";
 const description =
-	"A command-line conformance suite for deployed SEP-41 tokens on Stellar testnet. Writes are performed, not simulated, and a check that cannot reach an answer says so. Run it from your terminal, or try it in the browser.";
+	"Check deployed SEP-41 tokens on Stellar testnet from your terminal or browser. Reports include verdicts and evidence from signed transactions.";
 
 /**
  * The five verdicts, in the order a reader meets them: the two that are
@@ -64,7 +64,7 @@ const VERDICTS = [
 const COVERS = [
 	{
 		name: "SEP-41 token interface",
-		text: "All ten members. Five reads observed, five writes signed and submitted, and six checks that assert what a contract must refuse.",
+		text: "All ten members, plus six checks for required refusals and balance invariants.",
 	},
 	{
 		name: "Both kinds of token",
@@ -91,7 +91,7 @@ const EXCLUDES = [
 	},
 	{
 		name: "Mainnet writes",
-		text: "Reads work anywhere. The CLI signs writes on a test network only unless given an explicit flag; the browser checker is testnet-only.",
+		text: "The browser checker uses testnet. The CLI can read from other networks with a funded account. Writes there require an explicit flag.",
 	},
 ];
 
@@ -112,13 +112,13 @@ const TERMINAL: readonly (readonly Token[])[] = [
 	// `npx`, not a path into a clone: the package is on npm, so this runs
 	// with nothing installed. Seven lines exactly — the card reserves that
 	// height so the typing animation never shifts the section below it.
-	[{ text: "# reads only — no install, no keys", kind: "c" }],
+	[{ text: "# start without keys on testnet", kind: "c" }],
 	[
 		{ text: "npx soroban-guard " },
 		{ text: "<contract-id>", kind: "a" },
 	],
 	[],
-	[{ text: "# a full run: both parties sign, all sixteen answer", kind: "c" }],
+	[{ text: "# check writes with a funded holder and spender", kind: "c" }],
 	[
 		{ text: "OWNER_SECRET", kind: "v" },
 		{ text: "=$(stellar keys secret owner) \\" },
@@ -145,10 +145,8 @@ const TERMINAL: readonly (readonly Token[])[] = [
  * copy says plainly; against their own token, with their own keys, it is
  * the same command.
  *
- * Output is verbatim, `sep41-` ids included, since that is what the CLI
- * prints today; the middle rows are elided and say so. Testnet is reset
- * from time to time: after a reset the fixture must be redeployed and
- * `RECORDED_CONTRACT` updated, or the first command stops working.
+ * The excerpt is from the final report, which uses full check IDs. The
+ * fixture address must be updated after a testnet reset.
  */
 const TRY_COMMAND = `npx soroban-guard ${RECORDED_CONTRACT}`;
 const SHORT_CONTRACT = `${RECORDED_CONTRACT.slice(0, 8)}…${RECORDED_CONTRACT.slice(-7)}`;
@@ -294,9 +292,8 @@ const SAMPLES = [
 			</h1>
 
 			<p class="lede">
-				Sixteen checks run on-chain from your terminal. Every verdict carries
-				its evidence — and a check that cannot reach an answer says so instead
-				of guessing.
+				Run sixteen checks against a deployed token on Stellar testnet. The
+				report explains each verdict and records evidence for settled writes.
 			</p>
 
 			<div class="actions">
@@ -376,9 +373,9 @@ const SAMPLES = [
 				<p class="eyebrow">For developers</p>
 				<h2>One command.<br />Sixteen checks.</h2>
 				<p>
-					On npm as <code>soroban-guard</code>. Run it with <code>npx</code> on
-					Node 24 — nothing to install and nothing to configure. Point it at a
-					deployed contract and it reports every clause it could exercise.
+					Run <code>soroban-guard</code> with <code>npx</code> on Node 24.
+					The terminal shows each verdict as the check finishes, then prints
+					the final report. <a href={`${REPO_URL}#cli-progress`}>See an example of CLI progress.</a>
 				</p>
 				<div class="actions">
 					{/*
@@ -474,7 +471,7 @@ const SAMPLES = [
 					</button>
 				</div>
 
-				<p class="try-label">A full run, both keys</p>
+				<p class="try-label">Final report from a signed run</p>
 				{/* One block per line with no whitespace between children:
 				    inside a `pre` every space is significant. */}
 				<pre class="try-out"><code><span class="try-prompt">{"$ OWNER_SECRET=$(stellar keys secret alice) \\"}</span><span class="try-prompt">{"  SPENDER_SECRET=$(stellar keys secret bob) \\"}</span><span class="try-prompt">{`  npx soroban-guard ${SHORT_CONTRACT}`}</span><span class="try-head">{`SEP-41 Conformance  ${SHORT_CONTRACT}`}</span>{
