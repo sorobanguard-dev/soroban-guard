@@ -439,6 +439,8 @@ export async function lookupOutcome(
 export interface WriteTiming {
 	readonly pollIntervalMs?: number;
 	readonly giveUpAfterMs?: number;
+	/** Called when a signed contract write is ready to submit and follow. */
+	readonly onSubmit?: () => void;
 	/** How long a simulation waits for a server behind `minLedger` (see `ReadCall`). */
 	readonly catchUpMs?: number;
 }
@@ -1176,6 +1178,7 @@ export async function submitWrite(
 	if (built === undefined || signed === undefined || simulation === undefined) {
 		throw new Error("signing produced no transaction to send");
 	}
+	timing.onSubmit?.();
 	// `built` is what the SDK handed the signer, after the simulation.
 	const outcome = await sendAndFollow(
 		server,

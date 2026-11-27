@@ -3,18 +3,17 @@ import { fileURLToPath } from "node:url";
 import { Keypair, Networks } from "@stellar/stellar-sdk";
 import { describe, expect, it } from "vitest";
 
-/**
- * The CLI as a user meets it: a process, its arguments, its environment,
- * its exit code. Every path here exits before the first network call, so
- * the suite stays offline — the refusals are the contract a script calling
- * `soroban-guard` in CI depends on, and exit 2 is how it tells "you called
- * me wrong" apart from exit 1, "the contract failed".
- */
+/** Exercise the CLI in a subprocess with an isolated environment. */
 const CLI = fileURLToPath(new URL("../../src/cli.ts", import.meta.url));
 const CONTRACT = "CBDMISFO47JSINAYSIPLDLJ6RZMP2L3MVLQPBSJ6YQO64V4XERIZZR54";
 
-function run(args: string[], env: Record<string, string> = {}) {
-	const result = spawnSync(process.execPath, [CLI, ...args], {
+function run(
+	args: string[],
+	env: Record<string, string> = {},
+	preload?: string,
+) {
+	const imports = preload === undefined ? [] : ["--import", preload];
+	const result = spawnSync(process.execPath, [...imports, CLI, ...args], {
 		encoding: "utf8",
 		// Only what is passed: a developer's own OWNER_SECRET or RPC URL must
 		// not leak in and change which path the CLI takes.
@@ -30,6 +29,90 @@ function run(args: string[], env: Record<string, string> = {}) {
 	}
 	return { code: result.status, out: result.stdout, err: result.stderr };
 }
+
+describe("cli progress", () => {
+	// Exercise the real CLI, runner and renderer without a network or keys.
+	const source = `
+		import { rpc, SorobanDataBuilder, xdr } from ${JSON.stringify(import.meta.resolve("@stellar/stellar-sdk"))};
+		rpc.Server.prototype.getContractInstance = async () => ({ executable: xdr.ContractExecutable.contractExecutableStellarAsset() });
+		rpc.Server.prototype.getLedgerEntry = async () => ({ val: { type: "account", account: { seqNum: 1n } } });
+		rpc.Server.prototype.simulateTransaction = async (tx) => ({
+			_parsed: true, latestLedger: 100, events: [], transactionData: new SorobanDataBuilder(),
+			result: { retval: tx.operations[0].func.invokeContract.functionName.toString() === "decimals" ? xdr.ScVal.scvU32(7) : xdr.ScVal.scvVoid() },
+		});
+		if (process.env.TEST_TTY) Object.defineProperty(process.stderr, "isTTY", { value: true });
+	`;
+	const preload = `data:text/javascript;base64,${Buffer.from(source).toString("base64")}`;
+	const args = [CONTRACT, "--format", "json"];
+
+	it("keeps piped stderr quiet by default", () => {
+		const { code, out, err } = run(args, {}, preload);
+		expect(JSON.parse(out)).toMatchObject({
+			exitCode: code,
+			summary: { total: 16 },
+		});
+		expect(err).toBe("");
+	});
+
+	it("prints plain progress on stderr with --progress and leaves stdout as JSON", () => {
+		const { code, out, err } = run([...args, "--progress"], {}, preload);
+		const report = JSON.parse(out);
+		expect(report).toMatchObject({
+			schema: "soroban-guard/report@1",
+			exitCode: code,
+		});
+		expect(report.results[0].id).toBe("sep41-decimals");
+		const rows = err.split("\n").filter((row) => row.startsWith("["));
+		expect(rows).toHaveLength(16);
+		expect(rows[0]).toMatch(/^\[ 1\/16\] decimals +\(\d+\.\d+s\) {2}PASS$/);
+		expect(rows[1]).toMatch(/^\[ 2\/16\] balance +\(\d+\.\d+s\) {2}FAIL$/);
+		expect(rows[15]).toMatch(/^\[16\/16\] transfer_from-expired /);
+		expect(new Set(rows.map((row) => row.lastIndexOf(" "))).size).toBe(1);
+		expect(err).not.toContain("sep41-");
+		expect(err).not.toContain("\u001B");
+	});
+
+	it("shows a live line with terminal stderr and accepts --no-progress", () => {
+		const env = { TEST_TTY: "1" };
+		const interactive = run(args, env, preload);
+		expect(JSON.parse(interactive.out).summary.total).toBe(16);
+		expect(interactive.err).toContain("\r\u001B[2K0/16 complete");
+		expect(run([...args, "--no-progress"], env, preload).err).toBe("");
+	});
+
+	it("colors only the trailing verdict on terminal stderr", () => {
+		const { out, err } = run(args, { TEST_TTY: "1" }, preload);
+		const rows = err.replaceAll("\r\u001B[2K", "\n").split("\n");
+		expect(
+			rows.find((row) => row.startsWith("[ 1/16]"))?.split("\u001B"),
+		).toEqual([
+			expect.stringMatching(/^\[ 1\/16\] decimals +\(\d+\.\d+s\) {2}$/),
+			"[32mPASS",
+			"[0m",
+		]);
+		expect(
+			rows.find((row) => row.startsWith("[ 2/16]"))?.split("\u001B"),
+		).toEqual([
+			expect.stringMatching(/^\[ 2\/16\] balance +\(\d+\.\d+s\) {2}$/),
+			"[31mFAIL",
+			"[0m",
+		]);
+		expect(out).not.toContain("\u001B");
+	});
+
+	it.each([
+		["NO_COLOR", [], { NO_COLOR: "" }],
+		["--no-color", ["--no-color"], {}],
+	] as const)("keeps progress verdicts plain with %s", (_case, flags, env) => {
+		const { err } = run(
+			[...args, ...flags],
+			{ ...env, TEST_TTY: "1" },
+			preload,
+		);
+		expect(err).toMatch(/\[ 1\/16\] decimals +\(\d+\.\d+s\) {2}PASS\n/);
+		expect(err).not.toContain("\u001B[32m");
+	});
+});
 
 describe("cli arguments", () => {
 	it("prints the manifest version and exits 0 for --version", () => {

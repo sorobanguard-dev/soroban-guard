@@ -12,7 +12,7 @@ import { type Block, blocks } from "./markdown.ts";
  * site's layout instead of a README's.
  */
 export interface CheckEntry {
-	/** The stable id, `sep41-` prefix included, as the CLI reports it. */
+	/** The stable id with its `sep41-` prefix, as used in reports. */
 	readonly id: string;
 	/** Anchor on the page: the id without the prefix. */
 	readonly anchor: string;

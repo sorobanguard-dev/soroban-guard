@@ -235,11 +235,11 @@ npx soroban-guard CDABMBRIDJKHHNYHEQLE3GEINB5EKHGW62SDEXEOKNPKUF2MEJQVYLV5
 # all sixteen: a holder and a second account, both funded on testnet
 OWNER_SECRET=$(stellar keys secret owner) \\
 SPENDER_SECRET=$(stellar keys secret spender) \\
-  npx soroban-guard <contract-id> --format json`}</code></pre>
+  npx soroban-guard <contract-id> --format json > report.json`}</code></pre>
 			<p class="fine">
-				<code>--format json</code> writes the report this page is built
-				from; <code>--format md</code> writes a Markdown report that pastes
-				straight into a PR.
+				Progress stays in the terminal while the final report is saved to
+				<code>report.json</code>. Use <code>--format md</code> for a Markdown
+				report you can share in a pull request.
 			</p>
 		</section>
 

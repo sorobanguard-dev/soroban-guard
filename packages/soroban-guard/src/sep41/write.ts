@@ -50,6 +50,8 @@ export async function submitCheckWrite(
 		call.minLedger ?? 0,
 		ctx.soundness.settledThrough ?? 0,
 	);
+	const wait = ctx.onWait;
+	wait?.(`preparing ${call.method} transaction`);
 	const result = await submitWrite(
 		ctx.server,
 		{
@@ -58,6 +60,9 @@ export async function submitCheckWrite(
 			...(minLedger > 0 ? { minLedger } : {}),
 		},
 		ctx.networkPassphrase,
+		wait === undefined
+			? undefined
+			: { onSubmit: () => wait(`confirming ${call.method} transaction`) },
 	);
 	if (result.kind === "applied" || result.kind === "rejected") {
 		noteSettled(ctx.soundness, result.ledger);
@@ -72,6 +77,7 @@ export async function submitCheckWrite(
 				: { closedAfterDeadline: result.closedAfterDeadline }),
 		};
 	}
+	wait?.(undefined);
 	return result;
 }
 

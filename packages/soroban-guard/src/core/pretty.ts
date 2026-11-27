@@ -15,11 +15,11 @@ import { padVisible, style, visibleWidth } from "./ansi.ts";
 import { exitCodeFor } from "./report.ts";
 import {
 	type CheckResult,
-	type CheckStatus,
 	countByStatus,
 	LAYER_ORDER,
 	STATUS_GLYPH,
 } from "./types.ts";
+import { VERDICT_COLOR } from "./verdict-color.ts";
 
 export interface PrettyInput {
 	readonly standard: string;
@@ -30,14 +30,6 @@ export interface PrettyInput {
 	 * own wrapping, which breaks mid-word and ignores indentation. */
 	readonly width: number;
 }
-
-const COLOR: Record<CheckStatus, "green" | "red" | "yellow" | "grey"> = {
-	PASS: "green",
-	FAIL: "red",
-	UNVERIFIABLE: "yellow",
-	SKIPPED: "grey",
-	NOT_IMPLEMENTED: "grey",
-};
 
 /**
  * Cut a long token into chunks no wider than `room`.
@@ -133,7 +125,7 @@ export function renderPretty(input: PrettyInput): string {
 		for (const result of inLayer) {
 			const glyph = style(
 				STATUS_GLYPH[result.status],
-				COLOR[result.status],
+				VERDICT_COLOR[result.status],
 				color,
 			);
 			const id = padVisible(result.id, idWidth);

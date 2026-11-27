@@ -27,12 +27,11 @@ const total = groups.reduce((sum, group) => sum + group.checks.length, 0);
 
 	<main>
 		<header class="intro">
-			<h1>The {total} checks</h1>
+			<h1>The {total} SEP-41 checks</h1>
 			<p>
-				What each check proves, what it needs, and what it reports when it
-				cannot reach an answer. Listed in the order a run executes them: reads
-				first, then the checks that must be refused, then the writes that move
-				value.
+				Find a check by its short name from the live progress display. Each
+				entry explains what the check tests, what it requires, and which
+				verdicts it can report.
 			</p>
 		</header>
 
@@ -89,7 +88,7 @@ const total = groups.reduce((sum, group) => sum + group.checks.length, 0);
 										</span>
 									</h3>
 									<p class="cli-id">
-										<code>{check.id}</code> in CLI output
+										Report ID <code>{check.id}</code>
 									</p>
 									<Blocks blocks={check.body} />
 								</article>

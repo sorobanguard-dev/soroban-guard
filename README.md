@@ -17,6 +17,7 @@ or watch the walkthrough — the CLI and the web checker, start to finish:
 - [Status](#status)
 - [Install](#install)
 - [Usage](#usage)
+  - [CLI progress](#cli-progress)
   - [Example reports](#example-reports)
   - [Checking writes](#checking-writes)
   - [Exit codes](#exit-codes)
@@ -27,9 +28,9 @@ or watch the walkthrough — the CLI and the web checker, start to finish:
 - [License](#license)
 
 > **Scope, stated plainly:** this checks **SEP-41 token contracts only**,
-> and is built for **testnet**. Reads work against any network; the writes
-> refuse to sign anywhere but a test network unless
-> `--allow-non-testnet-write` is passed, and a full run burns real units
+> and is built for **testnet**. Reads on other networks need a funded account
+> supplied through `OWNER_ADDRESS` or `OWNER_SECRET`. Writes require a test
+> network unless you pass `--allow-non-testnet-write`. A full run burns units
 > where it lands. The name is broader than the tool — it does not audit
 > arbitrary Soroban contracts, review WASM, or check any other SEP.
 > A contract that passes here has been shown to honour the SEP-41
@@ -46,7 +47,7 @@ or watch the walkthrough — the CLI and the web checker, start to finish:
 | Reports (terminal, `md`, `json`) | Done — `--format` |
 | Browser UI | Done — same suite, signed by Freighter; a demo token with a faucet runs all sixteen from one wallet |
 | Events layer | Not started — balances asserted, topics unread |
-| Custom WASM proof | Done for `fixtures/vulnerable-token` (two defects found); conformant third-party WASM tokens not yet run |
+| Custom WASM results | SET and OZPT passed all sixteen checks. `fixtures/vulnerable-token` had two failures. See [real-token results](https://sorobanguard.com/results). |
 
 ## Install
 
@@ -66,11 +67,10 @@ node packages/soroban-guard/src/cli.ts <contract-id>
 
 ## Usage
 
-Against a real testnet token, with **nothing configured** — no keys, no
-addresses. This is the first run, and it is mostly question marks by
-design: thirteen checks need signing authority or a real holder, and each
-one names what it needs instead of guessing. A configured run answers all
-sixteen — see [Checking writes](#checking-writes) below for that output.
+This is the final report from a testnet run with no keys or addresses
+configured. Three checks passed. The other thirteen name the balances,
+accounts, or signing keys the run needs to assess them. For a signed
+example, see [Checking writes](#checking-writes).
 
 ```
 SEP-41 Conformance — CA5UTUUPHYL5K22UBRUVC37EARZUGYOSGK3IKIXG2JLCC5ZZLI4BDWDM
@@ -130,6 +130,25 @@ soroban-guard <contract-id> --format json > report.json   # CI, web UI
 soroban-guard <contract-id> --format md > CHECKS.md       # review, diffing
 ```
 
+### CLI progress
+
+Starting in 0.5.1, the CLI shows each verdict as the check finishes. These
+three rows are from a signed SEP-41 run.
+
+```text
+[ 1/16] decimals                      (0.3s)  PASS
+[ 6/16] transfer_from-unauthorized    (1.5s)  PASS
+[16/16] transfer_from-expired        (36.7s)  PASS
+```
+
+While a check is running, the terminal shows elapsed time and whether it
+is waiting for a transaction to settle or an allowance to expire. Each
+report retains the full check IDs, such as `sep41-decimals`.
+
+Progress goes to stderr, so `--format json > report.json` saves only the
+final report. Use `--progress` to log progress when stderr is redirected,
+`--no-progress` to hide it, or `--no-color` or `NO_COLOR` for plain verdicts.
+
 ### Example reports
 
 Two real CHECKS.md files, as the tool wrote them against testnet: a
@@ -157,8 +176,8 @@ SPENDER_SECRET=$(stellar keys secret spender) \
   soroban-guard <contract-id>
 ```
 
-With both keys configured, every row carries a verdict — this is a real
-run against a Stellar Asset Contract on testnet:
+This signed run against a Stellar Asset Contract on testnet passed all
+sixteen checks. The final report appears after the progress rows:
 
 ```
 SEP-41 Conformance — CARQGEM3RDSWA2SRZDL6LDBOEQWQHS74BOL5V62QXIGMOBIMIX5YTYYN
@@ -380,16 +399,12 @@ is a violation of the clause as written, not a variation the tool tolerates.
 
 ## Current limitations
 
-* Testnet only. Never place mainnet keys in `.env`.
-* Validated against a SAC (Stellar Asset Contract) token and against a
-  purpose-built broken WASM token. No check is SAC-specific: members are
-  called by name, and a WASM contract's spec is the richer path — it says
-  which members are declared, so undeclared ones report NOT_IMPLEMENTED
-  without spending a call, where a SAC has no spec and every member is
-  attempted blind. What is *not* yet proven is a conformant custom WASM
-  token: the passing runs in [docs/verification.md](docs/verification.md)
-  are all against a SAC, so a false FAIL specific to WASM tokens would not
-  have been caught yet.
+* The browser checker and the signed examples use testnet. Never place
+  mainnet keys in `.env`.
+* A readable WASM spec identifies which members the token declares. The
+  suite marks undeclared members `NOT_IMPLEMENTED` without a call. For
+  Stellar Asset Contracts and WASM tokens whose spec cannot be read, the
+  suite attempts each member by name.
 * The negative checks are proven to fire. A token that passes every check
   tells you nothing on its own — a check that never fires looks exactly
   like one that fires correctly. `fixtures/vulnerable-token` is a SEP-41

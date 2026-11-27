@@ -14,6 +14,9 @@ target/
 .DS_Store
 *.log
 
+# Local CLI progress smoke-test report
+/progress-report.json
+
 # Secrets — never commit keys
 .env
 .env.*

@@ -281,7 +281,10 @@ export const expiredAllowanceCheck = {
 
 		// Wait for the deadline to pass. Bounded: a stalled network is a fact
 		// about the run, not a verdict about the contract.
-		const reached = await waitForLedger(ctx, expiresAt, deadline);
+		ctx.onWait?.(`waiting for allowance expiry after ledger ${expiresAt}`);
+		const reached = await waitForLedger(ctx, expiresAt, deadline).finally(() =>
+			ctx.onWait?.(undefined),
+		);
 		if (reached === null) {
 			return unverifiable(
 				`the ledger did not pass ${expiresAt} within ${MAX_WAIT_MS / 1000}s, so the allowance may not have expired yet`,

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
 	padVisible,
 	style,
@@ -55,6 +55,10 @@ function common(results: readonly CheckResult[]) {
 }
 
 describe("ansi", () => {
+	afterEach(() => {
+		vi.unstubAllEnvs();
+	});
+
 	it("wraps in an escape only when enabled", () => {
 		expect(style("x", "green", true)).toBe("\u001B[32mx\u001B[0m");
 		expect(style("x", "green", false)).toBe("x");
@@ -75,7 +79,8 @@ describe("ansi", () => {
 
 	// A redirected report must stay greppable, so colour is opt-in on
 	// evidence the stream is a terminal.
-	it("gives colour only to a TTY that reports support", async () => {
+	it("gives colour only to a TTY that reports support", () => {
+		vi.stubEnv("NO_COLOR", undefined);
 		expect(supportsColor({ isTTY: true, hasColors: () => true })).toBe(true);
 		expect(supportsColor({ isTTY: true, hasColors: () => false })).toBe(false);
 		expect(supportsColor({ isTTY: false, hasColors: () => true })).toBe(false);
@@ -84,20 +89,11 @@ describe("ansi", () => {
 
 	// NO_COLOR present means off, even empty — that is the standard, and
 	// `NO_COLOR= command` is the common way to set it.
-	it("honours NO_COLOR even when empty", async () => {
-		const previous = process.env.NO_COLOR;
-		try {
-			process.env.NO_COLOR = "1";
-			expect(supportsColor({ isTTY: true, hasColors: () => true })).toBe(false);
-			process.env.NO_COLOR = "";
-			expect(supportsColor({ isTTY: true, hasColors: () => true })).toBe(false);
-		} finally {
-			if (previous === undefined) {
-				delete process.env.NO_COLOR;
-			} else {
-				process.env.NO_COLOR = previous;
-			}
-		}
+	it("honours NO_COLOR even when empty", () => {
+		vi.stubEnv("NO_COLOR", "1");
+		expect(supportsColor({ isTTY: true, hasColors: () => true })).toBe(false);
+		vi.stubEnv("NO_COLOR", "");
+		expect(supportsColor({ isTTY: true, hasColors: () => true })).toBe(false);
 	});
 });
 

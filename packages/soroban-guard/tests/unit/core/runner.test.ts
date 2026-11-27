@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { runSuite } from "../../../src/core/runner.ts";
+import { type CheckProgress, runSuite } from "../../../src/core/runner.ts";
 import type { Check, CheckResult, Suite } from "../../../src/core/types.ts";
 
 function stubCheck(
@@ -36,6 +36,27 @@ function passResult(id: string): CheckResult {
 }
 
 describe("runSuite", () => {
+	it("reports each check starting and finishing, including a throw", async () => {
+		const suite: Suite<unknown> = {
+			standard: "TEST",
+			checks: [
+				stubCheck("first", passResult("first")),
+				stubCheck("broken", new Error("RPC down")),
+			],
+		};
+		const events: CheckProgress[] = [];
+		const [first, broken] = await runSuite(suite, undefined, (event) =>
+			events.push(event),
+		);
+		expect(events).toEqual([
+			{ kind: "started", id: "first", completed: 0, total: 2 },
+			{ kind: "finished", result: first, completed: 1, total: 2 },
+			{ kind: "started", id: "broken", completed: 1, total: 2 },
+			{ kind: "finished", result: broken, completed: 2, total: 2 },
+		]);
+		expect(broken?.status).toBe("SKIPPED");
+	});
+
 	it("collects results in order", async () => {
 		const first = passResult("first");
 		const second = passResult("second");
