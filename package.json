@@ -1,6 +1,6 @@
 {
 	"name": "soroban-guard-monorepo",
-	"version": "0.5.0",
+	"version": "0.5.1",
 	"private": true,
 	"description": "Conformance testing for deployed SEP-41 Soroban token contracts",
 	"license": "Apache-2.0",

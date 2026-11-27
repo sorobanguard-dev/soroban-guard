@@ -1,6 +1,6 @@
 {
 	"name": "@soroban-guard/web",
-	"version": "0.5.0",
+	"version": "0.5.1",
 	"private": true,
 	"description": "soroban-guard website, and an in-browser runner for the SEP-41 checks signed with Freighter",
 	"license": "Apache-2.0",

@@ -15,6 +15,15 @@ log, not here.
 
 ## [Unreleased]
 
+## [0.5.1] — 2026-11-25
+
+### Added
+
+- CLI progress on stderr shows elapsed time and explains waits for
+  transaction confirmation and allowance expiry. Completed checks use short
+  names and aligned verdicts, colored in supported terminals. Use `--progress`
+  for non-interactive logs or `--no-progress` to hide progress.
+
 ## [0.5.0] — 2026-11-25
 
 ### Breaking
