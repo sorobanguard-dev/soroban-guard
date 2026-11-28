@@ -93,6 +93,18 @@ CodeRabbit reviews every pull request. Address each of its comments
 before asking for a merge — fix it, or reply with the reason it does not
 apply. An unanswered comment is an open review, whoever wrote it.
 
+## Signed Testnet smoke
+
+Run **signed testnet** from the Actions tab to exercise the packed CLI
+with real writes. Each run funds its own issuer, holder, and spender via
+Friendbot and deploys a fresh Stellar Asset Contract. The holder starts
+with a token balance and the spender starts with zero allowance. The job
+uses generated Testnet keys in memory and needs no repository secrets.
+
+The job expects all SEP-41 checks to pass. Download the artifact for
+`report/report.json` and `run.log` if a check fails. If setup fails before
+the CLI starts, the log identifies the step that failed.
+
 ## Release
 
 Before tagging:
