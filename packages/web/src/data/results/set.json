@@ -1,10 +1,10 @@
 {
   "schema": "soroban-guard/report@1",
-  "toolVersion": "0.4.5",
+  "toolVersion": "0.5.1",
   "standard": "SEP-41",
   "contractId": "CDABMBRIDJKHHNYHEQLE3GEINB5EKHGW62SDEXEOKNPKUF2MEJQVYLV5",
   "rpcUrl": "https://soroban-testnet.stellar.org",
-  "ranAt": "2026-10-19T14:36:26.145Z",
+  "ranAt": "2026-11-28T16:49:15.374Z",
   "exitCode": 0,
   "summary": {
     "total": 16,
@@ -24,9 +24,9 @@
       "expected": "u32 decimal precision",
       "actual": "returned 7",
       "evidence": {
-        "ledger": 5279401
+        "ledger": 5972182
       },
-      "durationMs": 312
+      "durationMs": 322
     },
     {
       "id": "sep41-balance",
@@ -35,11 +35,11 @@
       "requirement": "required",
       "status": "PASS",
       "expected": "non-negative balance for the holder",
-      "actual": "balance is 99999999964",
+      "actual": "balance is 99999999884",
       "evidence": {
-        "ledger": 5279401
+        "ledger": 5972182
       },
-      "durationMs": 301
+      "durationMs": 341
     },
     {
       "id": "sep41-allowance",
@@ -50,9 +50,9 @@
       "expected": "non-negative allowance from owner to spender",
       "actual": "allowance is 0",
       "evidence": {
-        "ledger": 5279401
+        "ledger": 5972182
       },
-      "durationMs": 371
+      "durationMs": 311
     },
     {
       "id": "sep41-name",
@@ -63,9 +63,9 @@
       "expected": "string token name",
       "actual": "name is \"Soroban Example Token\"",
       "evidence": {
-        "ledger": 5279401
+        "ledger": 5972182
       },
-      "durationMs": 397
+      "durationMs": 323
     },
     {
       "id": "sep41-symbol",
@@ -76,9 +76,9 @@
       "expected": "string token symbol",
       "actual": "symbol is \"SET\"",
       "evidence": {
-        "ledger": 5279401
+        "ledger": 5972182
       },
-      "durationMs": 300
+      "durationMs": 335
     },
     {
       "id": "sep41-transfer_from-unauthorized",
@@ -89,9 +89,9 @@
       "expected": "transfer_from refuses a spender with no allowance from the holder",
       "actual": "an unauthorized spend was refused",
       "evidence": {
-        "error": "Transaction simulation failed: \"HostError: Error(WasmVm, InvalidAction)\n\nEvent log (newest first):\n   0: [Diagnostic Event] contract:CDABMBRIDJKHHNYHEQLE3GEINB5EKHGW62SDEXEOKNPKUF2MEJQVYLV5, topics:[error, Error(WasmVm, InvalidAction)], data:[\"VM call trapped: UnreachableCodeReached\", transfer_from]\n   1: [Diagnostic Event] topics:[fn_call, CDABMBRIDJKHHNYHEQLE3GEINB5EKHGW62SDEXEOKNPKUF2MEJQVYLV5, transfer_from], data:[GDS6R6VS3OTSWVVYS6G5XXO3QBW5BBIAKQGCMA44PWNLCWY2SVGWCC25, GDMEI62DG7T56E2CRGHQBK66ZT73ITHV5VMNCUZUQLO53RHUAPVDGCDU, GDS6R6VS3OTSWVVYS6G5XXO3QBW5BBIAKQGCMA44PWNLCWY2SVGWCC25, 1]\n\""
+        "error": "HostError: Error(WasmVm, InvalidAction)\n\nEvent log (oldest first):\n   0: [Diagnostic Event] topics:[fn_call, c01606281a5473b70724164d9888687a451cd6f6a4325c8e535eaa174c22615c, transfer_from], data:[GBGGCUZZDRWDTOI246OIC52Y2PQHBU4EHTIJ6GXP5LS2IZWK6CNGHVZQ, GDMEI62DG7T56E2CRGHQBK66ZT73ITHV5VMNCUZUQLO53RHUAPVDGCDU, GBGGCUZZDRWDTOI246OIC52Y2PQHBU4EHTIJ6GXP5LS2IZWK6CNGHVZQ, 1]\n   1: [Diagnostic Event] contract:CDABMBRIDJKHHNYHEQLE3GEINB5EKHGW62SDEXEOKNPKUF2MEJQVYLV5, topics:[error, Error(WasmVm, InvalidAction)], data:[\"VM call trapped: UnreachableCodeReached\", transfer_from]"
       },
-      "durationMs": 1744
+      "durationMs": 1602
     },
     {
       "id": "sep41-transfer-zero-amount",
@@ -100,20 +100,20 @@
       "requirement": "required",
       "status": "PASS",
       "expected": "a transfer of zero leaves both balances unchanged",
-      "actual": "the call was accepted and both balances held, at 99999999964 and 18",
+      "actual": "the call was accepted and both balances held, at 99999999884 and 0",
       "evidence": {
         "before": {
-          "holder": "99999999964",
-          "recipient": "18"
+          "holder": "99999999884",
+          "recipient": "0"
         },
         "after": {
-          "holder": "99999999964",
-          "recipient": "18"
+          "holder": "99999999884",
+          "recipient": "0"
         },
-        "txHash": "af93e1bb4cd74cbcabf43607f1fedbe5c4939bca24759c495b7b2fe5d5ef4b9c",
-        "ledger": 5279403
+        "txHash": "e3aeec038161a36a0315da6db0bbc217179a447d6fda200237b55ee58d6484d4",
+        "ledger": 5972184
       },
-      "durationMs": 8142
+      "durationMs": 7139
     },
     {
       "id": "sep41-transfer-self",
@@ -122,18 +122,18 @@
       "requirement": "required",
       "status": "PASS",
       "expected": "a transfer to oneself leaves the balance unchanged",
-      "actual": "the call was accepted and the balance held at 99999999964",
+      "actual": "the call was accepted and the balance held at 99999999884",
       "evidence": {
         "before": {
-          "holder": "99999999964"
+          "holder": "99999999884"
         },
         "after": {
-          "holder": "99999999964"
+          "holder": "99999999884"
         },
-        "txHash": "95418b1a1a3a760652a3d25284ab02d6ea523d7b77d353e875a0c248182eb45c",
-        "ledger": 5279405
+        "txHash": "295b036631781fd73842e75d1a83431cde66f30f96d0470876e9e541744bc8b8",
+        "ledger": 5972185
       },
-      "durationMs": 18780
+      "durationMs": 4163
     },
     {
       "id": "sep41-transfer-negative-amount",
@@ -145,12 +145,12 @@
       "actual": "a transfer of -1 was refused",
       "evidence": {
         "before": {
-          "holder": "99999999964",
-          "recipient": "18"
+          "holder": "99999999884",
+          "recipient": "0"
         },
-        "error": "Transaction simulation failed: \"HostError: Error(WasmVm, InvalidAction)\n\nEvent log (newest first):\n   0: [Diagnostic Event] contract:CDABMBRIDJKHHNYHEQLE3GEINB5EKHGW62SDEXEOKNPKUF2MEJQVYLV5, topics:[error, Error(WasmVm, InvalidAction)], data:[\"VM call trapped: UnreachableCodeReached\", transfer]\n   1: [Diagnostic Event] topics:[fn_call, CDABMBRIDJKHHNYHEQLE3GEINB5EKHGW62SDEXEOKNPKUF2MEJQVYLV5, transfer], data:[GDMEI62DG7T56E2CRGHQBK66ZT73ITHV5VMNCUZUQLO53RHUAPVDGCDU, GDS6R6VS3OTSWVVYS6G5XXO3QBW5BBIAKQGCMA44PWNLCWY2SVGWCC25, -1]\n\""
+        "error": "HostError: Error(WasmVm, InvalidAction)\n\nEvent log (oldest first):\n   0: [Diagnostic Event] topics:[fn_call, c01606281a5473b70724164d9888687a451cd6f6a4325c8e535eaa174c22615c, transfer], data:[GDMEI62DG7T56E2CRGHQBK66ZT73ITHV5VMNCUZUQLO53RHUAPVDGCDU, GBGGCUZZDRWDTOI246OIC52Y2PQHBU4EHTIJ6GXP5LS2IZWK6CNGHVZQ, -1]\n   1: [Diagnostic Event] contract:CDABMBRIDJKHHNYHEQLE3GEINB5EKHGW62SDEXEOKNPKUF2MEJQVYLV5, topics:[error, Error(WasmVm, InvalidAction)], data:[\"VM call trapped: UnreachableCodeReached\", transfer]"
       },
-      "durationMs": 1203
+      "durationMs": 1261
     },
     {
       "id": "sep41-transfer-over-balance",
@@ -159,15 +159,15 @@
       "requirement": "required",
       "status": "PASS",
       "expected": "transfer refuses to move more than the holder's balance",
-      "actual": "a transfer of 99999999965 against a balance of 99999999964 was refused",
+      "actual": "a transfer of 99999999885 against a balance of 99999999884 was refused",
       "evidence": {
         "before": {
-          "holder": "99999999964",
-          "recipient": "18"
+          "holder": "99999999884",
+          "recipient": "0"
         },
-        "error": "Transaction simulation failed: \"HostError: Error(WasmVm, InvalidAction)\n\nEvent log (newest first):\n   0: [Diagnostic Event] contract:CDABMBRIDJKHHNYHEQLE3GEINB5EKHGW62SDEXEOKNPKUF2MEJQVYLV5, topics:[error, Error(WasmVm, InvalidAction)], data:[\"VM call trapped: UnreachableCodeReached\", transfer]\n   1: [Diagnostic Event] topics:[fn_call, CDABMBRIDJKHHNYHEQLE3GEINB5EKHGW62SDEXEOKNPKUF2MEJQVYLV5, transfer], data:[GDMEI62DG7T56E2CRGHQBK66ZT73ITHV5VMNCUZUQLO53RHUAPVDGCDU, GDS6R6VS3OTSWVVYS6G5XXO3QBW5BBIAKQGCMA44PWNLCWY2SVGWCC25, 99999999965]\n\""
+        "error": "HostError: Error(WasmVm, InvalidAction)\n\nEvent log (oldest first):\n   0: [Diagnostic Event] topics:[fn_call, c01606281a5473b70724164d9888687a451cd6f6a4325c8e535eaa174c22615c, transfer], data:[GDMEI62DG7T56E2CRGHQBK66ZT73ITHV5VMNCUZUQLO53RHUAPVDGCDU, GBGGCUZZDRWDTOI246OIC52Y2PQHBU4EHTIJ6GXP5LS2IZWK6CNGHVZQ, 99999999885]\n   1: [Diagnostic Event] contract:CDABMBRIDJKHHNYHEQLE3GEINB5EKHGW62SDEXEOKNPKUF2MEJQVYLV5, topics:[error, Error(WasmVm, InvalidAction)], data:[\"VM call trapped: UnreachableCodeReached\", transfer]"
       },
-      "durationMs": 1247
+      "durationMs": 1263
     },
     {
       "id": "sep41-transfer",
@@ -179,17 +179,17 @@
       "actual": "holder -1, recipient +1",
       "evidence": {
         "before": {
-          "holder": "99999999964",
-          "recipient": "18"
+          "holder": "99999999884",
+          "recipient": "0"
         },
         "after": {
-          "holder": "99999999963",
-          "recipient": "19"
+          "holder": "99999999883",
+          "recipient": "1"
         },
-        "txHash": "55809597badd19af2ffa34db5c2c82641babe0384f5600950c27356ef883768a",
-        "ledger": 5279408
+        "txHash": "d08f77925df90df36714135c761779cf1f6ed22c6013fe50f9cb8f1aa90ccbbe",
+        "ledger": 5972187
       },
-      "durationMs": 3745
+      "durationMs": 7225
     },
     {
       "id": "sep41-approve",
@@ -206,11 +206,11 @@
         "after": {
           "allowance": "2"
         },
-        "txHash": "7ade5eaf5e15d15d4be58198ad7fa9b814f9d0059fda2540f786fde5b4a6ff07",
-        "ledger": 5279409,
-        "confirmTxHash": "c266c70bdea2ab8abd838563a0716c9b8d5d864dd3c790937c5b79ffe0f98f37"
+        "txHash": "7197082a44a107b2f47d902fc761af235af08ca346b2b81c559892b3f9b3f245",
+        "ledger": 5972188,
+        "confirmTxHash": "6a558051e821fd94b415bc6fdd1a0824c44329c77f479feb0110a1e9e250f633"
       },
-      "durationMs": 9596
+      "durationMs": 10372
     },
     {
       "id": "sep41-transfer_from",
@@ -222,19 +222,19 @@
       "actual": "holder -1, recipient +1, allowance -1",
       "evidence": {
         "before": {
-          "holder": "99999999963",
-          "recipient": "19",
+          "holder": "99999999883",
+          "recipient": "1",
           "allowance": "2"
         },
         "after": {
-          "holder": "99999999962",
-          "recipient": "20",
+          "holder": "99999999882",
+          "recipient": "2",
           "allowance": "1"
         },
-        "txHash": "8bdc4f0d2a73afb0c84ebc32885a7ef2f05885151ede9b0518a6a05a5fb33d83",
-        "ledger": 5279411
+        "txHash": "da2da78376fab2b10d9cc2ca79a34cf4b769dad51220eddcd2a276cb2d8e7150",
+        "ledger": 5972190
       },
-      "durationMs": 18934
+      "durationMs": 5772
     },
     {
       "id": "sep41-burn",
@@ -246,15 +246,15 @@
       "actual": "holder -1",
       "evidence": {
         "before": {
-          "holder": "99999999962"
+          "holder": "99999999882"
         },
         "after": {
-          "holder": "99999999961"
+          "holder": "99999999881"
         },
-        "txHash": "2f6b14f3866b46e4bbf9643147220430a5bd9993a49a106108ba706ff7fe9bf2",
-        "ledger": 5279415
+        "txHash": "1f344cc7e84c53b6c7432c1831dfcd4cd53a99ab6ee52f6d1039abc6a374cfdd",
+        "ledger": 5972191
       },
-      "durationMs": 5706
+      "durationMs": 4289
     },
     {
       "id": "sep41-burn_from",
@@ -266,19 +266,19 @@
       "actual": "holder -1, spender 0, allowance -1",
       "evidence": {
         "before": {
-          "holder": "99999999961",
-          "spender": "20",
+          "holder": "99999999881",
+          "spender": "2",
           "allowance": "1"
         },
         "after": {
-          "holder": "99999999960",
-          "spender": "20",
+          "holder": "99999999880",
+          "spender": "2",
           "allowance": "0"
         },
-        "txHash": "eadcf06451b60cc5ac1049c194cf0a1886203e3b78dcf357bf3d9ce1fc37f982",
-        "ledger": 5279416
+        "txHash": "975875fb9e4b5599bbdf373832705569365042e15bd159e34fe509b96d7447dd",
+        "ledger": 5972192
       },
-      "durationMs": 18398
+      "durationMs": 5888
     },
     {
       "id": "sep41-transfer_from-expired",
@@ -287,18 +287,18 @@
       "requirement": "required",
       "status": "PASS",
       "expected": "transfer_from refuses a spend against an allowance whose live_until_ledger has passed",
-      "actual": "a spend against an allowance that expired at ledger 5279424 was refused at ledger 5279425",
+      "actual": "a spend against an allowance that expired at ledger 5972198 was refused at ledger 5972199, in which the holder held 99999999880 and the recipient could receive",
       "evidence": {
         "before": {
           "granted": "1",
           "allowance": "0",
-          "holder": "99999999960",
-          "recipient": "20"
+          "holder": "99999999880",
+          "recipient": "2"
         },
-        "ledger": 5279425,
-        "error": "Transaction simulation failed: \"HostError: Error(WasmVm, InvalidAction)\n\nEvent log (newest first):\n   0: [Diagnostic Event] contract:CDABMBRIDJKHHNYHEQLE3GEINB5EKHGW62SDEXEOKNPKUF2MEJQVYLV5, topics:[error, Error(WasmVm, InvalidAction)], data:[\"VM call trapped: UnreachableCodeReached\", transfer_from]\n   1: [Diagnostic Event] topics:[fn_call, CDABMBRIDJKHHNYHEQLE3GEINB5EKHGW62SDEXEOKNPKUF2MEJQVYLV5, transfer_from], data:[GDS6R6VS3OTSWVVYS6G5XXO3QBW5BBIAKQGCMA44PWNLCWY2SVGWCC25, GDMEI62DG7T56E2CRGHQBK66ZT73ITHV5VMNCUZUQLO53RHUAPVDGCDU, GDS6R6VS3OTSWVVYS6G5XXO3QBW5BBIAKQGCMA44PWNLCWY2SVGWCC25, 1]\n\""
+        "ledger": 5972199,
+        "error": "HostError: Error(WasmVm, InvalidAction)\n\nEvent log (oldest first):\n   0: [Diagnostic Event] topics:[fn_call, c01606281a5473b70724164d9888687a451cd6f6a4325c8e535eaa174c22615c, transfer_from], data:[GBGGCUZZDRWDTOI246OIC52Y2PQHBU4EHTIJ6GXP5LS2IZWK6CNGHVZQ, GDMEI62DG7T56E2CRGHQBK66ZT73ITHV5VMNCUZUQLO53RHUAPVDGCDU, GBGGCUZZDRWDTOI246OIC52Y2PQHBU4EHTIJ6GXP5LS2IZWK6CNGHVZQ, 1]\n   1: [Diagnostic Event] contract:CDABMBRIDJKHHNYHEQLE3GEINB5EKHGW62SDEXEOKNPKUF2MEJQVYLV5, topics:[error, Error(WasmVm, InvalidAction)], data:[\"VM call trapped: UnreachableCodeReached\", transfer_from]"
       },
-      "durationMs": 34629
+      "durationMs": 37251
     }
   ]
 }
