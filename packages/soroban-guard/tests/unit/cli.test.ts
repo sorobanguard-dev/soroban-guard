@@ -47,6 +47,7 @@ describe("cli progress", () => {
 
 	it("keeps piped stderr quiet by default", () => {
 		const { code, out, err } = run(args, {}, preload);
+		expect(code).toBe(1);
 		expect(JSON.parse(out)).toMatchObject({
 			exitCode: code,
 			summary: { total: 16 },
@@ -156,9 +157,10 @@ describe("cli arguments", () => {
 
 	// Strkey carries a checksum: C and 55 As has the right shape and is
 	// still not a contract id.
-	it("rejects a contract id that fails its checksum", () => {
-		const { code, err } = run([`C${"A".repeat(55)}`]);
+	it("rejects an invalid contract id before writing a JSON report", () => {
+		const { code, err, out } = run([`C${"A".repeat(55)}`, "--format", "json"]);
 		expect(code).toBe(2);
+		expect(out).toBe("");
 		expect(err).toMatch(/invalid contract ID/);
 	});
 

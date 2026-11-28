@@ -294,12 +294,13 @@ to a keyed run.
 | `1`  | a verified violation |
 | `2`  | unknown — the run failed, or members went unassessed |
 
-`0` requires every required member to have been assessed and passed, which
-in practice means a run configured with both keys against a token the
-holder actually holds. Anything less reports `2`: a member the suite could
-not exercise is unknown, not conformant.
+`0` requires a conclusive run, which typically needs both keys and a holder
+with enough of the token. A verified violation takes precedence over
+unassessed checks and returns `1`. A run with unassessed checks and no
+verified violation returns `2`.
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for the development workflow.
+See the [JSON report contract](docs/report-schema.md) for integration
+details and [CONTRIBUTING.md](CONTRIBUTING.md) for the development workflow.
 
 ## Web UI
 
