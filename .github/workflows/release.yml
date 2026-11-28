@@ -1,0 +1,177 @@
+name: release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+concurrency:
+  group: release-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      artifact-id: ${{ steps.upload.outputs.artifact-id }}
+      integrity: ${{ steps.pack.outputs.integrity }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          package-manager-cache: false
+
+      - name: Check release version and tag
+        id: version
+        env:
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          version=$(node -p "require('./packages/soroban-guard/package.json').version")
+          if ! [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::Expected a stable package version (X.Y.Z)."
+            exit 1
+          fi
+          for manifest in ./package.json ./packages/web/package.json; do
+            if [ "$(node -p 'require(process.argv[1]).version' "$manifest")" != "$version" ]; then
+              echo "::error::$manifest does not match the CLI version $version."
+              exit 1
+            fi
+          done
+          if ! grep -Fq "## [$version] — " CHANGELOG.md; then
+            echo "::error::Missing changelog entry for $version."
+            exit 1
+          fi
+          if [ "$GITHUB_REF_TYPE" = tag ]; then
+            if [ "$GITHUB_REF_NAME" != "v$version" ]; then
+              echo "::error::Expected tag v$version for this commit."
+              exit 1
+            fi
+            if ! git merge-base --is-ancestor HEAD "refs/remotes/origin/$DEFAULT_BRANCH"; then
+              echo "::error::The tagged commit must be on $DEFAULT_BRANCH."
+              exit 1
+            fi
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+      - run: pnpm typecheck
+      - run: pnpm check:ci
+      - run: pnpm test
+
+      - name: Pack and test the release tarball
+        id: pack
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          mkdir "$RUNNER_TEMP/release"
+          pnpm --filter soroban-guard pack --pack-destination "$RUNNER_TEMP/release"
+          cd "$RUNNER_TEMP/release"
+          tarball="./soroban-guard-$VERSION.tgz"
+          digest=$(openssl dgst -sha512 -binary "$tarball" | openssl base64 -A)
+          npm init -y >/dev/null
+          npm install --ignore-scripts --no-audit --no-fund "$tarball"
+          cli=./node_modules/.bin/soroban-guard
+          test "$("$cli" --version)" = "$VERSION"
+          "$cli" --help
+          status=0
+          "$cli" || status=$?
+          test "$status" -eq 2
+          npm publish "$tarball" --dry-run --ignore-scripts --access public
+          echo "integrity=sha512-$digest" >> "$GITHUB_OUTPUT"
+          printf 'Tested `soroban-guard@%s` from `%s`.\n\n`sha512-%s`\n' \
+            "$VERSION" "$GITHUB_SHA" "$digest" >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        id: upload
+        with:
+          name: soroban-guard-${{ steps.version.outputs.version }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/release/soroban-guard-${{ steps.version.outputs.version }}.tgz
+          if-no-files-found: error
+
+  publish:
+    if: github.event_name == 'push' && github.ref_type == 'tag'
+    needs: package
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      id-token: write
+    steps:
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          artifact-ids: ${{ needs.package.outputs.artifact-id }}
+          path: ${{ runner.temp }}/release
+
+      - name: Publish the tested tarball and verify npm integrity
+        working-directory: ${{ runner.temp }}/release
+        env:
+          VERSION: ${{ needs.package.outputs.version }}
+          EXPECTED_INTEGRITY: ${{ needs.package.outputs.integrity }}
+        run: |
+          tarball="./soroban-guard-$VERSION.tgz"
+          digest=$(openssl dgst -sha512 -binary "$tarball" | openssl base64 -A)
+          if [ "sha512-$digest" != "$EXPECTED_INTEGRITY" ]; then
+            echo "::error::Downloaded tarball differs from the tested artifact."
+            exit 1
+          fi
+
+          registry_status() {
+            curl --silent --show-error --max-time 20 --header 'Cache-Control: no-cache' \
+              --output npm-release.json --write-out '%{http_code}' \
+              "https://registry.npmjs.org/soroban-guard/$VERSION"
+          }
+          status=$(registry_status)
+          if [ "$status" = 404 ]; then
+            npm publish "$tarball" --ignore-scripts --access public
+            for attempt in {1..5}; do
+              status=$(registry_status)
+              if [ "$status" != 404 ] || [ "$attempt" = 5 ]; then
+                break
+              fi
+              sleep 2
+            done
+          fi
+          if [ "$status" != 200 ]; then
+            echo "::error::npm registry returned HTTP $status for soroban-guard@$VERSION."
+            exit 1
+          fi
+          published=$(node -p "require('./npm-release.json').dist.integrity")
+          if [ "$published" != "$EXPECTED_INTEGRITY" ]; then
+            echo "::error::The registry version differs from the tested tarball. Check the original publish before releasing on GitHub."
+            exit 1
+          fi
+
+      - name: Publish the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          if draft=$(gh release view "$GITHUB_REF_NAME" --json isDraft --jq .isDraft); then
+            if [ "$draft" = true ]; then
+              gh release edit "$GITHUB_REF_NAME" --draft=false
+            else
+              echo "GitHub release $GITHUB_REF_NAME is already published."
+            fi
+          else
+            gh release create "$GITHUB_REF_NAME" --verify-tag --generate-notes
+          fi

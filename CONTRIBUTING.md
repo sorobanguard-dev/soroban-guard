@@ -107,24 +107,40 @@ the CLI starts, the log identifies the step that failed.
 
 ## Release
 
-Before tagging:
+1. Bump `package.json`, `packages/soroban-guard/package.json`, and
+   `packages/web/package.json` together. Add a dated entry to `CHANGELOG.md`
+   and merge the release PR. Wait for CI on the merged commit.
+2. Run the **release** workflow manually on `main` and confirm the run uses
+   the release commit. The packaging job installs and smoke-tests the CLI
+   on Node 24, then uploads the tarball and shows its SHA-512 integrity in
+   the run summary. A manual run has no publishing permissions.
+3. Install the tarball in a scratch directory. Run it against a real Testnet
+   token three times with both keys and save each JSON report separately.
+   Run sequentially when reusing accounts. Check that the spender starts
+   each run with zero allowance and that the three verdict sets agree check
+   by check before tagging. For a fresh asset and accounts, run the
+   **signed testnet** workflow three times on the same release commit.
+4. Tag that same commit `vX.Y.Z` and push the tag. The workflow checks that
+   the tag matches the version and points to a commit on `main`, then runs
+   packaging again. The publish job downloads that run's tested tarball
+   and checks its integrity before uploading to npm. It checks npm's
+   integrity value before publishing the GitHub release. A draft on the
+   tag supplies the release notes. Otherwise GitHub generates them.
 
-1. Batch fixes into one release; a website-only change needs none.
-2. Run the release candidate against real tokens three times with both
-   keys (`node packages/soroban-guard/src/cli.ts <id> --format json`),
-   using a spender with no allowance left over from an earlier run.
-   Tag only if the three runs agree check for check.
-3. CI is green on the release commit.
+Configure [npm trusted publishing](https://docs.npmjs.com/trusted-publishers/)
+for `sorobanguard-dev/soroban-guard` with the workflow filename
+`release.yml` and permission to run `npm publish`.
 
-Bump the version in the manifests together (`package.json`,
-`packages/soroban-guard/package.json`, and `packages/web/package.json`,
-which has matched since 0.4.1) — a release that moves one and not the
-other repeats the 0.2.0/0.4.1 drift. Then CHANGELOG entry, merge, tag
-`vX.Y.Z`, push tag, and publish from the package directory:
+If publishing fails, rerun the failed job to reuse the tested artifact. The
+workflow accepts an existing npm version when its integrity matches and
+leaves an already-published GitHub release as it is. For a manual publish,
+use the tested tarball from outside the workspace:
 
 ```sh
-cd packages/soroban-guard && npm publish   # prepack builds dist/
+cd /tmp
+npm publish /path/to/soroban-guard-X.Y.Z.tgz --ignore-scripts --access public
 ```
 
-The website's `/changelog` page is built from `CHANGELOG.md`, so it
-shows the release on the next deploy with nothing else to update.
+After publishing, confirm `npm view soroban-guard dist-tags.latest` and run
+`npx --yes soroban-guard@X.Y.Z --version` from outside the workspace. The
+website's `/changelog` page is built from `CHANGELOG.md` on deploy.
