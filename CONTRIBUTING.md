@@ -113,7 +113,8 @@ the CLI starts, the log identifies the step that failed.
 2. Run the **release** workflow manually on `main` and confirm the run uses
    the release commit. The packaging job installs and smoke-tests the CLI
    on Node 24, then uploads the tarball and shows its SHA-512 integrity in
-   the run summary. A manual run has no publishing permissions.
+   the run summary. A manual run has no publishing permissions and works
+   for versions already on npm.
 3. Install the tarball in a scratch directory. Run it against a real Testnet
    token three times with both keys and save each JSON report separately.
    Run sequentially when reusing accounts. Check that the spender starts
@@ -129,7 +130,8 @@ the CLI starts, the log identifies the step that failed.
 
 Configure [npm trusted publishing](https://docs.npmjs.com/trusted-publishers/)
 for `sorobanguard-dev/soroban-guard` with the workflow filename
-`release.yml` and permission to run `npm publish`.
+`release.yml` and permission to run `npm publish`. The publish job checks
+that npm is at least 11.5.1 before uploading a new version.
 
 If publishing fails, rerun the failed job to reuse the tested artifact. The
 workflow accepts an existing npm version when its integrity matches and
