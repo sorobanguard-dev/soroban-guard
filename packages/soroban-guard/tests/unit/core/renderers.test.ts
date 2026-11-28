@@ -98,13 +98,58 @@ describe("ansi", () => {
 });
 
 describe("renderJsonReport", () => {
-	it("round-trips and pins the schema", () => {
-		const parsed = JSON.parse(renderJsonReport(common([result("PASS")])));
-		expect(parsed.schema).toBe("soroban-guard/report@1");
-		expect(parsed.contractId).toBe(CONTRACT);
-		expect(parsed.ranAt).toBe(RAN_AT);
-		expect(parsed.results).toHaveLength(1);
-		expect(parsed.results[0].clause).toBe("SEP-41 §transfer");
+	it("serializes the report@1 fields and decimal-string evidence", () => {
+		const txHash = "a".repeat(64);
+		const parsed = JSON.parse(
+			renderJsonReport({
+				...common([
+					result("PASS", {
+						evidence: {
+							before: { holder: "9007199254740993", recipient: "0" },
+							after: { holder: "9007199254740992", recipient: "1" },
+							txHash,
+							ledger: 100,
+						},
+					}),
+				]),
+				toolVersion: "0.5.1",
+			}),
+		);
+		expect(parsed).toEqual({
+			schema: "soroban-guard/report@1",
+			toolVersion: "0.5.1",
+			standard: "SEP-41",
+			contractId: CONTRACT,
+			rpcUrl: RPC,
+			ranAt: RAN_AT,
+			exitCode: 0,
+			summary: {
+				total: 1,
+				pass: 1,
+				fail: 0,
+				unverifiable: 0,
+				skipped: 0,
+				notImplemented: 0,
+			},
+			results: [
+				{
+					id: "sep41-transfer",
+					clause: "SEP-41 §transfer",
+					layer: "behavior",
+					requirement: "required",
+					status: "PASS",
+					expected: "transfer moves the amount from holder to recipient",
+					actual: "holder -1, recipient +1",
+					evidence: {
+						before: { holder: "9007199254740993", recipient: "0" },
+						after: { holder: "9007199254740992", recipient: "1" },
+						txHash,
+						ledger: 100,
+					},
+					durationMs: 1,
+				},
+			],
+		});
 	});
 
 	// A report quoted later has to say which code produced it.
