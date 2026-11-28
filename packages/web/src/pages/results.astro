@@ -76,7 +76,7 @@ const total = (runs: readonly ConformanceRun[]) =>
 const TOTAL = total(CONFORMANCE_RUNS);
 
 const title = "Real-token results — soroban-guard";
-const description = `SEP-41 conformance of ${CONFORMANCE_RUNS.length} testnet contracts — the tokens of stellar/soroban-examples and OpenZeppelin, and Stellar's asset contracts for the native and a custom asset — run by soroban-guard ${CONFORMANCE_VERSION} on ${CONFORMANCE_DATE}, every write linked to its transaction.`;
+const description = `SEP-41 conformance of ${CONFORMANCE_RUNS.length} testnet contracts, checked by soroban-guard ${CONFORMANCE_VERSION} on ${CONFORMANCE_DATE}, with links to recorded transactions.`;
 ---
 
 <Base
@@ -98,8 +98,7 @@ const description = `SEP-41 conformance of ${CONFORMANCE_RUNS.length} testnet co
 				<strong>{TOTAL.pass} pass · {TOTAL.fail} fail · {TOTAL.unverifiable} unverifiable</strong>.
 			</p>
 			<p>
-				Every check that writes links to the transaction it settled — click
-				a ✓ to see it on the ledger.
+				A linked verdict opens the transaction recorded for that check.
 			</p>
 			<p class="where">{CONFORMANCE_NETWORK}</p>
 		</header>
@@ -224,18 +223,21 @@ const description = `SEP-41 conformance of ${CONFORMANCE_RUNS.length} testnet co
 				asset contracts are the network's own.
 			</p>
 			<p>
-				Without keys, anyone gets the five reads. The writes need a holder
-				with at least five units and a second, funded account. The two
-				example tokens mint only to their admin, so their write rows can be
-				repeated by whoever holds their units, not by any visitor.
+				Use funded holder and spender addresses to exercise the reads
+				without signing. For the write checks, use both keys, a holder
+				with at least five token units, and a spender with zero allowance
+				from that holder. For an issued Stellar asset, both accounts
+				need a trustline.
 			</p>
-			<pre><code>{`# the reads
-npx soroban-guard CDABMBRIDJKHHNYHEQLE3GEINB5EKHGW62SDEXEOKNPKUF2MEJQVYLV5
+			<pre><code>{`# Read-only run
+OWNER_ADDRESS=$(stellar keys address owner) \\
+SPENDER_ADDRESS=$(stellar keys address spender) \\
+  npx soroban-guard@${CONFORMANCE_VERSION} CDABMBRIDJKHHNYHEQLE3GEINB5EKHGW62SDEXEOKNPKUF2MEJQVYLV5
 
-# all sixteen: a holder and a second account, both funded on testnet
+# Signed run
 OWNER_SECRET=$(stellar keys secret owner) \\
 SPENDER_SECRET=$(stellar keys secret spender) \\
-  npx soroban-guard <contract-id> --format json > report.json`}</code></pre>
+  npx soroban-guard@${CONFORMANCE_VERSION} <contract-id> --format json > report.json`}</code></pre>
 			<p class="fine">
 				Progress stays in the terminal while the final report is saved to
 				<code>report.json</code>. Use <code>--format md</code> for a Markdown

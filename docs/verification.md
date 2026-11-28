@@ -313,3 +313,26 @@ This is also why those four checks run least-destructive first
 (`zero → self → negative-amount → over-balance`): ordered the other way,
 the same contract reports one failure and eight unverifiable rows, and two
 real defects go untested. Pinned by unit test in `suite.test.ts`.
+
+## Run of 2026-11-28 — published 0.5.1
+
+The four [real-token results](https://sorobanguard.com/results) reports
+come from a fresh npm install of `soroban-guard@0.5.1`. The signed Testnet
+runs used a funded holder and a fresh spender with zero starting allowance
+on all four contracts.
+
+| Contract | Report | PASS | FAIL | UNVERIFIABLE | Exit | Example transaction |
+| --- | --- | ---: | ---: | ---: | ---: | --- |
+| TEST | [JSON](../packages/web/src/data/results/test.json) | 16 | 0 | 0 | 0 | [Transfer](https://stellar.expert/explorer/testnet/tx/d0ae60588bc71e996ceeb0e30e6f1688b261a64b917b88cb7a03fc5b5ad8fbeb) |
+| SET | [JSON](../packages/web/src/data/results/set.json) | 16 | 0 | 0 | 0 | [Transfer](https://stellar.expert/explorer/testnet/tx/d08f77925df90df36714135c761779cf1f6ed22c6013fe50f9cb8f1aa90ccbbe) |
+| OZPT | [JSON](../packages/web/src/data/results/ozpt.json) | 16 | 0 | 0 | 0 | [Transfer](https://stellar.expert/explorer/testnet/tx/324d77903a8f2bf0d4695880fb4471d56352f9157b23504d1b3e81b65faab762) |
+| Native XLM | [JSON](../packages/web/src/data/results/xlm.json) | 10 | 2 | 4 | 1 | [Transfer](https://stellar.expert/explorer/testnet/tx/8e71488745ad1bd865cc6e26fbf5dea2584159096112ad70458f48bcd91cb2a5) |
+
+Horizon confirmed all 30 transaction hashes recorded in the reports,
+including the second approval in each `approve` check. The decoded
+transactions matched the reported contracts and methods. SET and OZPT
+still served the WASM hashes listed on the results page.
+
+XLM refuses both burn methods. Its four transfer checks settled, but their
+balance measurements could not separate the XLM fees from the movements
+under test.

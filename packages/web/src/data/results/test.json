@@ -1,10 +1,10 @@
 {
   "schema": "soroban-guard/report@1",
-  "toolVersion": "0.4.5",
+  "toolVersion": "0.5.1",
   "standard": "SEP-41",
   "contractId": "CARQGEM3RDSWA2SRZDL6LDBOEQWQHS74BOL5V62QXIGMOBIMIX5YTYYN",
   "rpcUrl": "https://soroban-testnet.stellar.org",
-  "ranAt": "2026-10-19T19:21:09.666Z",
+  "ranAt": "2026-11-28T16:47:46.474Z",
   "exitCode": 0,
   "summary": {
     "total": 16,
@@ -24,9 +24,9 @@
       "expected": "u32 decimal precision",
       "actual": "returned 7",
       "evidence": {
-        "ledger": 5282817
+        "ledger": 5972164
       },
-      "durationMs": 333
+      "durationMs": 296
     },
     {
       "id": "sep41-balance",
@@ -35,11 +35,11 @@
       "requirement": "required",
       "status": "PASS",
       "expected": "non-negative balance for the holder",
-      "actual": "balance is 898999910",
+      "actual": "balance is 898999740",
       "evidence": {
-        "ledger": 5282817
+        "ledger": 5972164
       },
-      "durationMs": 307
+      "durationMs": 304
     },
     {
       "id": "sep41-allowance",
@@ -50,9 +50,9 @@
       "expected": "non-negative allowance from owner to spender",
       "actual": "allowance is 0",
       "evidence": {
-        "ledger": 5282817
+        "ledger": 5972164
       },
-      "durationMs": 305
+      "durationMs": 297
     },
     {
       "id": "sep41-name",
@@ -63,9 +63,9 @@
       "expected": "string token name",
       "actual": "name is \"TEST:GAY3IYUGLOBCIFRCDULGBSR4VYREU4BITUAIYTUD64KN232LJBOHSUGY\"",
       "evidence": {
-        "ledger": 5282817
+        "ledger": 5972164
       },
-      "durationMs": 300
+      "durationMs": 309
     },
     {
       "id": "sep41-symbol",
@@ -76,9 +76,9 @@
       "expected": "string token symbol",
       "actual": "symbol is \"TEST\"",
       "evidence": {
-        "ledger": 5282817
+        "ledger": 5972164
       },
-      "durationMs": 300
+      "durationMs": 301
     },
     {
       "id": "sep41-transfer_from-unauthorized",
@@ -89,9 +89,9 @@
       "expected": "transfer_from refuses a spender with no allowance from the holder",
       "actual": "an unauthorized spend was refused",
       "evidence": {
-        "error": "Transaction simulation failed: \"HostError: Error(Contract, #9)\n\nEvent log (newest first):\n   0: [Diagnostic Event] contract:CARQGEM3RDSWA2SRZDL6LDBOEQWQHS74BOL5V62QXIGMOBIMIX5YTYYN, topics:[error, Error(Contract, #9)], data:[\"not enough allowance to spend\", 0, 1]\n   1: [Diagnostic Event] topics:[fn_call, CARQGEM3RDSWA2SRZDL6LDBOEQWQHS74BOL5V62QXIGMOBIMIX5YTYYN, transfer_from], data:[GDS6R6VS3OTSWVVYS6G5XXO3QBW5BBIAKQGCMA44PWNLCWY2SVGWCC25, GDMEI62DG7T56E2CRGHQBK66ZT73ITHV5VMNCUZUQLO53RHUAPVDGCDU, GDS6R6VS3OTSWVVYS6G5XXO3QBW5BBIAKQGCMA44PWNLCWY2SVGWCC25, 1]\n\""
+        "error": "HostError: Error(Contract, #9)\n\nEvent log (oldest first):\n   0: [Diagnostic Event] topics:[fn_call, 2303119b88e5606a51c8d7e58c2e242d03cbfc0b97dafb50ba0cc7050c45fb89, transfer_from], data:[GBGGCUZZDRWDTOI246OIC52Y2PQHBU4EHTIJ6GXP5LS2IZWK6CNGHVZQ, GDMEI62DG7T56E2CRGHQBK66ZT73ITHV5VMNCUZUQLO53RHUAPVDGCDU, GBGGCUZZDRWDTOI246OIC52Y2PQHBU4EHTIJ6GXP5LS2IZWK6CNGHVZQ, 1]\n   1: [Diagnostic Event] contract:CARQGEM3RDSWA2SRZDL6LDBOEQWQHS74BOL5V62QXIGMOBIMIX5YTYYN, topics:[error, Error(Contract, #9)], data:[\"not enough allowance to spend\", 0, 1]"
       },
-      "durationMs": 1531
+      "durationMs": 1534
     },
     {
       "id": "sep41-transfer-zero-amount",
@@ -100,20 +100,20 @@
       "requirement": "required",
       "status": "PASS",
       "expected": "a transfer of zero leaves both balances unchanged",
-      "actual": "the call was accepted and both balances held, at 898999910 and 101000024",
+      "actual": "the call was accepted and both balances held, at 898999740 and 0",
       "evidence": {
         "before": {
-          "holder": "898999910",
-          "recipient": "101000024"
+          "holder": "898999740",
+          "recipient": "0"
         },
         "after": {
-          "holder": "898999910",
-          "recipient": "101000024"
+          "holder": "898999740",
+          "recipient": "0"
         },
-        "txHash": "7a2e11ad6d5e1de6e6d93224faf8b5d13068f876948f1960d4109672b7b0ebd3",
-        "ledger": 5282819
+        "txHash": "641b28728a1f416488aead87f239c3e935d9268cab8d0905ba7f18b76456c8c8",
+        "ledger": 5972166
       },
-      "durationMs": 8095
+      "durationMs": 6978
     },
     {
       "id": "sep41-transfer-self",
@@ -122,18 +122,18 @@
       "requirement": "required",
       "status": "PASS",
       "expected": "a transfer to oneself leaves the balance unchanged",
-      "actual": "the call was accepted and the balance held at 898999910",
+      "actual": "the call was accepted and the balance held at 898999740",
       "evidence": {
         "before": {
-          "holder": "898999910"
+          "holder": "898999740"
         },
         "after": {
-          "holder": "898999910"
+          "holder": "898999740"
         },
-        "txHash": "c5c00eebf880b9c216558c0d9ec90815249f7e6a83e76da525a23c23d95c69e8",
-        "ledger": 5282820
+        "txHash": "dfbca3cd18382d75041e085b5c565bf6169253d3a824d9ff6fce7f1337131e6f",
+        "ledger": 5972167
       },
-      "durationMs": 4934
+      "durationMs": 4101
     },
     {
       "id": "sep41-transfer-negative-amount",
@@ -145,12 +145,12 @@
       "actual": "a transfer of -1 was refused",
       "evidence": {
         "before": {
-          "holder": "898999910",
-          "recipient": "101000024"
+          "holder": "898999740",
+          "recipient": "0"
         },
-        "error": "Transaction simulation failed: \"HostError: Error(Contract, #8)\n\nEvent log (newest first):\n   0: [Diagnostic Event] contract:CARQGEM3RDSWA2SRZDL6LDBOEQWQHS74BOL5V62QXIGMOBIMIX5YTYYN, topics:[error, Error(Contract, #8)], data:[\"negative amount is not allowed\", -1]\n   1: [Diagnostic Event] topics:[fn_call, CARQGEM3RDSWA2SRZDL6LDBOEQWQHS74BOL5V62QXIGMOBIMIX5YTYYN, transfer], data:[GDMEI62DG7T56E2CRGHQBK66ZT73ITHV5VMNCUZUQLO53RHUAPVDGCDU, GDS6R6VS3OTSWVVYS6G5XXO3QBW5BBIAKQGCMA44PWNLCWY2SVGWCC25, -1]\n\""
+        "error": "HostError: Error(Contract, #8)\n\nEvent log (oldest first):\n   0: [Diagnostic Event] topics:[fn_call, 2303119b88e5606a51c8d7e58c2e242d03cbfc0b97dafb50ba0cc7050c45fb89, transfer], data:[GDMEI62DG7T56E2CRGHQBK66ZT73ITHV5VMNCUZUQLO53RHUAPVDGCDU, GBGGCUZZDRWDTOI246OIC52Y2PQHBU4EHTIJ6GXP5LS2IZWK6CNGHVZQ, -1]\n   1: [Diagnostic Event] contract:CARQGEM3RDSWA2SRZDL6LDBOEQWQHS74BOL5V62QXIGMOBIMIX5YTYYN, topics:[error, Error(Contract, #8)], data:[\"negative amount is not allowed\", -1]"
       },
-      "durationMs": 12697
+      "durationMs": 1192
     },
     {
       "id": "sep41-transfer-over-balance",
@@ -159,15 +159,15 @@
       "requirement": "required",
       "status": "PASS",
       "expected": "transfer refuses to move more than the holder's balance",
-      "actual": "a transfer of 898999911 against a balance of 898999910 was refused",
+      "actual": "a transfer of 898999741 against a balance of 898999740 was refused",
       "evidence": {
         "before": {
-          "holder": "898999910",
-          "recipient": "101000024"
+          "holder": "898999740",
+          "recipient": "0"
         },
-        "error": "Transaction simulation failed: \"HostError: Error(Contract, #10)\n\nEvent log (newest first):\n   0: [Diagnostic Event] contract:CARQGEM3RDSWA2SRZDL6LDBOEQWQHS74BOL5V62QXIGMOBIMIX5YTYYN, topics:[error, Error(Contract, #10)], data:[\"resulting balance is not within the allowed range\", 0, -1, 9223372036854775807]\n   1: [Diagnostic Event] topics:[fn_call, CARQGEM3RDSWA2SRZDL6LDBOEQWQHS74BOL5V62QXIGMOBIMIX5YTYYN, transfer], data:[GDMEI62DG7T56E2CRGHQBK66ZT73ITHV5VMNCUZUQLO53RHUAPVDGCDU, GDS6R6VS3OTSWVVYS6G5XXO3QBW5BBIAKQGCMA44PWNLCWY2SVGWCC25, 898999911]\n\""
+        "error": "HostError: Error(Contract, #10)\n\nEvent log (oldest first):\n   0: [Diagnostic Event] topics:[fn_call, 2303119b88e5606a51c8d7e58c2e242d03cbfc0b97dafb50ba0cc7050c45fb89, transfer], data:[GDMEI62DG7T56E2CRGHQBK66ZT73ITHV5VMNCUZUQLO53RHUAPVDGCDU, GBGGCUZZDRWDTOI246OIC52Y2PQHBU4EHTIJ6GXP5LS2IZWK6CNGHVZQ, 898999741]\n   1: [Diagnostic Event] contract:CARQGEM3RDSWA2SRZDL6LDBOEQWQHS74BOL5V62QXIGMOBIMIX5YTYYN, topics:[error, Error(Contract, #10)], data:[\"resulting balance is not within the allowed range\", 0, -1, 9223372036854775807]"
       },
-      "durationMs": 1193
+      "durationMs": 1199
     },
     {
       "id": "sep41-transfer",
@@ -179,17 +179,17 @@
       "actual": "holder -1, recipient +1",
       "evidence": {
         "before": {
-          "holder": "898999910",
-          "recipient": "101000024"
+          "holder": "898999740",
+          "recipient": "0"
         },
         "after": {
-          "holder": "898999909",
-          "recipient": "101000025"
+          "holder": "898999739",
+          "recipient": "1"
         },
-        "txHash": "2541e23ddcfc82f1ea655f7669e4f0636c1089284eff1e76d440ba50350ffef8",
-        "ledger": 5282824
+        "txHash": "d0ae60588bc71e996ceeb0e30e6f1688b261a64b917b88cb7a03fc5b5ad8fbeb",
+        "ledger": 5972169
       },
-      "durationMs": 5562
+      "durationMs": 6968
     },
     {
       "id": "sep41-approve",
@@ -206,11 +206,11 @@
         "after": {
           "allowance": "2"
         },
-        "txHash": "af5c94d4db01cb061a409a6e54e080c09dabd76c8c6b3e1ee35fd40eea7fcbe5",
-        "ledger": 5282825,
-        "confirmTxHash": "2bae4c2a57236329ee03712762a39d95f917767c19a9c741334dcebf47bf2365"
+        "txHash": "775847b1c15f3f443532a403495056fa8eff3a44d858fdcad1a51264df017add",
+        "ledger": 5972170,
+        "confirmTxHash": "27fe59b56690a016423306c1159995128ce46cceeeb647c92a1a869aecb03f61"
       },
-      "durationMs": 9498
+      "durationMs": 10144
     },
     {
       "id": "sep41-transfer_from",
@@ -222,19 +222,19 @@
       "actual": "holder -1, recipient +1, allowance -1",
       "evidence": {
         "before": {
-          "holder": "898999909",
-          "recipient": "101000025",
+          "holder": "898999739",
+          "recipient": "1",
           "allowance": "2"
         },
         "after": {
-          "holder": "898999908",
-          "recipient": "101000026",
+          "holder": "898999738",
+          "recipient": "2",
           "allowance": "1"
         },
-        "txHash": "702eefd2346968bd0ffb1e262b0529c4d4707beeedae7a7c115d58f229069f76",
-        "ledger": 5282829
+        "txHash": "276e1bb67dbd6b724153751ea40165c59e9925c5f088ba42f79a781275c37e87",
+        "ledger": 5972172
       },
-      "durationMs": 16297
+      "durationMs": 5626
     },
     {
       "id": "sep41-burn",
@@ -246,15 +246,15 @@
       "actual": "holder -1",
       "evidence": {
         "before": {
-          "holder": "898999908"
+          "holder": "898999738"
         },
         "after": {
-          "holder": "898999907"
+          "holder": "898999737"
         },
-        "txHash": "0852fc3c03949c35ec535806b9a687b1ec9619f05b22fe1c950e834b704829f8",
-        "ledger": 5282830
+        "txHash": "1494c6f3ce23f4a5423455cb402dbea1b0e8fc153c2b0ed3f42734e5efeeeb2f",
+        "ledger": 5972173
       },
-      "durationMs": 4988
+      "durationMs": 4046
     },
     {
       "id": "sep41-burn_from",
@@ -266,19 +266,19 @@
       "actual": "holder -1, spender 0, allowance -1",
       "evidence": {
         "before": {
-          "holder": "898999907",
-          "spender": "101000026",
+          "holder": "898999737",
+          "spender": "2",
           "allowance": "1"
         },
         "after": {
-          "holder": "898999906",
-          "spender": "101000026",
+          "holder": "898999736",
+          "spender": "2",
           "allowance": "0"
         },
-        "txHash": "d389cbbf637d87b4af8b896b4458ca0fded9d0ee1e14a3a523d6ab2220717622",
-        "ledger": 5282831
+        "txHash": "9fd03f7a953b2e33c0b057a7674e22969ed9c26839f1df3355c77c4aa225a82e",
+        "ledger": 5972174
       },
-      "durationMs": 19250
+      "durationMs": 5579
     },
     {
       "id": "sep41-transfer_from-expired",
@@ -287,18 +287,18 @@
       "requirement": "required",
       "status": "PASS",
       "expected": "transfer_from refuses a spend against an allowance whose live_until_ledger has passed",
-      "actual": "a spend against an allowance that expired at ledger 5282840 was refused at ledger 5282841",
+      "actual": "a spend against an allowance that expired at ledger 5972180 was refused at ledger 5972181, in which the holder held 898999736 and the recipient could receive",
       "evidence": {
         "before": {
           "granted": "1",
           "allowance": "0",
-          "holder": "898999906",
-          "recipient": "101000026"
+          "holder": "898999736",
+          "recipient": "2"
         },
-        "ledger": 5282841,
-        "error": "Transaction simulation failed: \"HostError: Error(Contract, #9)\n\nEvent log (newest first):\n   0: [Diagnostic Event] contract:CARQGEM3RDSWA2SRZDL6LDBOEQWQHS74BOL5V62QXIGMOBIMIX5YTYYN, topics:[error, Error(Contract, #9)], data:[\"not enough allowance to spend\", 0, 1]\n   1: [Diagnostic Event] topics:[fn_call, CARQGEM3RDSWA2SRZDL6LDBOEQWQHS74BOL5V62QXIGMOBIMIX5YTYYN, transfer_from], data:[GDS6R6VS3OTSWVVYS6G5XXO3QBW5BBIAKQGCMA44PWNLCWY2SVGWCC25, GDMEI62DG7T56E2CRGHQBK66ZT73ITHV5VMNCUZUQLO53RHUAPVDGCDU, GDS6R6VS3OTSWVVYS6G5XXO3QBW5BBIAKQGCMA44PWNLCWY2SVGWCC25, 1]\n\""
+        "ledger": 5972181,
+        "error": "HostError: Error(Contract, #9)\n\nEvent log (oldest first):\n   0: [Diagnostic Event] topics:[fn_call, 2303119b88e5606a51c8d7e58c2e242d03cbfc0b97dafb50ba0cc7050c45fb89, transfer_from], data:[GBGGCUZZDRWDTOI246OIC52Y2PQHBU4EHTIJ6GXP5LS2IZWK6CNGHVZQ, GDMEI62DG7T56E2CRGHQBK66ZT73ITHV5VMNCUZUQLO53RHUAPVDGCDU, GBGGCUZZDRWDTOI246OIC52Y2PQHBU4EHTIJ6GXP5LS2IZWK6CNGHVZQ, 1]\n   1: [Diagnostic Event] contract:CARQGEM3RDSWA2SRZDL6LDBOEQWQHS74BOL5V62QXIGMOBIMIX5YTYYN, topics:[error, Error(Contract, #9)], data:[\"not enough allowance to spend\", 0, 1]"
       },
-      "durationMs": 38891
+      "durationMs": 37920
     }
   ]
 }
